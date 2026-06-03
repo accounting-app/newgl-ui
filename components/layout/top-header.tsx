@@ -1,8 +1,10 @@
+export const DEFAULT_TOP_HEADER_USER_NAME = "John Doe";
+
 type TopHeaderProps = {
   userName?: string;
 };
 
-export function TopHeader({ userName = "John Doe" }: TopHeaderProps) {
+export function TopHeader({ userName = DEFAULT_TOP_HEADER_USER_NAME }: TopHeaderProps) {
   const avatarLetter = userName.trim().charAt(0).toUpperCase() || "U";
 
   return (

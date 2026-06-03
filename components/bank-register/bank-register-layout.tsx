@@ -4,6 +4,7 @@ import { AccountSelector } from "@/components/bank-register/account-selector";
 import { RegisterTable } from "@/components/bank-register/register-table";
 import { getRegisterTitle } from "@/components/bank-register/register-title";
 import { TablePagination } from "@/components/bank-register/table-pagination";
+import { DEFAULT_TOP_HEADER_USER_NAME } from "@/components/layout/top-header";
 import { useBankRegister } from "@/modules/accounting/presentation/hooks/use-bank-register";
 
 export function BankRegisterLayout() {
@@ -80,6 +81,9 @@ export function BankRegisterLayout() {
           selectedTransactionType={selectedTransactionType}
           onAddSelectedTransaction={addSelectedTransaction}
           onSelectTransactionType={selectTransactionType}
+          selectedAccountName={selectedAccount?.name ?? "Account"}
+          endingBalance={generalBalance}
+          printUserName={DEFAULT_TOP_HEADER_USER_NAME}
         />
         <TablePagination totalItems={entries.length} />
       </section>
