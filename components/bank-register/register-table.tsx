@@ -3,6 +3,7 @@ import { AddTransactionForm } from "@/components/bank-register/add-transaction-f
 import { ActionToolbar } from "@/components/bank-register/action-toolbar";
 import { EditTransactionForm } from "@/components/bank-register/edit-transaction-form";
 import { FilterFormPopover } from "@/components/bank-register/filter-form-popover";
+import { useRegisterExport } from "@/components/bank-register/hooks/use-register-export";
 import { useRegisterFilters } from "@/components/bank-register/hooks/use-register-filters";
 import { useRegisterPrint } from "@/components/bank-register/hooks/use-register-print";
 import { PayeeSideModal } from "@/components/bank-register/payee-side-modal";
@@ -194,6 +195,12 @@ export function RegisterTable({
   const handlePrintRegister = useRegisterPrint({
     entries: filteredEntries,
     userName: printUserName,
+    selectedAccountName,
+    endingBalance,
+    formatTransactionTypeLabel
+  });
+  const handleExportRegister = useRegisterExport({
+    entries: filteredEntries,
     selectedAccountName,
     endingBalance,
     formatTransactionTypeLabel
@@ -433,6 +440,7 @@ export function RegisterTable({
             type="button"
             className="flex h-full items-center hover:text-[var(--color-icon-secondary)]"
             aria-label="Export"
+            onClick={handleExportRegister}
           >
             <Upload className="h-[18px] w-[18px]" aria-hidden="true" />
           </button>
