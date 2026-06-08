@@ -17,6 +17,7 @@ import {
   isOutflowTransactionType,
   toDomainTransactionType
 } from "@/modules/accounting/presentation/transaction-type-policy";
+import { generateNextRefNumber } from "@/modules/accounting/domain/accounting-reports";
 import type {
   BankRegisterTransactionTypeId,
   BankRegisterTransactionTypeOption
@@ -78,6 +79,7 @@ export function useBankRegister() {
   const [draftErrors, setDraftErrors] = useState<DraftTransactionErrors>({});
   const [isSavingDraft, setIsSavingDraft] = useState(false);
   const [entries, setEntries] = useState<RegisterEntry[]>([]);
+  const [existingRefNumbers, setExistingRefNumbers] = useState<string[]>([]);
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
   const [selectedPostings, setSelectedPostings] = useState<LedgerPosting[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -116,6 +118,15 @@ export function useBankRegister() {
     setEntries(registerEntries);
   }, [selectedAccountId, services.registerService]);
 
+  const refreshRefNumbers = useCallback(async () => {
+    const transactions = await services.transactionService.listTransactions();
+    setExistingRefNumbers(
+      transactions
+        .map((transaction) => transaction.referenceNumber)
+        .filter((reference): reference is string => Boolean(reference))
+    );
+  }, [services.transactionService]);
+
   useEffect(() => {
     refreshAccounts().catch((value: unknown) => {
       setError(value instanceof Error ? value.message : "Failed to load accounts.");
@@ -129,12 +140,17 @@ export function useBankRegister() {
   }, [refreshEntries]);
 
   useEffect(() => {
+    refreshRefNumbers().catch(() => undefined);
+  }, [refreshRefNumbers]);
+
+  useEffect(() => {
     const unsubscribe = ledgerEventBus.subscribe("*", () => {
       refreshAccounts().catch(() => undefined);
       refreshEntries().catch(() => undefined);
+      refreshRefNumbers().catch(() => undefined);
     });
     return unsubscribe;
-  }, [refreshAccounts, refreshEntries]);
+  }, [refreshAccounts, refreshEntries, refreshRefNumbers]);
 
   useEffect(() => {
     const selectedSupported = availableTransactionTypes.some(
@@ -160,11 +176,12 @@ export function useBankRegister() {
         availableTransactionTypes.find((option) => option.id === transactionTypeId)?.label ??
         transactionTypeId.replaceAll("_", " ");
       setSelectedTransactionType(transactionTypeId);
+      void refreshRefNumbers();
       setDraftTransaction({
         transactionTypeId,
         transactionTypeLabel: selectedTypeLabel,
         date: new Date().toISOString().slice(0, 10),
-        refNo: `TX-${Math.floor(Math.random() * 100000)}`,
+        refNo: generateNextRefNumber(existingRefNumbers),
         payee: "",
         accountTypeLabel: "",
         memo: "",
@@ -175,7 +192,7 @@ export function useBankRegister() {
       setDraftErrors({});
       setError(null);
     },
-    [availableTransactionTypes, selectedAccountId]
+    [availableTransactionTypes, existingRefNumbers, refreshRefNumbers, selectedAccountId]
   );
 
   const updateDraftField = useCallback(
@@ -245,7 +262,8 @@ export function useBankRegister() {
       return;
     }
 
-    const referenceNumber = draftTransaction.refNo.trim() || `TX-${Math.floor(Math.random() * 100000)}`;
+    const referenceNumber =
+      draftTransaction.refNo.trim() || generateNextRefNumber(existingRefNumbers);
     const domainTransactionType = toDomainTransactionType(draftTransaction.transactionTypeId);
 
     const counterpartyFromTypedName = accounts.find(
@@ -362,7 +380,14 @@ export function useBankRegister() {
     } finally {
       setIsSavingDraft(false);
     }
-  }, [accounts, draftTransaction, isSavingDraft, selectedAccountId, services.transactionService]);
+  }, [
+    accounts,
+    draftTransaction,
+    existingRefNumbers,
+    isSavingDraft,
+    selectedAccountId,
+    services.transactionService
+  ]);
 
   const addSelectedTransaction = useCallback(() => {
     startDraftTransaction(selectedTransactionType);

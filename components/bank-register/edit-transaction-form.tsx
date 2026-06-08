@@ -4,6 +4,7 @@ import { SelectField } from "@/components/bank-register/select-field";
 import type { SelectFieldOption } from "@/components/bank-register/select-field";
 import { Button } from "@/components/ui/button";
 import { InputField } from "@/components/ui/input-field";
+import { isEntryLocked } from "@/modules/accounting/domain/accounting-reports";
 import type { RegisterEntry } from "@/modules/accounting/domain/models";
 import type { InlineEntryEditorInput } from "@/modules/accounting/presentation/hooks/use-bank-register";
 
@@ -44,6 +45,8 @@ export function EditTransactionForm({
   onCancel,
   onSave
 }: EditTransactionFormProps) {
+  const locked = isEntryLocked(entry.reconcileStatus ?? "");
+  const lockedLabel = entry.reconcileStatus === "R" ? "reconciled" : "cleared";
   return (
     <div className="form-transaction-row">
       <div className="form-transaction-row-top">
@@ -127,9 +130,19 @@ export function EditTransactionForm({
         </table>
       </div>
 
-      <div className="form-transaction-row-bottom flex justify-end gap-2">
+      <div className="form-transaction-row-bottom flex items-center justify-end gap-2">
+        {locked ? (
+          <p className="mb-1 mr-auto text-xs text-amber-600">
+            This transaction is {lockedLabel} and is locked. Clear the reconcile mark on the row to
+            edit it, or create a reversal.
+          </p>
+        ) : null}
         {rowError ? <p className="mb-1 text-xs text-red-600">{rowError}</p> : null}
-        <Button variant="secondary" disabled={isDeletingRow || isSavingRow} onClick={onDelete}>
+        <Button
+          variant="secondary"
+          disabled={isDeletingRow || isSavingRow || locked}
+          onClick={onDelete}
+        >
           Delete
         </Button>
         <Button variant="secondary" disabled={isDeletingRow || isSavingRow} onClick={() => undefined}>
@@ -138,7 +151,11 @@ export function EditTransactionForm({
         <Button variant="secondary" disabled={isDeletingRow || isSavingRow} onClick={onCancel}>
           Cancel
         </Button>
-        <Button variant="primary" disabled={isDeletingRow || isSavingRow} onClick={onSave}>
+        <Button
+          variant="primary"
+          disabled={isDeletingRow || isSavingRow || locked}
+          onClick={onSave}
+        >
           {isSavingRow ? "Saving..." : "Save"}
         </Button>
       </div>

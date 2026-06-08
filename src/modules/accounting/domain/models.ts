@@ -87,6 +87,13 @@ export const transactionStatusSchema = z.enum([
 
 export const reconcileStatusSchema = z.enum(["", "C", "R"]);
 
+export const auditLogEntrySchema = z.object({
+  action: z.string(),
+  userId: z.string(),
+  timestamp: z.string(),
+  changes: z.record(z.string(), z.unknown()).nullable().optional()
+});
+
 export const transactionPostingInputSchema = z.object({
   accountId: z.string().uuid(),
   type: postingEntryTypeSchema,
@@ -104,7 +111,9 @@ export const transactionSchema = z.object({
   accountLabel: z.string().optional(),
   sourceAccountId: z.string().uuid().optional(),
   reconcileStatus: reconcileStatusSchema.optional(),
+  periodId: z.string().optional(),
   postings: z.array(transactionPostingInputSchema).min(2),
+  auditLog: z.array(auditLogEntrySchema).optional(),
   createdBy: z.string().optional(),
   createdAt: z.string().datetime().optional(),
   updatedAt: z.string().datetime().optional(),
@@ -173,6 +182,7 @@ export type PostingEntryType = z.infer<typeof postingEntryTypeSchema>;
 export type TransactionType = z.infer<typeof transactionTypeSchema>;
 export type TransactionStatus = z.infer<typeof transactionStatusSchema>;
 export type ReconcileStatus = z.infer<typeof reconcileStatusSchema>;
+export type AuditLogEntry = z.infer<typeof auditLogEntrySchema>;
 export type TransactionPostingInput = z.infer<typeof transactionPostingInputSchema>;
 export type Transaction = z.infer<typeof transactionSchema>;
 export type LedgerPosting = z.infer<typeof ledgerPostingSchema>;

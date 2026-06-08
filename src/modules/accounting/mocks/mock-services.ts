@@ -18,6 +18,16 @@ import type {
   TransactionService
 } from "@/modules/accounting/application/contracts";
 import type { LedgerDomainEvent } from "@/modules/accounting/domain/events";
+import {
+  DEBIT_NORMAL_CATEGORIES,
+  assertEntryDeletable,
+  assertEntryEditable,
+  calculateTrialBalance,
+  generateBalanceSheet,
+  validateDoubleEntry,
+  validateTransactionAmounts
+} from "@/modules/accounting/domain/accounting-reports";
+import { getPeriodIdForDate, validateTransactionPeriod } from "@/modules/accounting/domain/periods";
 import { ledgerEventBus } from "@/shared/event-bus";
 import { createId } from "@/shared/utils/id";
 import { nowIso, todayIsoDate } from "@/shared/utils/date";
@@ -30,11 +40,9 @@ type Store = {
   registerEntries: RegisterEntry[];
 };
 
-const DEBIT_NORMAL_CATEGORIES = new Set<Account["category"]>([
-  "BANK",
-  "FIXED_ASSET",
-  "OTHER_CURRENT_ASSET"
-]);
+function auditEntry(action: string, changes: Record<string, unknown> | null = null) {
+  return { action, userId: "user", timestamp: nowIso(), changes };
+}
 
 function emit(event: LedgerDomainEvent): void {
   ledgerEventBus.emit(event);
@@ -305,18 +313,6 @@ function requireAccount(store: Store, accountId: string): Account {
   return account;
 }
 
-function ensureBalanced(postings: Transaction["postings"]): void {
-  const debitTotal = postings
-    .filter((posting) => posting.type === "DEBIT")
-    .reduce((total, posting) => total + posting.amount, 0);
-  const creditTotal = postings
-    .filter((posting) => posting.type === "CREDIT")
-    .reduce((total, posting) => total + posting.amount, 0);
-  if (debitTotal !== creditTotal) {
-    throw new Error("Total debits must equal total credits.");
-  }
-}
-
 function ensureAccountsActive(store: Store, transaction: Transaction): void {
   transaction.postings.forEach((posting) => {
     const account = requireAccount(store, posting.accountId);
@@ -504,6 +500,11 @@ export class MockTransactionService implements TransactionService {
   constructor(private readonly store: Store) {}
 
   async createTransaction(input: CreateTransactionInput): Promise<Transaction> {
+    // Plan §1 & §4: a transaction must be balanced and fall in an open period.
+    validateDoubleEntry(input.postings);
+    validateTransactionPeriod(input.transactionDate);
+
+    const createdAt = nowIso();
     const transaction: Transaction = {
       id: createId(),
       type: input.type,
@@ -515,9 +516,11 @@ export class MockTransactionService implements TransactionService {
       accountLabel: input.accountLabel,
       sourceAccountId: input.sourceAccountId,
       reconcileStatus: input.reconcileStatus,
+      periodId: getPeriodIdForDate(input.transactionDate),
       postings: input.postings,
-      createdAt: nowIso(),
-      updatedAt: nowIso(),
+      auditLog: [auditEntry("created")],
+      createdAt,
+      updatedAt: createdAt,
       createdBy: "user"
     };
     this.store.transactions.push(transaction);
@@ -551,7 +554,7 @@ export class MockTransactionService implements TransactionService {
       throw new Error("Only DRAFT transactions can be posted.");
     }
     ensureAccountsActive(this.store, transaction);
-    ensureBalanced(transaction.postings);
+    validateDoubleEntry(transaction.postings);
 
     const createdAt = nowIso();
     const postings: LedgerPosting[] = transaction.postings.map((posting) => {
@@ -583,6 +586,7 @@ export class MockTransactionService implements TransactionService {
     transaction.status = "POSTED";
     transaction.postedAt = createdAt;
     transaction.updatedAt = createdAt;
+    transaction.auditLog = [...(transaction.auditLog ?? []), auditEntry("posted")];
     this.store.ledgerPostings.push(...postings);
 
     createRegisterEntries(this.store, transaction);
@@ -612,6 +616,7 @@ export class MockTransactionService implements TransactionService {
       original.status = "VOIDED";
       original.voidedAt = nowIso();
       original.updatedAt = original.voidedAt;
+      original.auditLog = [...(original.auditLog ?? []), auditEntry("voided")];
       emit({ eventType: "TransactionVoided", transactionId: id, voidedAt: original.voidedAt });
       return original;
     }
@@ -639,6 +644,7 @@ export class MockTransactionService implements TransactionService {
     original.status = "VOIDED";
     original.voidedAt = voidTx.voidedAt;
     original.updatedAt = voidTx.voidedAt;
+    original.auditLog = [...(original.auditLog ?? []), auditEntry("voided")];
 
     emit({ eventType: "LedgerVoidCreated", transactionId: voidTx.id, createdAt: voidTx.voidedAt });
     emit({ eventType: "TransactionVoided", transactionId: original.id, voidedAt: original.voidedAt });
@@ -670,6 +676,7 @@ export class MockTransactionService implements TransactionService {
     const reversedAt = nowIso();
     original.reversedAt = reversedAt;
     original.updatedAt = reversedAt;
+    original.auditLog = [...(original.auditLog ?? []), auditEntry("reversed")];
     reversal.referenceOriginalTransactionId = original.id;
 
     emit({
@@ -734,53 +741,96 @@ export class MockRegisterService implements RegisterService {
     if (!entry) {
       throw new Error(`Register entry ${entryId} not found`);
     }
+    // Plan §2: cleared/reconciled records are immutable (use a reversal instead).
+    assertEntryEditable(entry.reconcileStatus);
+    // Plan §6: amounts must be positive; payment and deposit are mutually exclusive.
+    validateTransactionAmounts(input);
     if ((input.payment ?? 0) > 0 && (input.deposit ?? 0) > 0) {
       throw new Error("Register entry cannot contain both payment and deposit.");
     }
+    // Plan §4: the target date must belong to an open period.
+    validateTransactionPeriod(input.date);
+
+    const newDeposit = input.deposit && input.deposit > 0 ? input.deposit : undefined;
+    const newPayment = input.payment && input.payment > 0 ? input.payment : undefined;
+    const newAmount = newDeposit ?? newPayment ?? 0;
+    // In the register a deposit is a DEBIT and a payment is a CREDIT for this entry's
+    // account; the counterparty takes the opposite side so the entry stays balanced.
+    const thisAccountSide: PostingEntryType = newDeposit ? "DEBIT" : "CREDIT";
+    const counterpartySide: PostingEntryType = thisAccountSide === "DEBIT" ? "CREDIT" : "DEBIT";
+    const amountChanged = newAmount > 0;
 
     entry.date = input.date;
     entry.refNumber = input.refNumber;
     entry.payee = input.payee;
     entry.memo = input.memo;
-    entry.payment = input.payment && input.payment > 0 ? input.payment : undefined;
-    entry.deposit = input.deposit && input.deposit > 0 ? input.deposit : undefined;
+    if (amountChanged) {
+      entry.payment = newPayment;
+      entry.deposit = newDeposit;
+    }
     if (input.reconcileStatus !== undefined) {
       entry.reconcileStatus = input.reconcileStatus;
     }
 
     const transaction = this.store.transactions.find((item) => item.id === entry.transactionId);
+    const affectedAccountIds = new Set<string>([entry.accountId]);
+
     if (transaction) {
       transaction.transactionDate = input.date;
       transaction.referenceNumber = input.refNumber;
       transaction.payee = input.payee;
       transaction.memo = input.memo;
+      transaction.periodId = getPeriodIdForDate(input.date);
       if (input.reconcileStatus !== undefined) {
         transaction.reconcileStatus = input.reconcileStatus;
       }
+      if (amountChanged) {
+        // Keep both journal postings consistent with the new amount/direction.
+        transaction.postings = transaction.postings.map((posting) =>
+          posting.accountId === entry.accountId
+            ? { ...posting, type: thisAccountSide, amount: newAmount }
+            : { ...posting, type: counterpartySide, amount: newAmount }
+        );
+      }
+      transaction.postings.forEach((posting) => affectedAccountIds.add(posting.accountId));
+      transaction.auditLog = [...(transaction.auditLog ?? []), auditEntry("updated")];
       transaction.updatedAt = nowIso();
     }
 
+    // Update the posted ledger entries (the source of truth for currentBalance).
     this.store.ledgerPostings
       .filter((posting) => posting.transactionId === entry.transactionId)
       .forEach((posting) => {
         posting.postingDate = input.date;
         posting.referenceNumber = input.refNumber;
         posting.memo = input.memo;
+        if (amountChanged) {
+          const isThisAccount = posting.accountId === entry.accountId;
+          posting.entryType = isThisAccount ? thisAccountSide : counterpartySide;
+          posting.amount = newAmount;
+        }
+        affectedAccountIds.add(posting.accountId);
       });
 
-    recalculateRunningBalances(this.store, entry.accountId);
-    const accountEntries = this.store.registerEntries
-      .filter((item) => item.accountId === entry.accountId)
-      .sort((a, b) => `${b.date}-${b.createdAt}`.localeCompare(`${a.date}-${a.createdAt}`));
-    const account = requireAccount(this.store, entry.accountId);
-    account.currentBalance = accountEntries[0]?.runningBalance ?? account.openingBalance ?? 0;
-    account.updatedAt = nowIso();
-    emit({
-      eventType: "AccountBalanceUpdated",
-      accountId: account.id,
-      currentBalance: account.currentBalance,
-      updatedAt: account.updatedAt
-    });
+    // Mirror the new amount/direction onto the counterparty register row(s).
+    if (amountChanged) {
+      this.store.registerEntries
+        .filter((item) => item.transactionId === entry.transactionId && item.id !== entry.id)
+        .forEach((counterEntry) => {
+          if (counterpartySide === "DEBIT") {
+            counterEntry.deposit = newAmount;
+            counterEntry.payment = undefined;
+          } else {
+            counterEntry.payment = newAmount;
+            counterEntry.deposit = undefined;
+          }
+          affectedAccountIds.add(counterEntry.accountId);
+        });
+    }
+
+    const accountIds = [...affectedAccountIds];
+    accountIds.forEach((accountId) => recalculateRunningBalances(this.store, accountId));
+    updateAccountBalances(this.store, accountIds);
 
     return entry;
   }
@@ -795,46 +845,48 @@ export class MockRegisterService implements RegisterService {
   }
 
   async deleteRegisterEntry(entryId: string): Promise<RegisterEntry> {
-    const entryIndex = this.store.registerEntries.findIndex((item) => item.id === entryId);
-    if (entryIndex === -1) {
+    const entry = this.store.registerEntries.find((item) => item.id === entryId);
+    if (!entry) {
       throw new Error(`Register entry ${entryId} not found`);
     }
-    const entry = this.store.registerEntries[entryIndex];
-    const accountId = entry.accountId;
+    // Plan §2: only pending records can be deleted; cleared/reconciled need a reversal.
+    assertEntryDeletable(entry.reconcileStatus);
 
-    // Remove row from the register table data source.
-    this.store.registerEntries.splice(entryIndex, 1);
+    const transactionId = entry.transactionId;
+    const deletedAt = nowIso();
 
-    // Rebuild running balances from remaining rows.
-    recalculateRunningBalances(this.store, accountId);
+    // Collect every account touched by this transaction to revert both sides.
+    const affectedAccountIds = new Set<string>([entry.accountId]);
+    this.store.registerEntries
+      .filter((item) => item.transactionId === transactionId)
+      .forEach((item) => affectedAccountIds.add(item.accountId));
+    this.store.ledgerPostings
+      .filter((posting) => posting.transactionId === transactionId)
+      .forEach((posting) => affectedAccountIds.add(posting.accountId));
 
-    // Keep selected account balance in sync with the remaining rows.
-    const account = requireAccount(this.store, accountId);
-    const accountEntries = this.store.registerEntries
-      .filter((item) => item.accountId === accountId)
-      .sort((a, b) => `${b.date}-${b.createdAt}`.localeCompare(`${a.date}-${a.createdAt}`));
-    account.currentBalance = accountEntries[0]?.runningBalance ?? account.openingBalance ?? 0;
-    account.updatedAt = nowIso();
+    // Remove all register rows for this transaction (source + counterparty).
+    this.store.registerEntries = this.store.registerEntries.filter(
+      (item) => item.transactionId !== transactionId
+    );
 
-    const chart = this.store.chartAccounts.find((item) => item.id === accountId);
-    if (chart) {
-      chart.currentBalance = account.currentBalance;
-      chart.availableBalance = account.currentBalance;
-      chart.updatedAt = account.updatedAt;
-    }
+    // Void the ledger postings so they stop contributing to currentBalance.
+    this.store.ledgerPostings
+      .filter((posting) => posting.transactionId === transactionId)
+      .forEach((posting) => {
+        posting.status = "VOIDED";
+        posting.voidedAt = deletedAt;
+      });
 
-    emit({
-      eventType: "AccountBalanceUpdated",
-      accountId,
-      currentBalance: account.currentBalance,
-      updatedAt: account.updatedAt
-    });
-
-    const transaction = this.store.transactions.find((item) => item.id === entry.transactionId);
+    const transaction = this.store.transactions.find((item) => item.id === transactionId);
     if (transaction) {
       transaction.status = "DELETED";
-      transaction.updatedAt = nowIso();
+      transaction.updatedAt = deletedAt;
+      transaction.auditLog = [...(transaction.auditLog ?? []), auditEntry("deleted")];
     }
+
+    const accountIds = [...affectedAccountIds];
+    accountIds.forEach((accountId) => recalculateRunningBalances(this.store, accountId));
+    updateAccountBalances(this.store, accountIds);
 
     return entry;
   }
@@ -865,10 +917,12 @@ function seedDefaultRegisterTransactions(store: Store): void {
       accountLabel: seed.counterpartyAccountName,
       sourceAccountId: sourceAccount.id,
       reconcileStatus: seed.reconcileStatus,
+      periodId: getPeriodIdForDate(seed.date),
       postings: [
         { accountId: sourceAccount.id, type: sourcePostingType, amount: seed.amount },
         { accountId: counterpartyAccount.id, type: counterpartyPostingType, amount: seed.amount }
       ],
+      auditLog: [auditEntry("created"), auditEntry("posted")],
       createdAt,
       updatedAt: createdAt,
       postedAt: createdAt,
@@ -933,9 +987,43 @@ function seedDefaultRegisterTransactions(store: Store): void {
   }
 }
 
+function runDevAccountingChecks(store: Store): void {
+  if (process.env.NODE_ENV === "production") {
+    return;
+  }
+
+  // Plan §1: every non-deleted transaction must be balanced (debits = credits).
+  store.transactions
+    .filter((transaction) => transaction.status !== "DELETED")
+    .forEach((transaction) => {
+      try {
+        validateDoubleEntry(transaction.postings);
+      } catch (error) {
+        console.error(`[Accounting] ${transaction.id}: ${(error as Error).message}`);
+      }
+    });
+
+  // Plan §1: the trial balance over posted ledger entries must net to zero.
+  const trialBalance = calculateTrialBalance(store.ledgerPostings);
+  if (!trialBalance.balanced) {
+    console.error(
+      `[Accounting] Trial balance does not net to zero: debits=${trialBalance.totalDebits}, credits=${trialBalance.totalCredits}`
+    );
+  }
+
+  // Plan §6: the accounting equation Assets = Liabilities + Equity must hold.
+  const balanceSheet = generateBalanceSheet(store.accounts);
+  if (!balanceSheet.balanced) {
+    console.error(
+      `[Accounting] Balance sheet does not balance: assets=${balanceSheet.assets}, liabilities+equity=${balanceSheet.liabilitiesAndEquity}`
+    );
+  }
+}
+
 export function createMockAccountingServices() {
   const store = buildMockData();
   seedDefaultRegisterTransactions(store);
+  runDevAccountingChecks(store);
   return {
     accountService: new MockAccountService(store),
     ledgerService: new MockLedgerService(store),
