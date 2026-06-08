@@ -11,8 +11,8 @@ import type { InlineEntryEditorInput } from "@/modules/accounting/presentation/h
 type EditTransactionFormProps = {
   entry: RegisterEntry;
   editor: InlineEntryEditorInput;
-  accountLabel: string;
   payeeOptions: SelectFieldOption[];
+  accountOptions: SelectFieldOption[];
   rowError: string | null;
   isSavingRow: boolean;
   isDeletingRow: boolean;
@@ -20,7 +20,6 @@ type EditTransactionFormProps = {
   isDepositDisabled: boolean;
   onEditorChange: (field: keyof InlineEntryEditorInput, value: string) => void;
   onReconcileCycle: () => void;
-  onAccountLabelChange: (value: string) => void;
   onOpenPayeeModal: () => void;
   onDelete: () => void;
   onCancel: () => void;
@@ -30,8 +29,8 @@ type EditTransactionFormProps = {
 export function EditTransactionForm({
   entry,
   editor,
-  accountLabel,
   payeeOptions,
+  accountOptions,
   rowError,
   isSavingRow,
   isDeletingRow,
@@ -39,7 +38,6 @@ export function EditTransactionForm({
   isDepositDisabled,
   onEditorChange,
   onReconcileCycle,
-  onAccountLabelChange,
   onOpenPayeeModal,
   onDelete,
   onCancel,
@@ -79,13 +77,13 @@ export function EditTransactionForm({
                   onChange={(value) => onEditorChange("payee", value)}
                   onAddNew={onOpenPayeeModal}
                 />
-                <InputField
-                  type="text"
-                  value={accountLabel}
-                  disabled
-                  onChange={(event) => onAccountLabelChange(event.target.value)}
+                <SelectField
+                  value={editor.accountTypeId}
+                  options={accountOptions}
                   placeholder="Account"
-                  className="mt-1 w-full"
+                  onChange={(value) => onEditorChange("accountTypeId", value)}
+                  allowCustomValue={false}
+                  disabled={locked}
                 />
               </td>
               <td className="form-control">

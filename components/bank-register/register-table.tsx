@@ -11,6 +11,7 @@ import type { PayeeOption } from "@/components/bank-register/payee-side-modal";
 import { RegisterTableColumnGroup } from "@/components/bank-register/register-table-column-group";
 import { RegisterTableHeader } from "@/components/bank-register/register-table-header";
 import { SelectField } from "@/components/bank-register/select-field";
+import type { SelectFieldOption } from "@/components/bank-register/select-field";
 import { TablePagination } from "@/components/bank-register/table-pagination";
 import { Funnel, Printer, Settings, Upload } from "lucide-react";
 import type { RegisterEntry } from "@/modules/accounting/domain/models";
@@ -48,6 +49,7 @@ type RegisterTableProps = {
   onUpdateEntry: (entryId: string, input: InlineEntryEditorInput) => Promise<void>;
   onDeleteEntry: (entryId: string) => Promise<void>;
   onCycleReconcileStatus: (entryId: string) => void;
+  accountOptions: SelectFieldOption[];
   availableTransactionTypes: BankRegisterTransactionTypeOption[];
   selectedTransactionType: BankRegisterTransactionTypeId;
   onAddSelectedTransaction: () => void;
@@ -102,6 +104,7 @@ export function RegisterTable({
   onUpdateEntry,
   onDeleteEntry,
   onCycleReconcileStatus,
+  accountOptions,
   availableTransactionTypes,
   selectedTransactionType,
   onAddSelectedTransaction,
@@ -118,12 +121,12 @@ export function RegisterTable({
     date: "",
     refNo: "",
     payee: "",
+    accountTypeId: "",
     memo: "",
     payment: "",
     deposit: "",
     reconcileStatus: ""
   });
-  const [accountLabel, setAccountLabel] = useState("");
   const [payees, setPayees] = useState<PayeeOption[]>([]);
   const [isPayeeModalOpen, setIsPayeeModalOpen] = useState(false);
   const [payeeModalTarget, setPayeeModalTarget] = useState<"draft" | "row">("draft");
@@ -287,16 +290,17 @@ export function RegisterTable({
   function openRowEditor(entry: RegisterEntry) {
     setSelectedEntryId(entry.id);
     setRowError(null);
+    const matchedAccount = accountOptions.find((option) => option.label === entry.accountLabel);
     setEditor({
       date: entry.date,
       refNo: entry.refNumber ?? "",
       payee: entry.payee ?? "",
+      accountTypeId: matchedAccount?.value ?? "",
       memo: entry.memo ?? "",
       payment: entry.payment ? String(entry.payment) : "",
       deposit: entry.deposit ? String(entry.deposit) : "",
       reconcileStatus: entry.reconcileStatus ?? ""
     });
-    setAccountLabel(entry.accountLabel ?? "");
   }
 
   function cycleEditorReconcileStatus() {
@@ -561,6 +565,7 @@ export function RegisterTable({
             draftTransaction={draftTransaction}
             draftErrors={draftErrors}
             payeeOptions={payeeOptions}
+            accountOptions={accountOptions}
             isDraftAccountFieldDisabled={isDraftAccountFieldDisabled}
             isDraftInflowType={isDraftInflowType}
             isDraftOutflowType={isDraftOutflowType}
@@ -589,8 +594,8 @@ export function RegisterTable({
                         <EditTransactionForm
                           entry={selectedEntry}
                           editor={editor}
-                          accountLabel={accountLabel}
                           payeeOptions={payeeOptions}
+                          accountOptions={accountOptions}
                           rowError={rowError}
                           isSavingRow={isSavingRow}
                           isDeletingRow={isDeletingRow}
@@ -598,7 +603,6 @@ export function RegisterTable({
                           isDepositDisabled={OUTFLOW_ROW_TYPES.has(selectedEntry.transactionType)}
                           onEditorChange={(field, value) => setEditor((current) => ({ ...current, [field]: value }))}
                           onReconcileCycle={cycleEditorReconcileStatus}
-                          onAccountLabelChange={setAccountLabel}
                           onOpenPayeeModal={() => openPayeeModal("row")}
                           onDelete={handleDeleteRow}
                           onCancel={() => {

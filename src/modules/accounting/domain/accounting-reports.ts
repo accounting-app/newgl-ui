@@ -18,9 +18,12 @@ import type {
 
 /** Categories whose normal balance is on the DEBIT side (assets). */
 export const DEBIT_NORMAL_CATEGORIES = new Set<Account["category"]>([
+  "ACCOUNTS_RECEIVABLE",
   "BANK",
+  "EXPENSE",
   "FIXED_ASSET",
-  "OTHER_CURRENT_ASSET"
+  "OTHER_CURRENT_ASSET",
+  "OTHER_EXPENSE"
 ]);
 
 export type PostingLike = { type: PostingEntryType; amount: number };
@@ -131,6 +134,7 @@ export function validateTransactionAmounts(input: { payment?: number; deposit?: 
  * contribution/draw, not a transfer, and should be flagged.
  */
 const TRANSFER_ALLOWED_CATEGORIES = new Set<Account["category"]>([
+  "ACCOUNTS_RECEIVABLE",
   "BANK",
   "CREDIT_CARD",
   "FIXED_ASSET",

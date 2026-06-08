@@ -1,4 +1,3 @@
-import { ACCOUNT_FIELD_OPTIONS } from "@/components/bank-register/account-field-options";
 import { ReconcileStatusCell } from "@/components/bank-register/reconcile-status";
 import { RegisterTableColumnGroup } from "@/components/bank-register/register-table-column-group";
 import { SelectField } from "@/components/bank-register/select-field";
@@ -14,6 +13,7 @@ type AddTransactionFormProps = {
   draftTransaction: DraftTransactionForm;
   draftErrors: DraftTransactionErrors;
   payeeOptions: SelectFieldOption[];
+  accountOptions: SelectFieldOption[];
   isDraftAccountFieldDisabled: boolean;
   isDraftInflowType: boolean;
   isDraftOutflowType: boolean;
@@ -32,6 +32,7 @@ export function AddTransactionForm({
   draftTransaction,
   draftErrors,
   payeeOptions,
+  accountOptions,
   isDraftAccountFieldDisabled,
   isDraftInflowType,
   isDraftOutflowType,
@@ -77,14 +78,15 @@ export function AddTransactionForm({
                   onAddNew={onOpenPayeeModal}
                 />
                 <SelectField
-                  value={draftTransaction.accountTypeLabel}
-                  options={ACCOUNT_FIELD_OPTIONS}
+                  value={draftTransaction.accountTypeId}
+                  options={accountOptions}
                   placeholder="Account"
-                  onChange={(value) => onDraftFieldChange("accountTypeLabel", value)}
+                  onChange={(value) => onDraftFieldChange("accountTypeId", value)}
                   disabled={isDraftAccountFieldDisabled}
+                  allowCustomValue={false}
                 />
                 {draftErrors.payee ? <p className="mt-1 text-xs text-red-600">{draftErrors.payee}</p> : null}
-                {draftErrors.accountTypeLabel ? <p className="mt-1 text-xs text-red-600">{draftErrors.accountTypeLabel}</p> : null}
+                {draftErrors.accountTypeId ? <p className="mt-1 text-xs text-red-600">{draftErrors.accountTypeId}</p> : null}
               </td>
               <td className="form-control">
                 <InputField

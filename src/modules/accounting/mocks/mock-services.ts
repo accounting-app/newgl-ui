@@ -49,13 +49,18 @@ function emit(event: LedgerDomainEvent): void {
 }
 
 const ACCOUNT_TYPE_BY_CATEGORY: Record<Account["category"], ChartOfAccount["accountType"]> = {
+  ACCOUNTS_RECEIVABLE: "ASSET",
   BANK: "ASSET",
   CREDIT_CARD: "LIABILITY",
   EQUITY: "EQUITY",
+  EXPENSE: "EXPENSE",
   FIXED_ASSET: "ASSET",
+  INCOME: "REVENUE",
   LONG_TERM_LIABILITY: "LIABILITY",
   OTHER_CURRENT_ASSET: "ASSET",
-  OTHER_CURRENT_LIABILITY: "LIABILITY"
+  OTHER_CURRENT_LIABILITY: "LIABILITY",
+  OTHER_EXPENSE: "EXPENSE",
+  OTHER_INCOME: "REVENUE"
 };
 
 const NORMAL_BALANCE_BY_TYPE: Record<ChartOfAccount["accountType"], ChartOfAccount["normalBalance"]> = {
@@ -67,6 +72,7 @@ const NORMAL_BALANCE_BY_TYPE: Record<ChartOfAccount["accountType"], ChartOfAccou
 };
 
 const SEED_ACCOUNTS: Array<{ name: string; category: Account["category"] }> = [
+  { name: "Accounts Receivable (A/R)", category: "ACCOUNTS_RECEIVABLE" },
   { name: "Cash on hand", category: "BANK" },
   { name: "Credit Card Payable", category: "CREDIT_CARD" },
   { name: "Charitable donations", category: "EQUITY" },
@@ -87,6 +93,41 @@ const SEED_ACCOUNTS: Array<{ name: string; category: Account["category"] }> = [
   { name: "State estimated tax", category: "EQUITY" },
   { name: "State tax", category: "EQUITY" },
   { name: "Visits, copays, and prescriptions", category: "EQUITY" },
+  { name: "Advertising and Marketing", category: "EXPENSE" },
+  { name: "Airfare", category: "EXPENSE" },
+  { name: "Apps and software", category: "EXPENSE" },
+  { name: "Business licenses", category: "EXPENSE" },
+  { name: "Business loan (interest)", category: "EXPENSE" },
+  { name: "Commissions and fees", category: "EXPENSE" },
+  { name: "Communications", category: "EXPENSE" },
+  { name: "Continued education", category: "EXPENSE" },
+  { name: "Contract labor", category: "EXPENSE" },
+  { name: "Credit card interest", category: "EXPENSE" },
+  { name: "Entertainment", category: "EXPENSE" },
+  { name: "Equipment rent and lease", category: "EXPENSE" },
+  { name: "Legal and professional services", category: "EXPENSE" },
+  { name: "Liability insurance", category: "EXPENSE" },
+  { name: "Local taxes", category: "EXPENSE" },
+  { name: "Lodging", category: "EXPENSE" },
+  { name: "Materials and supplies", category: "EXPENSE" },
+  { name: "Meals with clients", category: "EXPENSE" },
+  { name: "Miscellaneous expenses", category: "EXPENSE" },
+  { name: "Mortgage interest (business property)", category: "EXPENSE" },
+  { name: "Office Expenses", category: "EXPENSE" },
+  { name: "Other business expenses", category: "EXPENSE" },
+  { name: "Other interest", category: "EXPENSE" },
+  { name: "Other travel expenses", category: "EXPENSE" },
+  { name: "Property rents and leases", category: "EXPENSE" },
+  { name: "Property tax (business property)", category: "EXPENSE" },
+  { name: "Repairs and maintenance", category: "EXPENSE" },
+  { name: "Shipping fees", category: "EXPENSE" },
+  { name: "Subscriptions and memberships", category: "EXPENSE" },
+  { name: "Transaction fees", category: "EXPENSE" },
+  { name: "Travel meals", category: "EXPENSE" },
+  { name: "Uncategorized Expense", category: "EXPENSE" },
+  { name: "Uniforms", category: "EXPENSE" },
+  { name: "Utilities (business property)", category: "EXPENSE" },
+  { name: "Vehicle rental/public transportation", category: "EXPENSE" },
   { name: "Apps and software (> $200)", category: "FIXED_ASSET" },
   { name: "Building purchase", category: "FIXED_ASSET" },
   { name: "Computer (> $200)", category: "FIXED_ASSET" },
@@ -98,6 +139,12 @@ const SEED_ACCOUNTS: Array<{ name: string; category: Account["category"] }> = [
   { name: "Photo and video equipment (> $200)", category: "FIXED_ASSET" },
   { name: "Tools and equipment (> $200)", category: "FIXED_ASSET" },
   { name: "Vehicle purchase", category: "FIXED_ASSET" },
+  { name: "Billable Expense Income", category: "INCOME" },
+  { name: "Sales", category: "INCOME" },
+  { name: "Services", category: "INCOME" },
+  { name: "Services ( 6 )", category: "INCOME" },
+  { name: "Unapplied Cash Payment Income", category: "INCOME" },
+  { name: "Uncategorized Income", category: "INCOME" },
   { name: "Business loan", category: "LONG_TERM_LIABILITY" },
   { name: "Mortgage principal (business property)", category: "LONG_TERM_LIABILITY" },
   { name: "Mortgage principal (home office)", category: "LONG_TERM_LIABILITY" },
@@ -105,7 +152,24 @@ const SEED_ACCOUNTS: Array<{ name: string; category: Account["category"] }> = [
   { name: "Loans to others", category: "OTHER_CURRENT_ASSET" },
   { name: "Uncategorized Asset", category: "OTHER_CURRENT_ASSET" },
   { name: "Undeposited Funds", category: "OTHER_CURRENT_ASSET" },
-  { name: "Sales tax to pay", category: "OTHER_CURRENT_LIABILITY" }
+  { name: "Sales tax to pay", category: "OTHER_CURRENT_LIABILITY" },
+  { name: "Gas and fuel", category: "OTHER_EXPENSE" },
+  { name: "Homeowner/rental insurance (home office)", category: "OTHER_EXPENSE" },
+  { name: "Mortgage interest (home office)", category: "OTHER_EXPENSE" },
+  { name: "Other home office expenses", category: "OTHER_EXPENSE" },
+  { name: "Other vehicle expenses", category: "OTHER_EXPENSE" },
+  { name: "Parking and tolls", category: "OTHER_EXPENSE" },
+  { name: "Property tax (home office)", category: "OTHER_EXPENSE" },
+  { name: "Reconciliation Discrepancies", category: "OTHER_EXPENSE" },
+  { name: "Rent and lease (home office)", category: "OTHER_EXPENSE" },
+  { name: "Repairs and maintenance (home office)", category: "OTHER_EXPENSE" },
+  { name: "Utilities (home office)", category: "OTHER_EXPENSE" },
+  { name: "Vehicle insurance", category: "OTHER_EXPENSE" },
+  { name: "Vehicle lease", category: "OTHER_EXPENSE" },
+  { name: "Vehicle loan interest", category: "OTHER_EXPENSE" },
+  { name: "Vehicle registration", category: "OTHER_EXPENSE" },
+  { name: "Vehicle repairs and maintenance", category: "OTHER_EXPENSE" },
+  { name: "Other income", category: "OTHER_INCOME" }
 ];
 
 type SeedFlow = "INFLOW" | "OUTFLOW";
@@ -500,8 +564,12 @@ export class MockTransactionService implements TransactionService {
   constructor(private readonly store: Store) {}
 
   async createTransaction(input: CreateTransactionInput): Promise<Transaction> {
-    // Plan §1 & §4: a transaction must be balanced and fall in an open period.
+    // Plan §1 & §4: a transaction must be balanced, affect at least two different
+    // accounts, and fall in an open period.
     validateDoubleEntry(input.postings);
+    if (new Set(input.postings.map((posting) => posting.accountId)).size < 2) {
+      throw new Error("A transaction must affect at least two different accounts.");
+    }
     validateTransactionPeriod(input.transactionDate);
 
     const createdAt = nowIso();
@@ -735,6 +803,7 @@ export class MockRegisterService implements RegisterService {
       payment?: number;
       deposit?: number;
       reconcileStatus?: ReconcileStatus;
+      counterpartyAccountId?: string;
     }
   ): Promise<RegisterEntry> {
     const entry = this.store.registerEntries.find((item) => item.id === entryId);
@@ -826,6 +895,60 @@ export class MockRegisterService implements RegisterService {
           }
           affectedAccountIds.add(counterEntry.accountId);
         });
+    }
+
+    // Plan §1/§5: an account can't be offset against itself.
+    if (input.counterpartyAccountId && input.counterpartyAccountId === entry.accountId) {
+      throw new Error("An account can't be its own offset account.");
+    }
+
+    // Plan §5: allow changing the offset (counterparty) account for a simple,
+    // two-sided transaction. Re-point the other posting to the new account.
+    if (input.counterpartyAccountId) {
+      const counterpartyPostings = (transaction?.postings ?? []).filter(
+        (posting) => posting.accountId !== entry.accountId
+      );
+      const currentCounterpartyId =
+        counterpartyPostings.length === 1 ? counterpartyPostings[0].accountId : undefined;
+
+      if (currentCounterpartyId && currentCounterpartyId !== input.counterpartyAccountId) {
+        const newCounterparty = requireAccount(this.store, input.counterpartyAccountId);
+
+        if (transaction) {
+          transaction.postings = transaction.postings.map((posting) =>
+            posting.accountId === currentCounterpartyId
+              ? { ...posting, accountId: newCounterparty.id }
+              : posting
+          );
+          transaction.accountLabel = newCounterparty.name;
+        }
+
+        this.store.ledgerPostings
+          .filter(
+            (posting) =>
+              posting.transactionId === entry.transactionId &&
+              posting.accountId === currentCounterpartyId
+          )
+          .forEach((posting) => {
+            posting.accountId = newCounterparty.id;
+            posting.accountCode = newCounterparty.code;
+            posting.accountName = newCounterparty.name;
+            posting.currency = newCounterparty.currency;
+          });
+
+        this.store.registerEntries
+          .filter(
+            (item) =>
+              item.transactionId === entry.transactionId && item.accountId === currentCounterpartyId
+          )
+          .forEach((counterEntry) => {
+            counterEntry.accountId = newCounterparty.id;
+          });
+
+        entry.accountLabel = newCounterparty.name;
+        affectedAccountIds.add(currentCounterpartyId);
+        affectedAccountIds.add(newCounterparty.id);
+      }
     }
 
     const accountIds = [...affectedAccountIds];

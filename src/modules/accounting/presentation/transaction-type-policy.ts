@@ -260,6 +260,25 @@ export function isOutflowTransactionType(transactionTypeId: BankRegisterTransact
   );
 }
 
+/**
+ * Categories that have their own register (balance-sheet accounts the user works
+ * in). Income/expense accounts (and A/R) are P&L/subledger accounts that only
+ * appear as the offset/category in a transaction, never as the working register.
+ */
+const REGISTER_ACCOUNT_CATEGORIES = new Set<Account["category"]>([
+  "BANK",
+  "CREDIT_CARD",
+  "EQUITY",
+  "FIXED_ASSET",
+  "LONG_TERM_LIABILITY",
+  "OTHER_CURRENT_ASSET",
+  "OTHER_CURRENT_LIABILITY"
+]);
+
+export function isRegisterAccountCategory(category: Account["category"]): boolean {
+  return REGISTER_ACCOUNT_CATEGORIES.has(category);
+}
+
 export function isAccountFieldDisabledForTransactionType(
   transactionTypeId: BankRegisterTransactionTypeId
 ): boolean {

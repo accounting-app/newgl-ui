@@ -1,13 +1,18 @@
 import { z } from "zod";
 
 export const accountCategorySchema = z.enum([
+  "ACCOUNTS_RECEIVABLE",
   "BANK",
   "CREDIT_CARD",
   "EQUITY",
+  "EXPENSE",
   "FIXED_ASSET",
+  "INCOME",
   "LONG_TERM_LIABILITY",
   "OTHER_CURRENT_ASSET",
-  "OTHER_CURRENT_LIABILITY"
+  "OTHER_CURRENT_LIABILITY",
+  "OTHER_EXPENSE",
+  "OTHER_INCOME"
 ]);
 
 export const accountStatusSchema = z.enum(["ACTIVE", "ARCHIVED", "CLOSED"]);

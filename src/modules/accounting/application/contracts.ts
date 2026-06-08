@@ -48,6 +48,7 @@ export interface RegisterService {
       payment?: number;
       deposit?: number;
       reconcileStatus?: ReconcileStatus;
+      counterpartyAccountId?: string;
     }
   ): Promise<RegisterEntry>;
   setReconcileStatus(entryId: string, status: ReconcileStatus): Promise<RegisterEntry>;
