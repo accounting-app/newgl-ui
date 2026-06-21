@@ -1,3 +1,4 @@
+import { BASE_API_URL } from "@/configuration";
 import type {
   Account,
   AccountHierarchy,
@@ -18,7 +19,7 @@ import type {
   TransactionService
 } from "@/modules/accounting/application/contracts";
 
-const ACCOUNT_TYPE_BY_CATEGORY: Record<Account["category"], ChartOfAccount["accountType"]> = {
+export const ACCOUNT_TYPE_BY_CATEGORY: Record<Account["category"], ChartOfAccount["accountType"]> = {
   ACCOUNTS_RECEIVABLE: "ASSET",
   BANK: "ASSET",
   CREDIT_CARD: "LIABILITY",
@@ -33,7 +34,7 @@ const ACCOUNT_TYPE_BY_CATEGORY: Record<Account["category"], ChartOfAccount["acco
   OTHER_INCOME: "REVENUE"
 };
 
-const NORMAL_BALANCE_BY_TYPE: Record<ChartOfAccount["accountType"], ChartOfAccount["normalBalance"]> = {
+export const NORMAL_BALANCE_BY_TYPE: Record<ChartOfAccount["accountType"], ChartOfAccount["normalBalance"]> = {
   ASSET: "DEBIT",
   LIABILITY: "CREDIT",
   EQUITY: "CREDIT",
@@ -41,7 +42,7 @@ const NORMAL_BALANCE_BY_TYPE: Record<ChartOfAccount["accountType"], ChartOfAccou
   EXPENSE: "DEBIT"
 };
 
-function toChartAccount(account: Account): ChartOfAccount {
+export function toChartAccount(account: Account): ChartOfAccount {
   const accountType = ACCOUNT_TYPE_BY_CATEGORY[account.category];
   return {
     id: account.id,
@@ -65,7 +66,7 @@ function toChartAccount(account: Account): ChartOfAccount {
 
 type ApiError = { error: string };
 
-async function request<T>(baseUrl: string, path: string, init?: RequestInit): Promise<T> {
+export async function request<T>(baseUrl: string, path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${baseUrl}${path}`, {
     ...init,
     headers: {
@@ -92,8 +93,9 @@ async function request<T>(baseUrl: string, path: string, init?: RequestInit): Pr
   return (await response.json()) as T;
 }
 
-class HttpAccountService implements AccountService {
-  constructor(private readonly baseUrl: string) {}
+export class HttpAccountService implements AccountService {
+  private readonly baseUrl = BASE_API_URL;
+  constructor() {}
 
   createAccount(input: CreateAccountInput): Promise<Account> {
     return request(this.baseUrl, "/accounts", { method: "POST", body: JSON.stringify(input) });
@@ -131,8 +133,9 @@ class HttpAccountService implements AccountService {
   }
 }
 
-class HttpTransactionService implements TransactionService {
-  constructor(private readonly baseUrl: string) {}
+export class HttpTransactionService implements TransactionService {
+  private readonly baseUrl = BASE_API_URL;
+  constructor() {}
 
   createTransaction(input: CreateTransactionInput): Promise<Transaction> {
     return request(this.baseUrl, "/transactions", { method: "POST", body: JSON.stringify(input) });
@@ -167,8 +170,9 @@ class HttpTransactionService implements TransactionService {
   }
 }
 
-class HttpLedgerService implements LedgerService {
-  constructor(private readonly baseUrl: string) {}
+export class HttpLedgerService implements LedgerService {
+  private readonly baseUrl = BASE_API_URL;
+  constructor() {}
 
   getPostingsByTransactionId(transactionId: string): Promise<LedgerPosting[]> {
     return request(this.baseUrl, `/ledger/transactions/${transactionId}/postings`);
@@ -179,8 +183,9 @@ class HttpLedgerService implements LedgerService {
   }
 }
 
-class HttpRegisterService implements RegisterService {
-  constructor(private readonly baseUrl: string) {}
+export class HttpRegisterService implements RegisterService {
+  private readonly baseUrl = BASE_API_URL;
+  constructor() {}
 
   listRegisterEntries(accountId: string): Promise<RegisterEntry[]> {
     return request(this.baseUrl, `/accounts/${accountId}/register`);
@@ -221,19 +226,15 @@ class HttpRegisterService implements RegisterService {
   }
 }
 
-export function createHttpServiceContainer(baseUrl: string): ServiceContainer {
-  const normalized = baseUrl.replace(/\/$/, "");
+export function createHttpServiceContainer(): ServiceContainer {
+  const accountService = new HttpAccountService();
+  const transactionService = new HttpTransactionService();
+  const ledgerService = new HttpLedgerService();
+  const registerService = new HttpRegisterService();
   return {
-    accountService: new HttpAccountService(normalized),
-    transactionService: new HttpTransactionService(normalized),
-    ledgerService: new HttpLedgerService(normalized),
-    registerService: new HttpRegisterService(normalized)
+    accountService,
+    transactionService,
+    ledgerService,
+    registerService
   };
-}
-
-/** Reads NEXT_PUBLIC_API_URL from ui/.env (loaded by Next.js at build/dev time). */
-export function resolveApiBaseUrl(): string | null {
-  const configured = process.env.NEXT_PUBLIC_API_URL?.trim();
-  if (!configured) return null;
-  return configured.replace(/\/$/, "");
 }
