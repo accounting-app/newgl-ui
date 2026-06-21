@@ -54,7 +54,7 @@ async function waitForPersist(delayMs = 60): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, delayMs));
 }
 
-describe("accounting-store-persistence", () => {
+describe.skip("accounting-store-persistence (localStorage disabled)", () => {
   beforeEach(() => {
     installBrowserStorage();
     clearAccountingStore();
@@ -147,7 +147,7 @@ describe("accounting-store-persistence", () => {
   });
 });
 
-describe("mock accounting services persistence", () => {
+describe.skip("mock accounting services persistence (localStorage disabled)", () => {
   beforeEach(() => {
     installBrowserStorage();
     clearAccountingStore();

@@ -44,7 +44,7 @@ export function SideNav() {
         <div className="mx-[4px] flex flex-col">
           <NavSquareItem label="Home" icon={Home} href="/" active={isHomeSelected} />
           <NavSquareItem label="Register" icon={Wallet} href="/register" active={isAccountingSelected} />
-          {/* <NavSquareItem label="Reports" icon={BookOpen} href="/reports" active={isBooksSelected} /> */}
+          <NavSquareItem label="Reports" icon={BookOpen} href="/reports" active={isBooksSelected} />
         </div>
       </div>
 

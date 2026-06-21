@@ -1,92 +1,100 @@
 import type { AccountingStore } from "@/modules/accounting/mocks/accounting-store";
 
-const STORAGE_KEY = "newgl:accounting-store";
-const STORAGE_VERSION = 1;
+// localStorage persistence is disabled — the UI reads/writes through the GL API
+// (NEXT_PUBLIC_API_URL in ui/.env). The implementation below is kept for reference.
 
-type PersistedPayload = {
-  version: number;
-  store: AccountingStore;
-};
+// const STORAGE_KEY = "newgl:accounting-store";
+// const STORAGE_VERSION = 1;
 
-function isBrowser(): boolean {
-  return typeof window !== "undefined" && typeof window.localStorage !== "undefined";
-}
+// type PersistedPayload = {
+//   version: number;
+//   store: AccountingStore;
+// };
 
-function isAccountingStore(value: unknown): value is AccountingStore {
-  if (!value || typeof value !== "object") {
-    return false;
-  }
-  const candidate = value as AccountingStore;
-  return (
-    Array.isArray(candidate.accounts) &&
-    Array.isArray(candidate.chartAccounts) &&
-    Array.isArray(candidate.transactions) &&
-    Array.isArray(candidate.ledgerPostings) &&
-    Array.isArray(candidate.registerEntries)
-  );
-}
+// function isBrowser(): boolean {
+//   return typeof window !== "undefined" && typeof window.localStorage !== "undefined";
+// }
+
+// function isAccountingStore(value: unknown): value is AccountingStore {
+//   if (!value || typeof value !== "object") {
+//     return false;
+//   }
+//   const candidate = value as AccountingStore;
+//   return (
+//     Array.isArray(candidate.accounts) &&
+//     Array.isArray(candidate.chartAccounts) &&
+//     Array.isArray(candidate.transactions) &&
+//     Array.isArray(candidate.ledgerPostings) &&
+//     Array.isArray(candidate.registerEntries)
+//   );
+// }
 
 export function loadAccountingStore(): AccountingStore | null {
-  if (!isBrowser()) {
-    return null;
-  }
+  return null;
 
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) {
-      return null;
-    }
+  // if (!isBrowser()) {
+  //   return null;
+  // }
 
-    const parsed = JSON.parse(raw) as PersistedPayload;
-    if (parsed.version !== STORAGE_VERSION || !isAccountingStore(parsed.store)) {
-      window.localStorage.removeItem(STORAGE_KEY);
-      return null;
-    }
+  // try {
+  //   const raw = window.localStorage.getItem(STORAGE_KEY);
+  //   if (!raw) {
+  //     return null;
+  //   }
 
-    return parsed.store;
-  } catch {
-    window.localStorage.removeItem(STORAGE_KEY);
-    return null;
-  }
+  //   const parsed = JSON.parse(raw) as PersistedPayload;
+  //   if (parsed.version !== STORAGE_VERSION || !isAccountingStore(parsed.store)) {
+  //     window.localStorage.removeItem(STORAGE_KEY);
+  //     return null;
+  //   }
+
+  //   return parsed.store;
+  // } catch {
+  //   window.localStorage.removeItem(STORAGE_KEY);
+  //   return null;
+  // }
 }
 
-export function saveAccountingStore(store: AccountingStore): void {
-  if (!isBrowser()) {
-    return;
-  }
+export function saveAccountingStore(_store: AccountingStore): void {
+  // localStorage disabled — persistence is handled by the backend API.
+  // if (!isBrowser()) {
+  //   return;
+  // }
 
-  const payload: PersistedPayload = {
-    version: STORAGE_VERSION,
-    store
-  };
+  // const payload: PersistedPayload = {
+  //   version: STORAGE_VERSION,
+  //   store
+  // };
 
-  try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
-  } catch (error) {
-    console.error("[Accounting] Failed to persist store to localStorage:", error);
-  }
+  // try {
+  //   window.localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+  // } catch (error) {
+  //   console.error("[Accounting] Failed to persist store to localStorage:", error);
+  // }
 }
 
-let persistTimer: ReturnType<typeof setTimeout> | null = null;
+// let persistTimer: ReturnType<typeof setTimeout> | null = null;
 
-export function scheduleAccountingStorePersist(store: AccountingStore): void {
-  if (!isBrowser()) {
-    return;
-  }
+export function scheduleAccountingStorePersist(_store: AccountingStore): void {
+  // localStorage disabled — persistence is handled by the backend API.
+  // if (!isBrowser()) {
+  //   return;
+  // }
 
-  if (persistTimer !== null) {
-    clearTimeout(persistTimer);
-  }
+  // if (persistTimer !== null) {
+  //   clearTimeout(persistTimer);
+  // }
 
-  persistTimer = setTimeout(() => {
-    persistTimer = null;
-    saveAccountingStore(store);
-  }, 50);
+  // persistTimer = setTimeout(() => {
+  //   persistTimer = null;
+  //   saveAccountingStore(store);
+  // }, 50);
 }
 
 export function clearAccountingStore(): void {
-  if (!isBrowser()) {
-    return;
-  }
-  window.localStorage.removeItem(STORAGE_KEY);
+  // localStorage disabled.
+  // if (!isBrowser()) {
+  //   return;
+  // }
+  // window.localStorage.removeItem(STORAGE_KEY);
 }

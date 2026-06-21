@@ -8,7 +8,7 @@ export function HomeGreetingScreen() {
       <div className="mx-auto grid w-full max-w-6xl gap-6 md:grid-cols-2">
         <section className="rounded-xl border border-[var(--color-divider-tertiary)] bg-[var(--color-container-background-primary)] p-8">
           <div className="mb-6 flex flex-col gap-4">
-            <Image src="/logo-big.png" alt="Simple" width={180} height={180} priority />
+            <Image style={{height: 'auto', width: 'auto'}} src="/logo-big.png" alt="Simple" width={180} height={180} priority />
             <h2 className="text-4xl font-semibold text-[var(--color-text-global)]">
               Hello, John. Welcome to Simple.
             </h2>

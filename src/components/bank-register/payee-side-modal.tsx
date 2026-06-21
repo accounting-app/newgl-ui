@@ -24,6 +24,18 @@ type PayeeSideModalProps = {
   onSave: (payee: PayeeOption) => void;
 };
 
+const PAYEE_MODAL_LABEL_CLASS = "flex flex-col gap-1 text-xs text-[var(--color-text-primary)]";
+const PAYEE_MODAL_INPUT_CLASS = "input-field w-full";
+const PAYEE_MODAL_SELECT_CLASS = "payee-modal-select w-full";
+const PAYEE_MODAL_SECTION_CLASS = "rounded border border-[var(--color-divider-tertiary)] p-3";
+const PAYEE_MODAL_SUBHEADING_CLASS = "mb-2 text-xs font-semibold text-[var(--color-text-primary)]";
+const PAYEE_MODAL_GROUP_HEADING_CLASS = "mb-1 text-xs font-medium text-[var(--color-text-primary)]";
+const PAYEE_MODAL_HELPER_TEXT_CLASS = "mt-1 text-[11px] text-[var(--color-icon-secondary)]";
+const PAYEE_MODAL_CHECKBOX_LABEL_CLASS =
+  "mt-2 flex items-center gap-2 text-xs text-[var(--color-text-primary)]";
+const PAYEE_MODAL_INFO_BOX_CLASS =
+  "rounded border border-dashed border-[var(--color-container-border-secondary)] bg-[var(--color-container-background-accent)] p-4 text-center text-xs text-[var(--color-icon-secondary)]";
+
 type CollapsibleCardProps = {
   title: string;
   icon: string;
@@ -34,19 +46,21 @@ type CollapsibleCardProps = {
 function CollapsibleCard({ title, icon, children, initiallyOpen = true }: CollapsibleCardProps) {
   const [isOpen, setIsOpen] = useState(initiallyOpen);
   return (
-    <section className="rounded-lg border border-slate-200 bg-white shadow-sm">
+    <section className="rounded-lg border border-[var(--color-divider-tertiary)] bg-[var(--color-container-background-primary)] shadow-sm">
       <button
         type="button"
         onClick={() => setIsOpen((value) => !value)}
         className="flex w-full items-center justify-between px-4 py-3 text-left"
       >
         <div className="flex items-center gap-2">
-          <span className="text-slate-500">{icon}</span>
-          <h3 className="text-sm font-semibold text-slate-800">{title}</h3>
+          <span className="text-[var(--color-icon-secondary)]">{icon}</span>
+          <h3 className="text-sm font-semibold text-[var(--color-text-primary)]">{title}</h3>
         </div>
-        <span className="text-slate-500">{isOpen ? "▾" : "▸"}</span>
+        <span className="text-[var(--color-icon-secondary)]">{isOpen ? "▾" : "▸"}</span>
       </button>
-      {isOpen ? <div className="space-y-3 border-t border-slate-100 px-4 py-4">{children}</div> : null}
+      {isOpen ? (
+        <div className="space-y-3 border-t border-[var(--color-divider-tertiary)] px-4 py-4">{children}</div>
+      ) : null}
     </section>
   );
 }
@@ -63,13 +77,13 @@ function Field({
   type?: string;
 }) {
   return (
-    <label className="flex flex-col gap-1 text-xs text-slate-700">
+    <label className={PAYEE_MODAL_LABEL_CLASS}>
       <span>{label}</span>
       <InputField
         type={type}
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="rounded border border-slate-300 px-2 py-1.5 text-sm text-slate-800"
+        className={PAYEE_MODAL_INPUT_CLASS}
       />
     </label>
   );
@@ -87,12 +101,12 @@ function SelectField({
   options: string[];
 }) {
   return (
-    <label className="flex flex-col gap-1 text-xs text-slate-700">
+    <label className={PAYEE_MODAL_LABEL_CLASS}>
       <span>{label}</span>
       <select
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="rounded border border-slate-300 px-2 py-1.5 text-sm text-slate-800"
+        className={PAYEE_MODAL_SELECT_CLASS}
       >
         {options.map((option) => (
           <option key={option} value={option}>
@@ -151,14 +165,10 @@ export function PayeeSideModal({ open, onClose, onSave }: PayeeSideModalProps) {
   return (
     <div className="fixed inset-0 z-50 flex">
       <button type="button" aria-label="Close payee modal" onClick={handleClose} className="h-full flex-1 bg-black/40" />
-      <aside className="h-screen w-[752px] overflow-y-auto bg-slate-50 p-5 shadow-2xl">
+      <aside className="tw-override payee-side-modal h-screen w-[752px] overflow-y-auto bg-[var(--color-container-background-accent)] p-5 text-[var(--color-text-primary)] shadow-2xl">
         <header className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-slate-900">Add new payee</h2>
-          <button
-            type="button"
-            onClick={handleClose}
-            className="rounded border border-slate-300 px-2 py-1 text-xs text-slate-600"
-          >
+          <h2 className="text-lg font-semibold text-[var(--color-text-primary)]">Add new payee</h2>
+          <button type="button" onClick={handleClose} className="button secondary !h-auto !min-w-0 px-2 py-1 text-xs">
             Close
           </button>
         </header>
@@ -219,16 +229,16 @@ export function PayeeSideModal({ open, onClose, onSave }: PayeeSideModalProps) {
             </CollapsibleCard>
 
             <CollapsibleCard title="Additional info" icon="⚙️">
-              <div className="rounded border border-slate-200 p-3">
-                <h4 className="mb-2 text-xs font-semibold text-slate-700">Sales tax</h4>
+              <div className={PAYEE_MODAL_SECTION_CLASS}>
+                <h4 className={PAYEE_MODAL_SUBHEADING_CLASS}>Sales tax</h4>
                 <Field label="Business ID No / Social Security No." value={vendor.salesTaxId} onChange={(value) => setVendor((prev) => ({ ...prev, salesTaxId: value }))} />
               </div>
 
-              <div className="rounded border border-slate-200 p-3">
-                <h4 className="mb-2 text-xs font-semibold text-slate-700">Expense rates</h4>
+              <div className={PAYEE_MODAL_SECTION_CLASS}>
+                <h4 className={PAYEE_MODAL_SUBHEADING_CLASS}>Expense rates</h4>
                 <div className="space-y-3">
                   <div>
-                    <h5 className="mb-1 text-xs font-medium text-slate-700">Payments</h5>
+                    <h5 className={PAYEE_MODAL_GROUP_HEADING_CLASS}>Payments</h5>
                     <div className="grid grid-cols-2 gap-3">
                       <SelectField
                         label="Terms"
@@ -242,13 +252,13 @@ export function PayeeSideModal({ open, onClose, onSave }: PayeeSideModalProps) {
                         onChange={(value) => setVendor((prev) => ({ ...prev, accountNo: value }))}
                       />
                     </div>
-                    <p className="mt-1 text-[11px] text-slate-500">
+                    <p className={PAYEE_MODAL_HELPER_TEXT_CLASS}>
                       Appears in the memo field on this vendor&apos;s bill payments
                     </p>
                   </div>
 
                   <div>
-                    <h5 className="mb-1 text-xs font-medium text-slate-700">Accounting</h5>
+                    <h5 className={PAYEE_MODAL_GROUP_HEADING_CLASS}>Accounting</h5>
                     <SelectField
                       label="Default expense category"
                       value={vendor.defaultExpenseCategory}
@@ -258,7 +268,7 @@ export function PayeeSideModal({ open, onClose, onSave }: PayeeSideModalProps) {
                   </div>
 
                   <div>
-                    <h5 className="mb-1 text-xs font-medium text-slate-700">Opening balance</h5>
+                    <h5 className={PAYEE_MODAL_GROUP_HEADING_CLASS}>Opening balance</h5>
                     <div className="grid grid-cols-2 gap-3">
                       <Field
                         label="Opening balance"
@@ -299,7 +309,7 @@ export function PayeeSideModal({ open, onClose, onSave }: PayeeSideModalProps) {
                 <Field label="Website" value={customer.website} onChange={(value) => setCustomer((prev) => ({ ...prev, website: value }))} />
                 <Field label="Name to print on checks" value={customer.nameOnChecks} onChange={(value) => setCustomer((prev) => ({ ...prev, nameOnChecks: value }))} />
               </div>
-              <label className="mt-2 flex items-center gap-2 text-xs text-slate-700">
+              <label className={PAYEE_MODAL_CHECKBOX_LABEL_CLASS}>
                 <input
                   type="checkbox"
                   checked={customer.isSubCustomer}
@@ -310,7 +320,7 @@ export function PayeeSideModal({ open, onClose, onSave }: PayeeSideModalProps) {
             </CollapsibleCard>
 
             <CollapsibleCard title="Communication permissions" icon="✉️">
-              <div className="rounded border border-dashed border-slate-300 bg-slate-50 p-4 text-center text-xs text-slate-600">
+              <div className={PAYEE_MODAL_INFO_BOX_CLASS}>
                 Enter an email to record customer consent - If the customer has opted in to receive
                 email marketing communications, acknowledge it here once you&apos;ve added an email.
               </div>
@@ -325,7 +335,7 @@ export function PayeeSideModal({ open, onClose, onSave }: PayeeSideModalProps) {
                 <Field label="ZIP code" value={customer.zip} onChange={(value) => setCustomer((prev) => ({ ...prev, zip: value }))} />
                 <Field label="Country" value={customer.country} onChange={(value) => setCustomer((prev) => ({ ...prev, country: value }))} />
               </div>
-              <label className="mt-2 flex items-center gap-2 text-xs text-slate-700">
+              <label className={PAYEE_MODAL_CHECKBOX_LABEL_CLASS}>
                 <input
                   type="checkbox"
                   checked={customer.shippingSameAsBilling}
@@ -380,16 +390,16 @@ export function PayeeSideModal({ open, onClose, onSave }: PayeeSideModalProps) {
             </CollapsibleCard>
 
             <CollapsibleCard title="Additional info" icon="⚙️">
-              <div className="rounded border border-slate-200 p-3">
-                <h4 className="mb-2 text-xs font-semibold text-slate-700">Sales tax</h4>
+              <div className={PAYEE_MODAL_SECTION_CLASS}>
+                <h4 className={PAYEE_MODAL_SUBHEADING_CLASS}>Sales tax</h4>
                 <Field
                   label="Exemption details"
                   value={customer.exemptionDetails}
                   onChange={(value) => setCustomer((prev) => ({ ...prev, exemptionDetails: value }))}
                 />
               </div>
-              <div className="rounded border border-slate-200 p-3">
-                <h4 className="mb-2 text-xs font-semibold text-slate-700">Opening balance</h4>
+              <div className={PAYEE_MODAL_SECTION_CLASS}>
+                <h4 className={PAYEE_MODAL_SUBHEADING_CLASS}>Opening balance</h4>
                 <div className="grid grid-cols-2 gap-3">
                   <Field
                     label="Opening balance"

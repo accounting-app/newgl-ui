@@ -185,6 +185,28 @@
   cursor: not-allowed;
 }
 
+.tw-override .payee-modal-select {
+  height: 32px;
+  padding: 0.5rem 0.75rem;
+  font-size: var(--font-size-input-text) !important;
+  line-height: 1.2;
+  border-radius: var(--radius-x-small);
+  border: 1px solid var(--color-input-border-primary) !important;
+  background-color: var(--color-input-background) !important;
+  color: var(--color-input-text) !important;
+  transition: background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.tw-override .payee-modal-select:focus-visible {
+  outline: none;
+  border-color: var(--override-focus) !important;
+  box-shadow: 0 0 0 1px var(--override-focus) !important;
+}
+
+.tw-override .payee-side-modal {
+  color: var(--color-text-primary);
+}
+
 /*
   Add your future high-priority overrides below this line.
   Example:

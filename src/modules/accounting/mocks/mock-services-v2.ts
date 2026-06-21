@@ -30,17 +30,18 @@ import {
 import { getPeriodIdForDate, validateTransactionPeriod } from "@/modules/accounting/domain/periods";
 import type { AccountingStore } from "@/modules/accounting/mocks/accounting-store";
 import { ledgerEventBus } from "@/shared/event-bus";
-import {
-  loadAccountingStore,
-  scheduleAccountingStorePersist
-} from "@/shared/storage/accounting-store-persistence";
+// localStorage persistence disabled — use the GL API via service-container-v2 instead.
+// import {
+//   loadAccountingStore,
+//   scheduleAccountingStorePersist
+// } from "@/shared/storage/accounting-store-persistence";
 import { createId } from "@/shared/utils/id";
 import { nowIso, todayIsoDate } from "@/shared/utils/date";
 
 type Store = AccountingStore;
 
-function persistStore(store: Store): void {
-  scheduleAccountingStorePersist(store);
+function persistStore(_store: Store): void {
+  // scheduleAccountingStorePersist(store); // disabled: localStorage
 }
 
 function auditEntry(action: string, changes: Record<string, unknown> | null = null) {
@@ -1158,10 +1159,10 @@ function runDevAccountingChecks(store: Store): void {
 }
 
 function initializeStore(): Store {
-  const persisted = loadAccountingStore();
-  if (persisted) {
-    return persisted;
-  }
+  // const persisted = loadAccountingStore(); // disabled: localStorage
+  // if (persisted) {
+  //   return persisted;
+  // }
 
   const store = buildMockData();
   seedDefaultRegisterTransactions(store);

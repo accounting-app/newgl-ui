@@ -384,6 +384,7 @@ export function useBankRegister() {
       setDraftTransaction(null);
       setDraftErrors({});
       setError(null);
+      await Promise.all([refreshEntries(), refreshAccounts(), refreshRefNumbers()]);
     } catch (value: unknown) {
       setDraftErrors({
         form: value instanceof Error ? value.message : "Failed to create transaction."
@@ -396,6 +397,9 @@ export function useBankRegister() {
     draftTransaction,
     existingRefNumbers,
     isSavingDraft,
+    refreshAccounts,
+    refreshEntries,
+    refreshRefNumbers,
     selectedAccountId,
     services.transactionService
   ]);
@@ -419,11 +423,12 @@ export function useBankRegister() {
         setSelectedTransaction(null);
         setSelectedPostings([]);
         setError(null);
+        await Promise.all([refreshEntries(), refreshAccounts(), refreshRefNumbers()]);
       } catch (value: unknown) {
         setError(value instanceof Error ? value.message : "Void failed.");
       }
     },
-    [services.transactionService]
+    [refreshAccounts, refreshEntries, refreshRefNumbers, services.transactionService]
   );
 
   const reverseTransaction = useCallback(
@@ -433,11 +438,12 @@ export function useBankRegister() {
         setSelectedTransaction(null);
         setSelectedPostings([]);
         setError(null);
+        await Promise.all([refreshEntries(), refreshAccounts(), refreshRefNumbers()]);
       } catch (value: unknown) {
         setError(value instanceof Error ? value.message : "Reversal failed.");
       }
     },
-    [services.transactionService]
+    [refreshAccounts, refreshEntries, refreshRefNumbers, services.transactionService]
   );
 
   const updateRegisterEntryInline = useCallback(
