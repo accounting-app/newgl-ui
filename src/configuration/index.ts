@@ -4,7 +4,7 @@ export const NEXT_PUBLIC_APP_ENV = process.env.NEXT_PUBLIC_APP_ENV as AppEnv;
 
 export const LOCAL_BASE_API_URL = "http://localhost:8080/api";
 export const DEV_BASE_API_URL = "http://localhost:8080/api";
-export const STAGING_BASE_API_URL = "https://newgl-api.fly.dev/api";
+export const STAGING_BASE_API_URL = "https://newgl.serveousercontent.com/api";
 export const PRODUCTION_BASE_API_URL = "https://newgl-api.fly.dev/api";
 
 export const APP_ENV_CONFIG: Record<AppEnv, { BASE_API_URL: string }> = {
