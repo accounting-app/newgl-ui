@@ -1,20 +1,5 @@
 import Link from "next/link";
-import { BarChart2, Scale } from "lucide-react";
-
-const REPORT_TYPES = [
-  {
-    href: "/reports/profit-loss",
-    icon: BarChart2,
-    title: "Profit and Loss",
-    description: "Income, expenses, and net income over a period.",
-  },
-  {
-    href: "/reports/balance-sheet",
-    icon: Scale,
-    title: "Balance Sheet",
-    description: "Assets, liabilities, and equity as of a date.",
-  },
-];
+import { REPORT_NAV_ITEMS } from "@/constants/reports";
 
 export default function ReportsIndexPage() {
   return (
@@ -28,7 +13,7 @@ export default function ReportsIndexPage() {
       <section className="page-content">
         <div className="mx-auto mt-8 w-full max-w-[840px]">
           <ul className="grid gap-3 sm:grid-cols-2">
-            {REPORT_TYPES.map(({ href, icon: Icon, title, description }) => (
+            {REPORT_NAV_ITEMS.map(({ href, icon: Icon, label, description }) => (
               <li key={href}>
                 <Link
                   href={href}
@@ -36,7 +21,7 @@ export default function ReportsIndexPage() {
                 >
                   <Icon className="mt-0.5 h-5 w-5 shrink-0 text-[var(--color-icon-secondary)]" />
                   <div>
-                    <p className="font-medium text-[var(--color-text-primary)]">{title}</p>
+                    <p className="font-medium text-[var(--color-text-primary)]">{label}</p>
                     <p className="mt-0.5 text-xs text-[var(--color-icon-secondary)]">{description}</p>
                   </div>
                 </Link>

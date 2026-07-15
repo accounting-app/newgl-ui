@@ -14,6 +14,8 @@ import {
   REPORT_PERIOD_OPTIONS,
   REPORT_USER_NAME
 } from "@/constants/ui";
+import { REPORT_NAV_ITEMS } from "@/constants/reports";
+import type { ReportType } from "@/constants/reports";
 import { buildHierarchyRows } from "@/lib/accounting/account-hierarchy";
 import { ReportSection } from "@/components/reports/report-section";
 import { ReportAccountRows } from "@/components/reports/report-account-rows";
@@ -22,8 +24,6 @@ import type { DrillTransaction } from "@/lib/accounting/drill-down";
 import { getServiceContainer } from "@/lib/services/service-container-v2";
 import { DEBIT_NORMAL_CATEGORIES } from "@/modules/accounting/domain/accounting-reports";
 import type { Account, LedgerPosting } from "@/modules/accounting/domain/models";
-
-type ReportType = "profit_loss" | "balance_sheet";
 
 type ReportsPageProps = {
   reportType: ReportType;
@@ -357,12 +357,36 @@ export function ReportsPage({ reportType }: ReportsPageProps) {
       <header className="header header-reports mb-4">
         <div className="w-full">
           <nav className="mb-2 flex items-center gap-1.5 text-xs text-[var(--color-icon-secondary)]">
+            <span className="text-[var(--color-icon-secondary)]">‹</span>
             <Link href="/reports" className="hover:underline text-[var(--color-link-text)]">
               Standard Reports
             </Link>
-            <span>›</span>
-            <span className="text-[var(--color-text-primary)]">{reportLabel}</span>
           </nav>
+          <div
+            role="tablist"
+            aria-label="Report type"
+            className="mb-6 flex items-center gap-1 border-b border-[var(--color-divider-tertiary)]"
+          >
+            {REPORT_NAV_ITEMS.map((item) => {
+              const isActive = item.type === reportType;
+              return (
+                <Link
+                  key={item.type}
+                  href={item.href}
+                  role="tab"
+                  aria-selected={isActive}
+                  aria-current={isActive ? "page" : undefined}
+                  className={`-mb-px border-b-2 px-3 py-1.5 text-xs font-medium transition-colors ${
+                    isActive
+                      ? "border-[var(--color-ui-primary)] text-[var(--color-text-primary)]"
+                      : "border-transparent text-[var(--color-icon-secondary)] hover:text-[var(--color-text-primary)]"
+                  }`}
+                >
+                  {item.label}
+                </Link>
+              );
+            })}
+          </div>
           <h1 className="page-title">{reportLabel}</h1>
         </div>
         <div className="header-filters">
