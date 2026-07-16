@@ -1,5 +1,10 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { REPORT_NAV_ITEMS } from "@/constants/reports";
+
+export const metadata: Metadata = {
+  title: "Standard Reports"
+};
 
 export default function ReportsIndexPage() {
   return (

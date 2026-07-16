@@ -6,7 +6,10 @@ import "../styles/tailwind-overrides.css";
 import { ThemeProvider } from "@/components/theme";
 
 export const metadata: Metadata = {
-  title: "New GL",
+  title: {
+    template: "New GL - %s",
+    default: "New GL"
+  },
   description: "The GL of accountants, by accountants, for accountants."
 };
 
