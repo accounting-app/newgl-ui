@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { InputField } from "@/components/ui/input-field";
 import { SelectField } from "@/components/bank-register/select-field";
@@ -129,6 +130,53 @@ function dateRangeForPreset(preset: ReportPeriodPreset, today = new Date()): { f
   }
 }
 
+const VALID_REPORT_PERIODS = new Set(REPORT_PERIOD_OPTIONS.map((o) => o.value));
+const VALID_DISPLAY_COLUMNS = new Set(REPORT_DISPLAY_COLUMNS_OPTIONS.map((o) => o.value));
+const VALID_COMPARE_TO = new Set(REPORT_COMPARE_TO_OPTIONS.map((o) => o.value));
+
+type ReportUrlFilters = {
+  reportPeriod: ReportPeriodPreset;
+  fromDate: string;
+  toDate: string;
+  accountingMethod: AccountingMethod;
+  displayColumnsBy: string;
+  compareTo: string;
+};
+
+function parseReportPeriod(searchParams: URLSearchParams): ReportPeriodPreset {
+  const value = searchParams.get("reportPeriod");
+  return (value && VALID_REPORT_PERIODS.has(value) ? value : REPORT_DEFAULT_PERIOD) as ReportPeriodPreset;
+}
+
+function parseAccountingMethod(searchParams: URLSearchParams): AccountingMethod {
+  const value = searchParams.get("accountingMethod");
+  return value === "cash" || value === "accrual" ? value : "cash";
+}
+
+function parseDisplayColumnsBy(searchParams: URLSearchParams): string {
+  const value = searchParams.get("displayColumnsBy");
+  return value && VALID_DISPLAY_COLUMNS.has(value) ? value : REPORT_DEFAULT_DISPLAY_COLUMNS_BY;
+}
+
+function parseCompareTo(searchParams: URLSearchParams): string {
+  const value = searchParams.get("compareTo");
+  return value && VALID_COMPARE_TO.has(value) ? value : REPORT_DEFAULT_COMPARE_TO;
+}
+
+function buildReportQueryString(filters: ReportUrlFilters): string {
+  const params = new URLSearchParams();
+  if (filters.reportPeriod !== REPORT_DEFAULT_PERIOD) params.set("reportPeriod", filters.reportPeriod);
+  if (filters.reportPeriod === "custom") {
+    if (filters.fromDate) params.set("from", filters.fromDate);
+    if (filters.toDate) params.set("to", filters.toDate);
+  }
+  if (filters.accountingMethod !== "cash") params.set("accountingMethod", filters.accountingMethod);
+  if (filters.displayColumnsBy !== REPORT_DEFAULT_DISPLAY_COLUMNS_BY)
+    params.set("displayColumnsBy", filters.displayColumnsBy);
+  if (filters.compareTo !== REPORT_DEFAULT_COMPARE_TO) params.set("compareTo", filters.compareTo);
+  return params.toString();
+}
+
 function formatMoney(value: number): string {
   return value.toLocaleString("en-US", {
     style: "currency",
@@ -174,13 +222,29 @@ function signedImpact(account: Account, posting: LedgerPosting): number {
 }
 
 export function ReportsPage({ reportType }: ReportsPageProps) {
+  return (
+    <Suspense fallback={null}>
+      <ReportsPageInner reportType={reportType} />
+    </Suspense>
+  );
+}
+
+function ReportsPageInner({ reportType }: ReportsPageProps) {
   const services = useMemo(() => getServiceContainer(), []);
-  const [reportPeriod, setReportPeriod] = useState<ReportPeriodPreset>(REPORT_DEFAULT_PERIOD);
-  const [fromDate, setFromDate] = useState("");
-  const [toDate, setToDate] = useState("");
-  const [accountingMethod, setAccountingMethod] = useState<AccountingMethod>("cash");
-  const [displayColumnsBy, setDisplayColumnsBy] = useState<string>(REPORT_DEFAULT_DISPLAY_COLUMNS_BY);
-  const [compareTo, setCompareTo] = useState<string>(REPORT_DEFAULT_COMPARE_TO);
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const [reportPeriod, setReportPeriod] = useState<ReportPeriodPreset>(() => parseReportPeriod(searchParams));
+  const [fromDate, setFromDate] = useState(() =>
+    parseReportPeriod(searchParams) === "custom" ? searchParams.get("from") ?? "" : ""
+  );
+  const [toDate, setToDate] = useState(() =>
+    parseReportPeriod(searchParams) === "custom" ? searchParams.get("to") ?? "" : ""
+  );
+  const [accountingMethod, setAccountingMethod] = useState<AccountingMethod>(() =>
+    parseAccountingMethod(searchParams)
+  );
+  const [displayColumnsBy, setDisplayColumnsBy] = useState<string>(() => parseDisplayColumnsBy(searchParams));
+  const [compareTo, setCompareTo] = useState<string>(() => parseCompareTo(searchParams));
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [postings, setPostings] = useState<LedgerPosting[]>([]);
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({
@@ -207,15 +271,29 @@ export function ReportsPage({ reportType }: ReportsPageProps) {
   }
 
   useEffect(() => {
-    const range = dateRangeForPreset(REPORT_DEFAULT_PERIOD);
+    if (reportPeriod === "custom") return;
+    const range = dateRangeForPreset(reportPeriod);
     setFromDate(range.from);
     setToDate(range.to);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
     services.accountService.listAccounts().then(setAccounts).catch(() => setAccounts([]));
     services.ledgerService.listPostings().then(setPostings).catch(() => setPostings([]));
   }, [services]);
+
+  const reportQueryString = useMemo(
+    () =>
+      buildReportQueryString({ reportPeriod, fromDate, toDate, accountingMethod, displayColumnsBy, compareTo }),
+    [reportPeriod, fromDate, toDate, accountingMethod, displayColumnsBy, compareTo]
+  );
+
+  useEffect(() => {
+    const basePath = reportType === "profit_loss" ? "/reports/profit-loss" : "/reports/balance-sheet";
+    const url = reportQueryString ? `${basePath}?${reportQueryString}` : basePath;
+    router.replace(url, { scroll: false });
+  }, [reportQueryString, reportType, router]);
 
   function handlePeriodChange(value: string) {
     const preset = value as ReportPeriodPreset;
@@ -369,10 +447,11 @@ export function ReportsPage({ reportType }: ReportsPageProps) {
           >
             {REPORT_NAV_ITEMS.map((item) => {
               const isActive = item.type === reportType;
+              const href = reportQueryString ? `${item.href}?${reportQueryString}` : item.href;
               return (
                 <Link
                   key={item.type}
-                  href={item.href}
+                  href={href}
                   role="tab"
                   aria-selected={isActive}
                   aria-current={isActive ? "page" : undefined}
