@@ -5,7 +5,10 @@ import type {
   ChartOfAccount,
   CreateAccountInput,
   CreateTransactionInput,
+  ImportTransactionsInput,
+  ImportTransactionsResult,
   LedgerPosting,
+  ListTransactionsFilter,
   ReconcileStatus,
   RegisterEntry,
   Transaction,
@@ -145,8 +148,16 @@ export class HttpTransactionService implements TransactionService {
     return request(this.baseUrl, `/transactions/${id}`);
   }
 
-  listTransactions(): Promise<Transaction[]> {
-    return request(this.baseUrl, "/transactions");
+  listTransactions(filter?: ListTransactionsFilter): Promise<Transaction[]> {
+    const params = new URLSearchParams();
+    if (filter?.status) params.set("status", filter.status);
+    if (filter?.sourceAccountId) params.set("sourceAccountId", filter.sourceAccountId);
+    const query = params.toString();
+    return request(this.baseUrl, `/transactions${query ? `?${query}` : ""}`);
+  }
+
+  importTransactions(input: ImportTransactionsInput): Promise<ImportTransactionsResult> {
+    return request(this.baseUrl, "/transactions/import", { method: "POST", body: JSON.stringify(input) });
   }
 
   postTransaction(id: string): Promise<Transaction> {

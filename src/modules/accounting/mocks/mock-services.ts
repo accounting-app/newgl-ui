@@ -4,7 +4,11 @@ import type {
   ChartOfAccount,
   CreateAccountInput,
   CreateTransactionInput,
+  ImportTransactionRowResult,
+  ImportTransactionsInput,
+  ImportTransactionsResult,
   LedgerPosting,
+  ListTransactionsFilter,
   PostingEntryType,
   ReconcileStatus,
   RegisterEntry,
@@ -612,8 +616,15 @@ export class MockTransactionService implements TransactionService {
     return transaction;
   }
 
-  async listTransactions(): Promise<Transaction[]> {
-    return [...this.store.transactions];
+  async listTransactions(filter?: ListTransactionsFilter): Promise<Transaction[]> {
+    if (!filter) {
+      return [...this.store.transactions];
+    }
+    return this.store.transactions.filter((transaction) => {
+      if (filter.status && transaction.status !== filter.status) return false;
+      if (filter.sourceAccountId && transaction.sourceAccountId !== filter.sourceAccountId) return false;
+      return true;
+    });
   }
 
   async postTransaction(id: string): Promise<Transaction> {
@@ -769,6 +780,75 @@ export class MockTransactionService implements TransactionService {
     }
     const transaction = await this.createTransaction({ ...input, type: "TRANSFER" });
     return this.postTransaction(transaction.id);
+  }
+
+  async importTransactions(input: ImportTransactionsInput): Promise<ImportTransactionsResult> {
+    const results: ImportTransactionRowResult[] = [];
+
+    for (const row of input.rows) {
+      try {
+        const isOutflow = row.amount < 0;
+        const amount = Math.abs(row.amount);
+        if (amount === 0) {
+          throw new Error("Amount must not be zero.");
+        }
+        if (input.mainAccountId === row.categoryAccountId) {
+          throw new Error("Main account and category account must differ.");
+        }
+
+        const postings = isOutflow
+          ? [
+              { accountId: input.mainAccountId, type: "CREDIT" as const, amount },
+              { accountId: row.categoryAccountId, type: "DEBIT" as const, amount }
+            ]
+          : [
+              { accountId: input.mainAccountId, type: "DEBIT" as const, amount },
+              { accountId: row.categoryAccountId, type: "CREDIT" as const, amount }
+            ];
+
+        validateDoubleEntry(postings);
+        validateTransactionPeriod(row.transactionDate);
+        postings.forEach((posting) => {
+          const account = requireAccount(this.store, posting.accountId);
+          if (account.status !== "ACTIVE") {
+            throw new Error(`Account ${account.id} is ${account.status.toLowerCase()} and cannot receive transactions.`);
+          }
+        });
+
+        const createdAt = nowIso();
+        const transaction: Transaction = {
+          id: createId(),
+          type: isOutflow ? "EXPENSE" : "DEPOSIT",
+          status: "DRAFT",
+          transactionDate: row.transactionDate,
+          referenceNumber: row.referenceNumber,
+          memo: row.memo,
+          payee: row.payee,
+          sourceAccountId: input.mainAccountId,
+          periodId: getPeriodIdForDate(row.transactionDate),
+          postings,
+          auditLog: [auditEntry("created")],
+          createdAt,
+          updatedAt: createdAt,
+          createdBy: "user"
+        };
+        this.store.transactions.push(transaction);
+
+        results.push({ clientRowId: row.clientRowId, status: "CREATED", transactionId: transaction.id });
+      } catch (err) {
+        results.push({
+          clientRowId: row.clientRowId,
+          status: "FAILED",
+          error: err instanceof Error ? err.message : "Unknown error"
+        });
+      }
+    }
+
+    return {
+      succeeded: results.filter((result) => result.status === "CREATED").length,
+      failed: results.filter((result) => result.status === "FAILED").length,
+      results
+    };
   }
 }
 
