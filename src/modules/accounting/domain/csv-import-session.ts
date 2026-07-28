@@ -3,6 +3,7 @@ import type { ReviewRow } from "@/modules/accounting/domain/csv-import";
 export type CsvImportSession = {
   mainAccountId: string;
   rows: ReviewRow[];
+  selectedRowClientIds: string[];
 };
 
 function storageKey(accountId: string): string {
@@ -25,6 +26,9 @@ export function loadCsvImportSession(accountId: string): CsvImportSession | null
     if (!raw) return null;
     const parsed = JSON.parse(raw) as CsvImportSession;
     if (!parsed || !Array.isArray(parsed.rows) || parsed.rows.length === 0) return null;
+    if (!Array.isArray(parsed.selectedRowClientIds)) {
+      parsed.selectedRowClientIds = parsed.rows.map((row) => row.clientRowId);
+    }
     return parsed;
   } catch {
     return null;

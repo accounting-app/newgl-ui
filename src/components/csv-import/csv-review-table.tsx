@@ -1,24 +1,27 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { Trash2 } from "lucide-react";
 import { SelectField } from "@/components/bank-register/select-field";
 import type { SelectFieldOption } from "@/components/bank-register/select-field";
 import { Button } from "@/components/ui/button";
 import { InputField } from "@/components/ui/input-field";
-import type { ReviewRow } from "@/modules/accounting/domain/csv-import";
+import type { ReviewRow, SignConvention } from "@/modules/accounting/domain/csv-import";
 
 type CsvReviewTableProps = {
   rows: ReviewRow[];
   accountOptions: SelectFieldOption[];
   mainAccountId: string;
-  onMainAccountChange: (accountId: string) => void;
+  selectedRowIds: Set<string>;
+  onSelectedRowIdsChange: (next: Set<string>) => void;
+  signConvention: SignConvention;
+  onSignConventionChange: (next: SignConvention) => void;
   onRowChange: (clientRowId: string, patch: Partial<ReviewRow>) => void;
   onRowDelete: (clientRowId: string) => void;
-  onSubmit: () => void;
-  onCancel: () => void;
+  onBack: () => void;
+  onContinue: () => void;
   isSubmitting: boolean;
   submitError?: string | null;
+  backDisabled?: boolean;
 };
 
 export function isRowSubmittable(row: ReviewRow, mainAccountId: string): boolean {
@@ -32,80 +35,112 @@ export function isRowSubmittable(row: ReviewRow, mainAccountId: string): boolean
 
 function rowErrorMessage(row: ReviewRow, mainAccountId: string): string | null {
   if (row.parseErrors.length > 0) return row.parseErrors.join(" ");
-  if (!row.categoryAccountId) return "Select a category account.";
-  if (row.categoryAccountId === mainAccountId) return "Category must differ from the main account.";
+  if (!row.categoryAccountId) return "Select a target account.";
+  if (row.categoryAccountId === mainAccountId) return "Target account must differ from the main account.";
   return null;
+}
+
+function formatMoney(value: number): string {
+  return value.toLocaleString("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2 });
 }
 
 export function CsvReviewTable({
   rows,
   accountOptions,
   mainAccountId,
-  onMainAccountChange,
+  selectedRowIds,
+  onSelectedRowIdsChange,
+  signConvention,
+  onSignConventionChange,
   onRowChange,
   onRowDelete,
-  onSubmit,
-  onCancel,
+  onBack,
+  onContinue,
   isSubmitting,
-  submitError
+  submitError,
+  backDisabled
 }: CsvReviewTableProps) {
-  const [isConfirming, setIsConfirming] = useState(false);
+  const selectedRows = rows.filter((row) => selectedRowIds.has(row.clientRowId));
+  const selectedSubmittableCount = selectedRows.filter((row) => isRowSubmittable(row, mainAccountId)).length;
+  const allSelectedAreReady = selectedRows.length > 0 && selectedSubmittableCount === selectedRows.length;
+  const allChecked = rows.length > 0 && selectedRowIds.size === rows.length;
 
-  useEffect(() => {
-    setIsConfirming(false);
-  }, [rows, mainAccountId]);
+  function toggleRow(clientRowId: string, checked: boolean) {
+    const next = new Set(selectedRowIds);
+    if (checked) next.add(clientRowId);
+    else next.delete(clientRowId);
+    onSelectedRowIdsChange(next);
+  }
 
-  const parsedCount = rows.filter((row) => row.parseErrors.length === 0).length;
-  const parseFailedCount = rows.length - parsedCount;
-  const submittableCount = rows.filter((row) => isRowSubmittable(row, mainAccountId)).length;
-  const allRowsReady = rows.length > 0 && submittableCount === rows.length;
-
-  function handleImportClick() {
-    if (!allRowsReady) return;
-    if (!isConfirming) {
-      setIsConfirming(true);
-      return;
-    }
-    onSubmit();
+  function toggleAll(checked: boolean) {
+    onSelectedRowIdsChange(checked ? new Set(rows.map((row) => row.clientRowId)) : new Set());
   }
 
   return (
     <div className="flex h-full flex-col gap-4">
-      <div>
-        <h2 className="text-xl font-medium text-[var(--color-text-primary)]">Review transactions</h2>
-        <p className="mt-1 text-sm text-[var(--color-icon-secondary)]">
-          {parsedCount} parsed successfully
-          {parseFailedCount > 0 ? ` / ${parseFailedCount} need attention` : ""}. Assign a category to each
-          row before importing.
+      <h2 className="text-xl font-medium text-[var(--color-text-primary)]">
+        Let&apos;s verify and import your transactions
+      </h2>
+
+      <div className="rounded border border-[var(--color-divider-tertiary)] p-4">
+        <p className="mb-3 text-sm text-[var(--color-text-primary)]">
+          <strong>Check:</strong> Generally, income transactions post as <strong>positive</strong> numbers and
+          expense transactions post as <strong>negative</strong> ones. Occasionally, some banks send files with
+          this reversed. Do the transactions below correctly indicate income and expenses?
         </p>
+        <div className="flex flex-col gap-2">
+          <label className="flex items-center gap-2 text-sm text-[var(--color-text-primary)]">
+            <input
+              type="radio"
+              name="sign-convention"
+              checked={signConvention === "ORIGINAL"}
+              onChange={() => onSignConventionChange("ORIGINAL")}
+            />
+            Keep original values
+          </label>
+          <label className="flex items-center gap-2 text-sm text-[var(--color-text-primary)]">
+            <input
+              type="radio"
+              name="sign-convention"
+              checked={signConvention === "REVERSED"}
+              onChange={() => onSignConventionChange("REVERSED")}
+            />
+            Reverse all values
+          </label>
+        </div>
       </div>
 
-      <div className="max-w-xs">
-        <p className="mb-1 text-xs text-[var(--color-icon-secondary)]">Main account</p>
-        <SelectField
-          value={mainAccountId}
-          onChange={onMainAccountChange}
-          options={accountOptions}
-          placeholder="Select account"
-          allowCustomValue={false}
-        />
-      </div>
+      <p className="text-sm text-[var(--color-text-primary)]">
+        <strong>Select:</strong> Choose the transactions you want to import, and assign a target account to
+        each.
+      </p>
 
       <div className="flex-1 overflow-auto rounded border border-[var(--color-divider-tertiary)]">
-        <table className="w-full min-w-[900px] border-collapse text-sm">
+        <table className="w-full table-fixed border-collapse text-sm">
+          <colgroup>
+            <col className="w-10" />
+            <col className="w-[12%]" />
+            <col className="w-[24%]" />
+            <col className="w-[12%]" />
+            <col className="w-[26%]" />
+            <col className="w-10" />
+          </colgroup>
           <thead className="sticky top-0 bg-[var(--color-container-background-accent)]">
             <tr className="border-b border-[var(--color-divider-tertiary)]">
+              <th className="px-3 py-2">
+                <input type="checkbox" checked={allChecked} onChange={(event) => toggleAll(event.target.checked)} />
+              </th>
               <th className="px-3 py-2 text-left font-medium text-[var(--color-text-primary)]">Date</th>
-              <th className="px-3 py-2 text-left font-medium text-[var(--color-text-primary)]">Payee</th>
               <th className="px-3 py-2 text-left font-medium text-[var(--color-text-primary)]">Description</th>
               <th className="px-3 py-2 text-right font-medium text-[var(--color-text-primary)]">Amount</th>
-              <th className="px-3 py-2 text-left font-medium text-[var(--color-text-primary)]">Category</th>
+              <th className="px-3 py-2 text-left font-medium text-[var(--color-text-primary)]">Target account</th>
               <th className="px-3 py-2"> </th>
             </tr>
           </thead>
           <tbody>
             {rows.map((row) => {
               const error = rowErrorMessage(row, mainAccountId);
+              const isChecked = selectedRowIds.has(row.clientRowId);
               return (
                 <tr
                   key={row.clientRowId}
@@ -113,6 +148,13 @@ export function CsvReviewTable({
                     error ? "bg-[var(--color-container-background-accent)]" : ""
                   }`}
                 >
+                  <td className="px-3 py-2 align-top">
+                    <input
+                      type="checkbox"
+                      checked={isChecked}
+                      onChange={(event) => toggleRow(row.clientRowId, event.target.checked)}
+                    />
+                  </td>
                   <td className="p-2 align-top">
                     <InputField
                       type="date"
@@ -124,14 +166,6 @@ export function CsvReviewTable({
                           parseErrors: row.parseErrors.filter((message) => !message.startsWith("Date"))
                         })
                       }
-                      className="w-full"
-                    />
-                  </td>
-                  <td className="p-2 align-top">
-                    <InputField
-                      type="text"
-                      value={row.payee}
-                      onChange={(event) => onRowChange(row.clientRowId, { payee: event.target.value })}
                       className="w-full"
                     />
                   </td>
@@ -154,11 +188,16 @@ export function CsvReviewTable({
                         onRowChange(row.clientRowId, {
                           amount: Number.isFinite(parsed) ? parsed : null,
                           rawAmount: value,
-                          parseErrors: row.parseErrors.filter((message) => !message.startsWith("Amount"))
+                          parseErrors: row.parseErrors.filter((message) => !message.toLowerCase().includes("amount"))
                         });
                       }}
                       className="w-full text-right"
                     />
+                    {row.amount !== null ? (
+                      <p className="mt-0.5 text-right text-[11px] text-[var(--color-icon-secondary)]">
+                        {formatMoney(row.amount)}
+                      </p>
+                    ) : null}
                   </td>
                   <td className="p-2 align-top">
                     <SelectField
@@ -188,21 +227,13 @@ export function CsvReviewTable({
         </table>
       </div>
 
-      <div className="flex items-center justify-end gap-2">
+      <div className="flex items-center justify-between">
         {submitError ? <p className="mr-auto text-sm text-red-600">{submitError}</p> : null}
-        <Button variant="secondary" onClick={onCancel} disabled={isSubmitting}>
-          Cancel
+        <Button variant="secondary" onClick={onBack} disabled={isSubmitting || backDisabled}>
+          Back
         </Button>
-        <Button
-          variant="primary"
-          onClick={handleImportClick}
-          disabled={isSubmitting || !allRowsReady}
-        >
-          {isSubmitting
-            ? "Importing..."
-            : isConfirming
-              ? "Are you sure you want to import?"
-              : `Import ${submittableCount} transaction${submittableCount === 1 ? "" : "s"}`}
+        <Button variant="primary" onClick={onContinue} disabled={isSubmitting || !allSelectedAreReady}>
+          Continue
         </Button>
       </div>
     </div>

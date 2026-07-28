@@ -18,7 +18,7 @@ export function CsvImportSummary({ result, rows, skippedCount, onClose }: CsvImp
   return (
     <div className="mx-auto flex w-full max-w-[640px] flex-col gap-6">
       <div>
-        <h2 className="text-xl font-medium text-[var(--color-text-primary)]">Import complete</h2>
+        <h2 className="text-xl font-medium text-[var(--color-text-primary)]">Import completed</h2>
         <p className="mt-1 text-sm text-[var(--color-icon-secondary)]">
           {result.succeeded} succeeded / {result.failed} failed
           {skippedCount > 0 ? ` / ${skippedCount} skipped` : ""}.
@@ -54,7 +54,7 @@ export function CsvImportSummary({ result, rows, skippedCount, onClose }: CsvImp
 
       <div className="flex items-center justify-end gap-2">
         <Button variant="primary" onClick={onClose}>
-          Close
+          Done
         </Button>
       </div>
     </div>
