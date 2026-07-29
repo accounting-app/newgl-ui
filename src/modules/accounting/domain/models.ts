@@ -220,3 +220,36 @@ export type CreateTransactionInput = Pick<
   | "reconcileStatus"
   | "postings"
 >;
+
+export type ImportTransactionRowInput = {
+  clientRowId: string;
+  transactionDate: string;
+  payee?: string;
+  memo?: string;
+  amount: number;
+  categoryAccountId: string;
+  referenceNumber?: string;
+};
+
+export type ImportTransactionsInput = {
+  mainAccountId: string;
+  rows: ImportTransactionRowInput[];
+};
+
+export type ImportTransactionRowResult = {
+  clientRowId: string;
+  status: "CREATED" | "FAILED";
+  transactionId?: string;
+  error?: string;
+};
+
+export type ImportTransactionsResult = {
+  succeeded: number;
+  failed: number;
+  results: ImportTransactionRowResult[];
+};
+
+export type ListTransactionsFilter = {
+  status?: TransactionStatus;
+  sourceAccountId?: string;
+};

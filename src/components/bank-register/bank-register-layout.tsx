@@ -1,11 +1,13 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AccountSelector } from "@/components/bank-register/account-selector";
 import { RegisterTable } from "@/components/bank-register/register-table";
 import { getRegisterTitle } from "@/components/bank-register/register-title";
 import type { SelectFieldOption } from "@/components/bank-register/select-field";
+import { ImportModal } from "@/components/csv-import/import-modal";
 import { ACCOUNT_CATEGORY_LABELS, DEFAULT_TOP_HEADER_USER_NAME } from "@/constants/ui";
+import { loadCsvImportSession } from "@/modules/accounting/domain/csv-import-session";
 import { isRegisterAccountCategory } from "@/modules/accounting/presentation/transaction-type-policy";
 import { useBankRegister } from "@hooks/use-bank-register";
 
@@ -32,7 +34,18 @@ export function BankRegisterLayout() {
     saveDraftTransaction,
     updateRegisterEntryInline,
     updateDraftField,
+    importTransactions,
   } = useBankRegister();
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [savedImportRowCount, setSavedImportRowCount] = useState(0);
+
+  useEffect(() => {
+    if (!selectedAccountId) {
+      setSavedImportRowCount(0);
+      return;
+    }
+    setSavedImportRowCount(loadCsvImportSession(selectedAccountId)?.rows.length ?? 0);
+  }, [selectedAccountId]);
 
   const registerTitle = getRegisterTitle(selectedAccount);
 
@@ -106,8 +119,19 @@ export function BankRegisterLayout() {
           selectedAccountName={selectedAccount?.name ?? "Account"}
           endingBalance={generalBalance}
           printUserName={DEFAULT_TOP_HEADER_USER_NAME}
+          onOpenImport={() => setIsImportModalOpen(true)}
+          savedImportRowCount={savedImportRowCount}
         />
       </section>
+
+      <ImportModal
+        open={isImportModalOpen}
+        onClose={() => setIsImportModalOpen(false)}
+        defaultMainAccountId={selectedAccountId}
+        accountOptions={accountOptions}
+        onImportTransactions={importTransactions}
+        onSessionChange={setSavedImportRowCount}
+      />
     </main>
   );
 }

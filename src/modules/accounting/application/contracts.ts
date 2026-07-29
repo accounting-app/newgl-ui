@@ -3,7 +3,10 @@ import type {
   AccountHierarchy,
   CreateAccountInput,
   CreateTransactionInput,
+  ImportTransactionsInput,
+  ImportTransactionsResult,
   LedgerPosting,
+  ListTransactionsFilter,
   ReconcileStatus,
   RegisterEntry,
   Transaction,
@@ -22,12 +25,13 @@ export interface AccountService {
 export interface TransactionService {
   createTransaction(input: CreateTransactionInput): Promise<Transaction>;
   getTransactionById(id: string): Promise<Transaction>;
-  listTransactions(): Promise<Transaction[]>;
+  listTransactions(filter?: ListTransactionsFilter): Promise<Transaction[]>;
   postTransaction(id: string): Promise<Transaction>;
   voidTransaction(id: string): Promise<Transaction>;
   reverseTransaction(id: string): Promise<Transaction>;
   createDeposit(input: Omit<CreateTransactionInput, "type">): Promise<Transaction>;
   createTransfer(input: Omit<CreateTransactionInput, "type">): Promise<Transaction>;
+  importTransactions(input: ImportTransactionsInput): Promise<ImportTransactionsResult>;
 }
 
 export interface LedgerService {

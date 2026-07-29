@@ -5,6 +5,8 @@ import { getServiceContainer } from "@/lib/services/service-container-v2";
 import { ledgerEventBus } from "@/shared/event-bus";
 import type {
   Account,
+  ImportTransactionsInput,
+  ImportTransactionsResult,
   LedgerPosting,
   ReconcileStatus,
   RegisterEntry,
@@ -431,6 +433,15 @@ export function useBankRegister() {
     [refreshAccounts, refreshEntries, refreshRefNumbers, services.transactionService]
   );
 
+  const importTransactions = useCallback(
+    async (input: ImportTransactionsInput): Promise<ImportTransactionsResult> => {
+      const result = await services.transactionService.importTransactions(input);
+      await Promise.all([refreshEntries(), refreshAccounts(), refreshRefNumbers()]);
+      return result;
+    },
+    [refreshAccounts, refreshEntries, refreshRefNumbers, services.transactionService]
+  );
+
   const reverseTransaction = useCallback(
     async (transactionId: string) => {
       try {
@@ -524,6 +535,7 @@ export function useBankRegister() {
     selectTransaction,
     updateDraftField,
     voidTransaction,
-    reverseTransaction
+    reverseTransaction,
+    importTransactions
   };
 }
