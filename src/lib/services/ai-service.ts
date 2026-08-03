@@ -58,3 +58,15 @@ export async function suggestCategorization(
   });
   return result.results;
 }
+
+// Fire-and-forget from the caller's point of view (AI_INTEGRATION_PLAN.md
+// Part 7, feature #2 closing the loop with feature #3): every confirmed
+// import row teaches the payee->account mapping, so next time that payee
+// shows up it resolves via a learned rule instead of a fresh model call.
+export async function learnPayeeRules(rules: { payee: string; accountId: string }[]): Promise<void> {
+  if (rules.length === 0) return;
+  await request(BASE_API_URL, "/ai/rules/learn", {
+    method: "POST",
+    body: JSON.stringify({ rules })
+  });
+}
