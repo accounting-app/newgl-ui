@@ -8,15 +8,22 @@ export type Tenant = {
   id: string;
   name: string;
   planId: string;
+  aiEnabled: boolean;
 };
 
 type TenantContextValue = {
   tenant: Tenant | null;
   loading: boolean;
   error: string | null;
+  setTenant: (tenant: Tenant) => void;
 };
 
-const TenantContext = createContext<TenantContextValue>({ tenant: null, loading: true, error: null });
+const TenantContext = createContext<TenantContextValue>({
+  tenant: null,
+  loading: true,
+  error: null,
+  setTenant: () => {}
+});
 
 type TenantProviderProps = Readonly<{
   children: ReactNode;
@@ -56,7 +63,7 @@ export function TenantProvider({ children }: TenantProviderProps) {
     };
   }, []);
 
-  return <TenantContext.Provider value={{ tenant, loading, error }}>{children}</TenantContext.Provider>;
+  return <TenantContext.Provider value={{ tenant, loading, error, setTenant }}>{children}</TenantContext.Provider>;
 }
 
 export function useTenant(): TenantContextValue {

@@ -25,6 +25,7 @@ type CsvReviewTableProps = {
   onSuggestCategories: () => void;
   isSuggestingCategories: boolean;
   suggestCategoriesError: string | null;
+  aiEnabled: boolean;
 };
 
 export function isRowSubmittable(row: ReviewRow, mainAccountId: string): boolean {
@@ -64,7 +65,8 @@ export function CsvReviewTable({
   backDisabled,
   onSuggestCategories,
   isSuggestingCategories,
-  suggestCategoriesError
+  suggestCategoriesError,
+  aiEnabled
 }: CsvReviewTableProps) {
   const selectedRows = rows.filter((row) => selectedRowIds.has(row.clientRowId));
   const selectedSubmittableCount = selectedRows.filter((row) => isRowSubmittable(row, mainAccountId)).length;
@@ -121,12 +123,14 @@ export function CsvReviewTable({
           <strong>Select:</strong> Choose the transactions you want to import, and assign a target account to
           each.
         </p>
-        <Button variant="secondary" onClick={onSuggestCategories} disabled={isSuggestingCategories}>
-          <span className="flex items-center gap-1.5 whitespace-nowrap">
-            <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
-            {isSuggestingCategories ? "Suggesting…" : "Suggest categories with AI"}
-          </span>
-        </Button>
+        {aiEnabled ? (
+          <Button variant="secondary" onClick={onSuggestCategories} disabled={isSuggestingCategories}>
+            <span className="flex items-center gap-1.5 whitespace-nowrap">
+              <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
+              {isSuggestingCategories ? "Suggesting…" : "Suggest categories with AI"}
+            </span>
+          </Button>
+        ) : null}
       </div>
       {suggestCategoriesError ? <p className="text-sm text-red-600">{suggestCategoriesError}</p> : null}
 

@@ -12,6 +12,7 @@ import { ImportWizardSteps } from "@/components/csv-import/import-wizard-steps";
 import type { WizardStepInfo } from "@/components/csv-import/import-wizard-steps";
 import { SelectAccountStep } from "@/components/csv-import/select-account-step";
 import { useBodyScrollLock } from "@/hooks/use-body-scroll-lock";
+import { useTenant } from "@/lib/tenant/tenant-provider";
 import { buildReviewRows, getColumnLabels, tokenizeCsvText } from "@/modules/accounting/domain/parse-csv";
 import { learnPayeeRules, suggestCategorization, suggestColumnMapping } from "@/lib/services/ai-service";
 import {
@@ -54,6 +55,8 @@ export function ImportModal({
   onImportTransactions,
   onSessionChange
 }: ImportModalProps) {
+  const { tenant } = useTenant();
+  const aiEnabled = tenant?.aiEnabled ?? true;
   const [step, setStep] = useState<WizardStep>("UPLOAD");
   const [uploadError, setUploadError] = useState<string | null>(null);
 
@@ -273,7 +276,7 @@ export function ImportModal({
       // that makes future imports cheaper, never something the import result
       // should wait on or fail over.
       const learnableRows = submittable.filter((row) => row.payee.trim() !== "");
-      if (learnableRows.length > 0) {
+      if (aiEnabled && learnableRows.length > 0) {
         learnPayeeRules(
           learnableRows.map((row) => ({ payee: row.payee, accountId: row.categoryAccountId! }))
         ).catch(() => {});
@@ -347,6 +350,7 @@ export function ImportModal({
               onSuggestMapping={handleSuggestMapping}
               isSuggestingMapping={isSuggestingMapping}
               suggestMappingError={suggestMappingError}
+              aiEnabled={aiEnabled}
             />
           ) : null}
 
@@ -370,6 +374,7 @@ export function ImportModal({
                 onSuggestCategories={handleSuggestCategories}
                 isSuggestingCategories={isSuggestingCategories}
                 suggestCategoriesError={suggestCategoriesError}
+                aiEnabled={aiEnabled}
               />
               {resumedFromSession ? (
                 <button

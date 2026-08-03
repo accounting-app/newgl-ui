@@ -6,6 +6,8 @@ import { InputField } from "@/components/ui/input-field";
 import { SettingsCard } from "@/components/settings/settings-card";
 import { BASE_API_URL } from "@/configuration";
 import { request } from "@/lib/services/http-service-container";
+import { setAiFeaturesEnabled } from "@/lib/services/ai-service";
+import { useTenant } from "@/lib/tenant/tenant-provider";
 
 type AiStatus = {
   keySource: "platform" | "byok";
@@ -25,6 +27,10 @@ type UsageSummary = {
 };
 
 export default function AiSettingsPage() {
+  const { tenant, setTenant } = useTenant();
+  const [isTogglingAi, setIsTogglingAi] = useState(false);
+  const [toggleError, setToggleError] = useState<string | null>(null);
+
   const [status, setStatus] = useState<AiStatus | null>(null);
   const [usage, setUsage] = useState<UsageSummary | null>(null);
   const [loading, setLoading] = useState(true);
@@ -86,6 +92,20 @@ export default function AiSettingsPage() {
     }
   }
 
+  async function handleToggleAi() {
+    if (!tenant) return;
+    setIsTogglingAi(true);
+    setToggleError(null);
+    try {
+      const updated = await setAiFeaturesEnabled(!tenant.aiEnabled);
+      setTenant(updated);
+    } catch (err) {
+      setToggleError(err instanceof Error ? err.message : "Could not update this setting");
+    } finally {
+      setIsTogglingAi(false);
+    }
+  }
+
   if (loading) {
     return <p className="text-sm text-[var(--color-text-primary)]">Loading…</p>;
   }
@@ -100,6 +120,21 @@ export default function AiSettingsPage() {
 
   return (
     <>
+      <SettingsCard
+        title="AI features"
+        description="Turn AI suggestions off entirely -- column mapping, categorization, and payee learning all stop, and no data is sent to Anthropic."
+      >
+        <div className="flex items-center justify-between">
+          <p className="text-sm text-[var(--color-text-global)]">
+            {tenant?.aiEnabled ? "AI features are on" : "AI features are off"}
+          </p>
+          <Button variant="secondary" onClick={handleToggleAi} disabled={isTogglingAi || !tenant}>
+            {isTogglingAi ? "Saving…" : tenant?.aiEnabled ? "Turn off" : "Turn on"}
+          </Button>
+        </div>
+        {toggleError ? <p className="mt-2 text-sm text-red-600">{toggleError}</p> : null}
+      </SettingsCard>
+
       <SettingsCard title="AI key" description="Bring your own Anthropic key, or use New GL's free-plan key.">
         {status?.keySource === "byok" ? (
           <div className="flex items-center justify-between">

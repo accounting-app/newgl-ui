@@ -23,6 +23,7 @@ type CsvMappingStepProps = {
   onSuggestMapping: () => void;
   isSuggestingMapping: boolean;
   suggestMappingError: string | null;
+  aiEnabled: boolean;
 };
 
 const NATIVE_SELECT_CLASS =
@@ -77,7 +78,8 @@ export function CsvMappingStep({
   onContinue,
   onSuggestMapping,
   isSuggestingMapping,
-  suggestMappingError
+  suggestMappingError,
+  aiEnabled
 }: CsvMappingStepProps) {
   const options = columnOptions(columnLabels);
   const isContinueDisabled =
@@ -146,17 +148,19 @@ export function CsvMappingStep({
           <p className="text-sm font-medium text-[var(--color-text-primary)]">
             Step 2: Select the fields that correspond to your file
           </p>
-          <Button
-            variant="secondary"
-            onClick={onSuggestMapping}
-            disabled={isSuggestingMapping || !formatOptions.hasHeaderRow}
-            title={formatOptions.hasHeaderRow ? undefined : "Needs a header row to suggest fields"}
-          >
-            <span className="flex items-center gap-1.5">
-              <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
-              {isSuggestingMapping ? "Suggesting…" : "Suggest with AI"}
-            </span>
-          </Button>
+          {aiEnabled ? (
+            <Button
+              variant="secondary"
+              onClick={onSuggestMapping}
+              disabled={isSuggestingMapping || !formatOptions.hasHeaderRow}
+              title={formatOptions.hasHeaderRow ? undefined : "Needs a header row to suggest fields"}
+            >
+              <span className="flex items-center gap-1.5">
+                <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
+                {isSuggestingMapping ? "Suggesting…" : "Suggest with AI"}
+              </span>
+            </Button>
+          ) : null}
         </div>
         {suggestMappingError ? <p className="mb-3 text-sm text-red-600">{suggestMappingError}</p> : null}
         <div>

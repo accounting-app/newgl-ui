@@ -1,6 +1,7 @@
 import { BASE_API_URL } from "@/configuration";
 import { request } from "@/lib/services/http-service-container";
 import type { ColumnMapping } from "@/modules/accounting/domain/csv-import";
+import type { Tenant } from "@/lib/tenant/tenant-provider";
 
 // Keys newgl-ai returns -- matches newgl-ai's COLUMN_MAPPING_TARGET_FIELDS,
 // distinct from the frontend's ColumnMapping field names (translated below).
@@ -68,5 +69,12 @@ export async function learnPayeeRules(rules: { payee: string; accountId: string 
   await request(BASE_API_URL, "/ai/rules/learn", {
     method: "POST",
     body: JSON.stringify({ rules })
+  });
+}
+
+export async function setAiFeaturesEnabled(aiEnabled: boolean): Promise<Tenant> {
+  return request<Tenant>(BASE_API_URL, "/tenants/ai-enabled", {
+    method: "PATCH",
+    body: JSON.stringify({ aiEnabled })
   });
 }
