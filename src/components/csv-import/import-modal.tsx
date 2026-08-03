@@ -13,7 +13,7 @@ import type { WizardStepInfo } from "@/components/csv-import/import-wizard-steps
 import { SelectAccountStep } from "@/components/csv-import/select-account-step";
 import { useBodyScrollLock } from "@/hooks/use-body-scroll-lock";
 import { buildReviewRows, getColumnLabels, tokenizeCsvText } from "@/modules/accounting/domain/parse-csv";
-import { suggestColumnMapping } from "@/lib/services/ai-service";
+import { suggestCategorization, suggestColumnMapping } from "@/lib/services/ai-service";
 import {
   clearCsvImportSession,
   loadCsvImportSession,
@@ -65,6 +65,8 @@ export function ImportModal({
   const [signConvention, setSignConvention] = useState<SignConvention>("ORIGINAL");
   const [isSuggestingMapping, setIsSuggestingMapping] = useState(false);
   const [suggestMappingError, setSuggestMappingError] = useState<string | null>(null);
+  const [isSuggestingCategories, setIsSuggestingCategories] = useState(false);
+  const [suggestCategoriesError, setSuggestCategoriesError] = useState<string | null>(null);
 
   const [reviewRows, setReviewRows] = useState<ReviewRow[]>([]);
   const [selectedRowIds, setSelectedRowIds] = useState<Set<string>>(new Set());
@@ -101,6 +103,7 @@ export function ImportModal({
       setMapping(EMPTY_COLUMN_MAPPING);
       setSignConvention("ORIGINAL");
       setSuggestMappingError(null);
+      setSuggestCategoriesError(null);
       setResumedFromSession(false);
       setStep("UPLOAD");
     }
@@ -167,6 +170,38 @@ export function ImportModal({
     setStep("VERIFY");
   }
 
+  async function handleSuggestCategories() {
+    // categorize needs a non-empty payee (backend schema requires it) --
+    // rows without one are left for manual selection.
+    const eligibleRows = reviewRows.filter((row) => row.payee.trim() !== "" && row.amount !== null);
+    if (eligibleRows.length === 0) return;
+
+    setIsSuggestingCategories(true);
+    setSuggestCategoriesError(null);
+    try {
+      const suggestions = await suggestCategorization(
+        eligibleRows.map((row) => ({ payee: row.payee, memo: row.memo || undefined, amount: row.amount! }))
+      );
+      const suggestionByRowId = new Map(eligibleRows.map((row, index) => [row.clientRowId, suggestions[index]]));
+      setReviewRows((current) =>
+        current.map((row) => {
+          const suggestion = suggestionByRowId.get(row.clientRowId);
+          if (!suggestion || suggestion.accountId === null) return row;
+          return {
+            ...row,
+            categoryAccountId: suggestion.accountId,
+            categoryConfidence: suggestion.confidence,
+            categorySource: suggestion.resolvedBy
+          };
+        })
+      );
+    } catch (err) {
+      setSuggestCategoriesError(err instanceof Error ? err.message : "Could not suggest categories right now.");
+    } finally {
+      setIsSuggestingCategories(false);
+    }
+  }
+
   function handleSignConventionChange(next: SignConvention) {
     setSignConvention(next);
     setReviewRows((current) => current.map((row) => (row.amount === null ? row : { ...row, amount: -row.amount })));
@@ -206,6 +241,7 @@ export function ImportModal({
     setMapping(EMPTY_COLUMN_MAPPING);
     setSignConvention("ORIGINAL");
     setSuggestMappingError(null);
+    setSuggestCategoriesError(null);
     setResumedFromSession(false);
     setStep("UPLOAD");
   }
@@ -321,6 +357,9 @@ export function ImportModal({
                 isSubmitting={isSubmitting}
                 submitError={uploadError}
                 backDisabled={resumedFromSession}
+                onSuggestCategories={handleSuggestCategories}
+                isSuggestingCategories={isSuggestingCategories}
+                suggestCategoriesError={suggestCategoriesError}
               />
               {resumedFromSession ? (
                 <button

@@ -34,3 +34,27 @@ export async function suggestColumnMapping(
     referenceColumn: result.mapping.referenceNumber ?? null
   };
 }
+
+export type CategorizationSuggestion = {
+  accountId: string | null;
+  confidence: number | null;
+  resolvedBy: "rule" | "ai";
+};
+
+type CategorizeResponse = {
+  results: CategorizationSuggestion[];
+  usage: { actions: number; inputTokens: number; outputTokens: number };
+  keySource: "platform" | "byok" | null;
+};
+
+// Results are index-aligned with the input array -- caller matches them back
+// to rows by position (AI_INTEGRATION_PLAN.md Part 7, feature #3).
+export async function suggestCategorization(
+  transactions: { payee: string; memo?: string; amount: number }[]
+): Promise<CategorizationSuggestion[]> {
+  const result = await request<CategorizeResponse>(BASE_API_URL, "/ai/categorize", {
+    method: "POST",
+    body: JSON.stringify({ transactions })
+  });
+  return result.results;
+}
