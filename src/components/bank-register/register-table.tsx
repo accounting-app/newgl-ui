@@ -13,7 +13,8 @@ import { RegisterTableHeader } from "@/components/bank-register/register-table-h
 import { SelectField } from "@/components/bank-register/select-field";
 import type { SelectFieldOption } from "@/components/bank-register/select-field";
 import { TablePagination } from "@/components/bank-register/table-pagination";
-import { Download, FileUp, Funnel, Printer, Settings } from "lucide-react";
+import Link from "next/link";
+import { Database, Download, FileUp, Funnel, Printer, Settings } from "lucide-react";
 import { Tooltip } from "@/components/ui/tooltip";
 import {
   REGISTER_INFLOW_ROW_TYPES,
@@ -521,6 +522,15 @@ export function RegisterTable({
                 </span>
               ) : null}
             </button>
+          </Tooltip>
+          <Tooltip label="Manage .bean file">
+            <Link
+              href="/settings/ledger"
+              className="flex h-full items-center hover:text-[var(--color-icon-secondary)]"
+              aria-label="Manage .bean file"
+            >
+              <Database className="h-[18px] w-[18px]" aria-hidden="true" />
+            </Link>
           </Tooltip>
           <div className="relative flex h-full items-center" data-settings-popover-root>
             <Tooltip label="Settings">
