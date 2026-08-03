@@ -1,3 +1,5 @@
+export type CategorySource = "rule" | "ai" | "manual" | null;
+
 export type ParsedCsvRow = {
   clientRowId: string;
   rawDate: string;
@@ -9,6 +11,8 @@ export type ParsedCsvRow = {
   memo: string;
   amount: number | null;
   categoryAccountId: string | null;
+  categoryConfidence: number | null;
+  categorySource: CategorySource;
   parseErrors: string[];
 };
 

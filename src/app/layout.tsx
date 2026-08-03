@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
-import { AppShell } from "@/components/layout/app-shell";
 import "./globals.css";
 import "../styles/tailwind-overrides.css";
 import { ThemeProvider } from "@/components/theme";
@@ -17,13 +16,14 @@ type RootLayoutProps = Readonly<{
   children: ReactNode;
 }>;
 
+// AppShell (sidebar/nav) moved to src/app/(app)/layout.tsx -- (auth) pages
+// (login/signup) must not render inside it. This root layout is now just
+// the html/body shell + theming, shared by both route groups.
 export default function RootLayout({ children }: RootLayoutProps) {
   return (
     <html lang="en" suppressHydrationWarning>
       <body>
-        <ThemeProvider>
-          <AppShell>{children}</AppShell>
-        </ThemeProvider>
+        <ThemeProvider>{children}</ThemeProvider>
       </body>
     </html>
   );

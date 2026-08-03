@@ -1,6 +1,6 @@
 "use client";
 
-import { Trash2 } from "lucide-react";
+import { Sparkles, Trash2 } from "lucide-react";
 import { SelectField } from "@/components/bank-register/select-field";
 import type { SelectFieldOption } from "@/components/bank-register/select-field";
 import { Button } from "@/components/ui/button";
@@ -22,6 +22,10 @@ type CsvReviewTableProps = {
   isSubmitting: boolean;
   submitError?: string | null;
   backDisabled?: boolean;
+  onSuggestCategories: () => void;
+  isSuggestingCategories: boolean;
+  suggestCategoriesError: string | null;
+  aiEnabled: boolean;
 };
 
 export function isRowSubmittable(row: ReviewRow, mainAccountId: string): boolean {
@@ -58,7 +62,11 @@ export function CsvReviewTable({
   onContinue,
   isSubmitting,
   submitError,
-  backDisabled
+  backDisabled,
+  onSuggestCategories,
+  isSuggestingCategories,
+  suggestCategoriesError,
+  aiEnabled
 }: CsvReviewTableProps) {
   const selectedRows = rows.filter((row) => selectedRowIds.has(row.clientRowId));
   const selectedSubmittableCount = selectedRows.filter((row) => isRowSubmittable(row, mainAccountId)).length;
@@ -110,10 +118,21 @@ export function CsvReviewTable({
         </div>
       </div>
 
-      <p className="text-sm text-[var(--color-text-primary)]">
-        <strong>Select:</strong> Choose the transactions you want to import, and assign a target account to
-        each.
-      </p>
+      <div className="flex items-center justify-between gap-4">
+        <p className="text-sm text-[var(--color-text-primary)]">
+          <strong>Select:</strong> Choose the transactions you want to import, and assign a target account to
+          each.
+        </p>
+        {aiEnabled ? (
+          <Button variant="secondary" onClick={onSuggestCategories} disabled={isSuggestingCategories}>
+            <span className="flex items-center gap-1.5 whitespace-nowrap">
+              <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
+              {isSuggestingCategories ? "Suggesting…" : "Suggest categories with AI"}
+            </span>
+          </Button>
+        ) : null}
+      </div>
+      {suggestCategoriesError ? <p className="text-sm text-red-600">{suggestCategoriesError}</p> : null}
 
       <div className="flex-1 overflow-auto rounded border border-[var(--color-divider-tertiary)]">
         <table className="w-full table-fixed border-collapse text-sm">
@@ -202,12 +221,27 @@ export function CsvReviewTable({
                   <td className="p-2 align-top">
                     <SelectField
                       value={row.categoryAccountId ?? ""}
-                      onChange={(value) => onRowChange(row.clientRowId, { categoryAccountId: value || null })}
+                      onChange={(value) =>
+                        onRowChange(row.clientRowId, {
+                          categoryAccountId: value || null,
+                          categoryConfidence: null,
+                          categorySource: value ? "manual" : null
+                        })
+                      }
                       options={accountOptions}
                       placeholder="Select"
                       allowCustomValue={false}
                       optionSize="sm"
                     />
+                    {row.categorySource === "ai" || row.categorySource === "rule" ? (
+                      <p className="mt-0.5 text-[11px] text-[var(--color-icon-secondary)]">
+                        {row.categorySource === "rule"
+                          ? "Remembered from a previous import"
+                          : row.categoryConfidence !== null
+                            ? `AI suggested · ${Math.round(row.categoryConfidence * 100)}% confident`
+                            : "AI suggested"}
+                      </p>
+                    ) : null}
                   </td>
                   <td className="p-2 align-top text-center">
                     <button

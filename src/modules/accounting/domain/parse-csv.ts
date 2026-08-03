@@ -174,6 +174,8 @@ export function buildReviewRows(
       memo: rawDescription,
       amount,
       categoryAccountId: null,
+      categoryConfidence: null,
+      categorySource: null,
       parseErrors
     };
   });
