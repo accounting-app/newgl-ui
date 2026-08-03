@@ -68,7 +68,7 @@ export function toChartAccount(account: Account): ChartOfAccount {
   };
 }
 
-type ApiError = { error: string };
+type ApiError = { error: string | { message: string } };
 
 // Thrown specifically on 401 so callers (or a shared boundary) can
 // distinguish "your session expired, log in again" from every other
@@ -121,7 +121,8 @@ export async function request<T>(baseUrl: string, path: string, init?: RequestIn
     let message = `Request failed (${response.status})`;
     try {
       const payload = (await response.json()) as ApiError;
-      if (payload.error) message = payload.error;
+      if (typeof payload.error === "string") message = payload.error;
+      else if (payload.error?.message) message = payload.error.message;
     } catch {
       // ignore parse errors
     }
