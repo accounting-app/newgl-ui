@@ -1,5 +1,6 @@
 "use client";
 
+import { Sparkles } from "lucide-react";
 import { SelectField } from "@/components/bank-register/select-field";
 import { Button } from "@/components/ui/button";
 import {
@@ -19,6 +20,9 @@ type CsvMappingStepProps = {
   onMappingChange: (patch: Partial<ColumnMapping>) => void;
   onBack: () => void;
   onContinue: () => void;
+  onSuggestMapping: () => void;
+  isSuggestingMapping: boolean;
+  suggestMappingError: string | null;
 };
 
 const NATIVE_SELECT_CLASS =
@@ -70,7 +74,10 @@ export function CsvMappingStep({
   mapping,
   onMappingChange,
   onBack,
-  onContinue
+  onContinue,
+  onSuggestMapping,
+  isSuggestingMapping,
+  suggestMappingError
 }: CsvMappingStepProps) {
   const options = columnOptions(columnLabels);
   const isContinueDisabled =
@@ -135,9 +142,23 @@ export function CsvMappingStep({
       </section>
 
       <section>
-        <p className="mb-1 border-b border-[var(--color-divider-tertiary)] pb-2 text-sm font-medium text-[var(--color-text-primary)]">
-          Step 2: Select the fields that correspond to your file
-        </p>
+        <div className="mb-1 flex items-center justify-between border-b border-[var(--color-divider-tertiary)] pb-2">
+          <p className="text-sm font-medium text-[var(--color-text-primary)]">
+            Step 2: Select the fields that correspond to your file
+          </p>
+          <Button
+            variant="secondary"
+            onClick={onSuggestMapping}
+            disabled={isSuggestingMapping || !formatOptions.hasHeaderRow}
+            title={formatOptions.hasHeaderRow ? undefined : "Needs a header row to suggest fields"}
+          >
+            <span className="flex items-center gap-1.5">
+              <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
+              {isSuggestingMapping ? "Suggesting…" : "Suggest with AI"}
+            </span>
+          </Button>
+        </div>
+        {suggestMappingError ? <p className="mb-3 text-sm text-red-600">{suggestMappingError}</p> : null}
         <div>
           <MappingRow
             label="Date"

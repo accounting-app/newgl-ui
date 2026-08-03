@@ -13,6 +13,7 @@ import type { WizardStepInfo } from "@/components/csv-import/import-wizard-steps
 import { SelectAccountStep } from "@/components/csv-import/select-account-step";
 import { useBodyScrollLock } from "@/hooks/use-body-scroll-lock";
 import { buildReviewRows, getColumnLabels, tokenizeCsvText } from "@/modules/accounting/domain/parse-csv";
+import { suggestColumnMapping } from "@/lib/services/ai-service";
 import {
   clearCsvImportSession,
   loadCsvImportSession,
@@ -62,6 +63,8 @@ export function ImportModal({
   const [formatOptions, setFormatOptions] = useState<FormatOptions>(DEFAULT_FORMAT_OPTIONS);
   const [mapping, setMapping] = useState<ColumnMapping>(EMPTY_COLUMN_MAPPING);
   const [signConvention, setSignConvention] = useState<SignConvention>("ORIGINAL");
+  const [isSuggestingMapping, setIsSuggestingMapping] = useState(false);
+  const [suggestMappingError, setSuggestMappingError] = useState<string | null>(null);
 
   const [reviewRows, setReviewRows] = useState<ReviewRow[]>([]);
   const [selectedRowIds, setSelectedRowIds] = useState<Set<string>>(new Set());
@@ -97,6 +100,7 @@ export function ImportModal({
       setFormatOptions(DEFAULT_FORMAT_OPTIONS);
       setMapping(EMPTY_COLUMN_MAPPING);
       setSignConvention("ORIGINAL");
+      setSuggestMappingError(null);
       setResumedFromSession(false);
       setStep("UPLOAD");
     }
@@ -131,6 +135,27 @@ export function ImportModal({
         setStep("ACCOUNT");
       })
       .catch(() => setUploadError("Could not read that file. Please try again."));
+  }
+
+  async function handleSuggestMapping() {
+    setIsSuggestingMapping(true);
+    setSuggestMappingError(null);
+    try {
+      const csvHeader = getColumnLabels(rawRows, formatOptions.hasHeaderRow);
+      const dataRows = formatOptions.hasHeaderRow ? rawRows.slice(1) : rawRows;
+      const suggestion = await suggestColumnMapping(csvHeader, dataRows.slice(0, 3));
+      setMapping((current) => ({
+        ...current,
+        ...suggestion,
+        // The AI never suggests these -- only relevant in DEBIT_CREDIT mode,
+        // which isn't one of its target fields.
+        ...(formatOptions.amountColumnsMode === "DEBIT_CREDIT" ? { amountColumn: current.amountColumn } : {})
+      }));
+    } catch (err) {
+      setSuggestMappingError(err instanceof Error ? err.message : "Could not suggest a mapping right now.");
+    } finally {
+      setIsSuggestingMapping(false);
+    }
   }
 
   function handleMappingContinue() {
@@ -180,6 +205,7 @@ export function ImportModal({
     setFormatOptions(DEFAULT_FORMAT_OPTIONS);
     setMapping(EMPTY_COLUMN_MAPPING);
     setSignConvention("ORIGINAL");
+    setSuggestMappingError(null);
     setResumedFromSession(false);
     setStep("UPLOAD");
   }
@@ -272,6 +298,9 @@ export function ImportModal({
               onMappingChange={(patch) => setMapping((current) => ({ ...current, ...patch }))}
               onBack={() => setStep("ACCOUNT")}
               onContinue={handleMappingContinue}
+              onSuggestMapping={handleSuggestMapping}
+              isSuggestingMapping={isSuggestingMapping}
+              suggestMappingError={suggestMappingError}
             />
           ) : null}
 
