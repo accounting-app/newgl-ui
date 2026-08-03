@@ -1,4 +1,5 @@
 import { BASE_API_URL } from "@/configuration";
+import { createClient } from "@/lib/supabase/client";
 import type {
   Account,
   AccountHierarchy,
@@ -69,14 +70,52 @@ export function toChartAccount(account: Account): ChartOfAccount {
 
 type ApiError = { error: string };
 
+// Thrown specifically on 401 so callers (or a shared boundary) can
+// distinguish "your session expired, log in again" from every other
+// failure, rather than rendering a generic error toast for both
+// (AI_INTEGRATION_PLAN.md frontend plan, Part A4).
+export class SessionExpiredError extends Error {
+  constructor() {
+    super("Your session has expired. Please sign in again.");
+    this.name = "SessionExpiredError";
+  }
+}
+
+async function getAccessToken(): Promise<string | null> {
+  // Every current call site in this app is a Client Component (verified --
+  // no Route Handlers, no server-side data fetching exist today), so the
+  // browser client is sufficient. Revisit if server-side fetching is ever
+  // added.
+  const supabase = createClient();
+  const {
+    data: { session }
+  } = await supabase.auth.getSession();
+  return session?.access_token ?? null;
+}
+
 export async function request<T>(baseUrl: string, path: string, init?: RequestInit): Promise<T> {
+  const accessToken = await getAccessToken();
+
   const response = await fetch(`${baseUrl}${path}`, {
     ...init,
     headers: {
       "Content-Type": "application/json",
+      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
       ...(init?.headers ?? {})
     }
   });
+
+  if (response.status === 401) {
+    // The session cookie exists but newgl-api rejected it (expired,
+    // revoked, or -- with accessToken null -- there was never one to send).
+    // middleware.ts already redirects unauthenticated page loads to
+    // /login; this covers the case where a session expires mid-session on
+    // an already-open tab.
+    if (typeof window !== "undefined") {
+      window.location.href = "/login";
+    }
+    throw new SessionExpiredError();
+  }
 
   if (!response.ok) {
     let message = `Request failed (${response.status})`;
