@@ -1,13 +1,24 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { Suspense, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { InputField } from "@/components/ui/input-field";
 import { createClient } from "@/lib/supabase/client";
 
+// useSearchParams() (for the post-login `next` redirect) opts this page out
+// of static rendering unless it's wrapped in Suspense -- without this,
+// `next build` fails outright rather than just warning.
 export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <LoginForm />
+    </Suspense>
+  );
+}
+
+function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [email, setEmail] = useState("");
