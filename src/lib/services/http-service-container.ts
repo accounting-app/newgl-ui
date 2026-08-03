@@ -81,7 +81,7 @@ export class SessionExpiredError extends Error {
   }
 }
 
-async function getAccessToken(): Promise<string | null> {
+export async function getAccessToken(): Promise<string | null> {
   // Every current call site in this app is a Client Component (verified --
   // no Route Handlers, no server-side data fetching exist today), so the
   // browser client is sufficient. Revisit if server-side fetching is ever

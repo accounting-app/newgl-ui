@@ -18,3 +18,8 @@ export const APP_ENV_CONFIG: Record<AppEnv, { BASE_API_URL: string }> = {
 // NEXT_PUBLIC_API_URL, when set, overrides the per-environment default.
 export const BASE_API_URL =
   process.env.NEXT_PUBLIC_API_URL || APP_ENV_CONFIG[NEXT_PUBLIC_APP_ENV].BASE_API_URL;
+
+// Every tenant has exactly one ledger today, created at bootstrap with this
+// name (mirrors newgl-api's LEDGER_NAME default -- see configuration/index.ts
+// there). Revisit once multiple ledgers per tenant are exposed in the UI.
+export const PRIMARY_LEDGER_NAME = "company";
