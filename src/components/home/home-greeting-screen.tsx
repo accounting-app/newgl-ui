@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { ArrowRight, Sparkles } from "lucide-react";
+import { DashboardMetrics } from "@/components/home/dashboard-metrics";
 
 export function HomeGreetingScreen() {
   return (
@@ -38,6 +39,8 @@ export function HomeGreetingScreen() {
           </article>
         </section>
       </div>
+
+      <DashboardMetrics />
     </main>
   );
 }
