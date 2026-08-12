@@ -14,7 +14,7 @@ import { SelectField } from "@/components/bank-register/select-field";
 import type { SelectFieldOption } from "@/components/bank-register/select-field";
 import { TablePagination } from "@/components/bank-register/table-pagination";
 import Link from "next/link";
-import { Database, Download, FileUp, Funnel, Printer, Settings } from "lucide-react";
+import { BookOpenText, Database, Download, FileUp, Funnel, Printer, Settings } from "lucide-react";
 import { Tooltip } from "@/components/ui/tooltip";
 import {
   REGISTER_INFLOW_ROW_TYPES,
@@ -26,6 +26,7 @@ import {
   nextReconcileStatus
 } from "@hooks/use-bank-register";
 import type {
+  DraftSplitLine,
   DraftTransactionErrors,
   DraftTransactionForm,
   InlineEntryEditorInput
@@ -66,6 +67,13 @@ type RegisterTableProps = {
   printUserName: string;
   onOpenImport: () => void;
   savedImportRowCount: number;
+  onOpenJournalEntry: () => void;
+  isSplitMode: boolean;
+  draftSplits: DraftSplitLine[];
+  onToggleSplitMode: () => void;
+  onAddSplitLine: () => void;
+  onRemoveSplitLine: (clientId: string) => void;
+  onUpdateSplitLine: (clientId: string, patch: Partial<Omit<DraftSplitLine, "clientId">>) => void;
 };
 
 function rowStyle(status: RegisterEntry["status"]): string {
@@ -107,7 +115,14 @@ export function RegisterTable({
   endingBalance,
   printUserName,
   onOpenImport,
-  savedImportRowCount
+  savedImportRowCount,
+  onOpenJournalEntry,
+  isSplitMode,
+  draftSplits,
+  onToggleSplitMode,
+  onAddSplitLine,
+  onRemoveSplitLine,
+  onUpdateSplitLine
 }: RegisterTableProps) {
   const [selectedEntryId, setSelectedEntryId] = useState<string | null>(null);
   const [isSavingRow, setIsSavingRow] = useState(false);
@@ -523,6 +538,16 @@ export function RegisterTable({
               ) : null}
             </button>
           </Tooltip>
+          <Tooltip label="Journal Entry">
+            <button
+              type="button"
+              className="flex h-full items-center hover:text-[var(--color-icon-secondary)]"
+              aria-label="New Journal Entry"
+              onClick={onOpenJournalEntry}
+            >
+              <BookOpenText className="h-[18px] w-[18px]" aria-hidden="true" />
+            </button>
+          </Tooltip>
           <Tooltip label="Manage .bean file">
             <Link
               href="/settings/ledger"
@@ -601,6 +626,12 @@ export function RegisterTable({
             onDraftCancel={onDraftCancel}
             onReconcileCycle={onDraftReconcileCycle}
             onOpenPayeeModal={() => openPayeeModal("draft")}
+            isSplitMode={isSplitMode}
+            draftSplits={draftSplits}
+            onToggleSplitMode={onToggleSplitMode}
+            onAddSplitLine={onAddSplitLine}
+            onRemoveSplitLine={onRemoveSplitLine}
+            onUpdateSplitLine={onUpdateSplitLine}
           />
         ) : null}
 

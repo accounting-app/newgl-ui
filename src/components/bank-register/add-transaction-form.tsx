@@ -5,6 +5,7 @@ import type { SelectFieldOption } from "@/components/bank-register/select-field"
 import { Button } from "@/components/ui/button";
 import { InputField } from "@/components/ui/input-field";
 import type {
+  DraftSplitLine,
   DraftTransactionErrors,
   DraftTransactionForm
 } from "@hooks/use-bank-register";
@@ -26,6 +27,12 @@ type AddTransactionFormProps = {
   onDraftCancel: () => void;
   onReconcileCycle: () => void;
   onOpenPayeeModal: () => void;
+  isSplitMode: boolean;
+  draftSplits: DraftSplitLine[];
+  onToggleSplitMode: () => void;
+  onAddSplitLine: () => void;
+  onRemoveSplitLine: (clientId: string) => void;
+  onUpdateSplitLine: (clientId: string, patch: Partial<Omit<DraftSplitLine, "clientId">>) => void;
 };
 
 export function AddTransactionForm({
@@ -41,8 +48,18 @@ export function AddTransactionForm({
   onDraftSave,
   onDraftCancel,
   onReconcileCycle,
-  onOpenPayeeModal
+  onOpenPayeeModal,
+  isSplitMode,
+  draftSplits,
+  onToggleSplitMode,
+  onAddSplitLine,
+  onRemoveSplitLine,
+  onUpdateSplitLine
 }: AddTransactionFormProps) {
+  const splitTotal = draftSplits.reduce((sum, line) => sum + (Number(line.amount) || 0), 0);
+  const targetAmount = Number(draftTransaction.payment || 0) + Number(draftTransaction.deposit || 0);
+  const splitDifference = Math.round((targetAmount - splitTotal) * 100) / 100;
+  const canSplit = !isDraftAccountFieldDisabled;
   return (
     <div className="form-transaction-row">
       <div className="form-transaction-row-top">
@@ -77,14 +94,29 @@ export function AddTransactionForm({
                   onChange={(value) => onDraftFieldChange("payee", value)}
                   onAddNew={onOpenPayeeModal}
                 />
-                <SelectField
-                  value={draftTransaction.accountTypeId}
-                  options={accountOptions}
-                  placeholder="Account"
-                  onChange={(value) => onDraftFieldChange("accountTypeId", value)}
-                  disabled={isDraftAccountFieldDisabled}
-                  allowCustomValue={false}
-                />
+                {isSplitMode ? (
+                  <div className="mt-1 rounded border border-[var(--color-divider-tertiary)] px-2 py-1.5 text-xs text-[var(--color-text-primary)]">
+                    Split across {draftSplits.length} accounts
+                  </div>
+                ) : (
+                  <SelectField
+                    value={draftTransaction.accountTypeId}
+                    options={accountOptions}
+                    placeholder="Account"
+                    onChange={(value) => onDraftFieldChange("accountTypeId", value)}
+                    disabled={isDraftAccountFieldDisabled}
+                    allowCustomValue={false}
+                  />
+                )}
+                {canSplit ? (
+                  <button
+                    type="button"
+                    className="mt-1 text-[11px] text-[var(--color-link-text)] hover:underline"
+                    onClick={onToggleSplitMode}
+                  >
+                    {isSplitMode ? "Use a single account instead" : "Split into multiple accounts"}
+                  </button>
+                ) : null}
                 {draftErrors.payee ? <p className="mt-1 text-xs text-red-600">{draftErrors.payee}</p> : null}
                 {draftErrors.accountTypeId ? <p className="mt-1 text-xs text-red-600">{draftErrors.accountTypeId}</p> : null}
               </td>
@@ -131,6 +163,72 @@ export function AddTransactionForm({
           </tbody>
         </table>
       </div>
+
+      {isSplitMode ? (
+        <div className="mx-3 mb-3 rounded border border-[var(--color-divider-tertiary)] p-3">
+          <table className="w-full border-collapse text-sm">
+            <thead>
+              <tr className="text-left text-xs text-[var(--color-icon-secondary)]">
+                <th className="pb-1 pr-3 font-medium">Account</th>
+                <th className="pb-1 pr-3 text-right font-medium">Amount</th>
+                <th className="pb-1"> </th>
+              </tr>
+            </thead>
+            <tbody>
+              {draftSplits.map((line) => (
+                <tr key={line.clientId}>
+                  <td className="py-1 pr-3">
+                    <SelectField
+                      value={line.accountId}
+                      options={accountOptions}
+                      placeholder="Select account"
+                      onChange={(value) => onUpdateSplitLine(line.clientId, { accountId: value })}
+                      allowCustomValue={false}
+                      optionSize="sm"
+                    />
+                  </td>
+                  <td className="py-1 pr-3">
+                    <InputField
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={line.amount}
+                      onChange={(event) => onUpdateSplitLine(line.clientId, { amount: event.target.value })}
+                      className="w-28 text-right"
+                    />
+                  </td>
+                  <td className="py-1 text-center">
+                    <button
+                      type="button"
+                      aria-label="Remove split line"
+                      className="text-[var(--color-icon-secondary)] hover:text-red-600 disabled:opacity-30"
+                      onClick={() => onRemoveSplitLine(line.clientId)}
+                      disabled={draftSplits.length <= 2}
+                    >
+                      ×
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <div className="mt-2 flex items-center justify-between">
+            <Button type="button" variant="secondary" onClick={onAddSplitLine}>
+              Add split line
+            </Button>
+            <p
+              className={`text-xs ${splitDifference === 0 && targetAmount > 0 ? "text-emerald-700" : "text-[var(--color-icon-secondary)]"}`}
+            >
+              {targetAmount <= 0
+                ? "Enter a payment or deposit amount above."
+                : splitDifference === 0
+                  ? `Splits total ${splitTotal.toFixed(2)} — matches the transaction amount.`
+                  : `Splits total ${splitTotal.toFixed(2)}, ${splitDifference > 0 ? "short" : "over"} by ${Math.abs(splitDifference).toFixed(2)}.`}
+            </p>
+          </div>
+        </div>
+      ) : null}
+
       <div className="form-transaction-row-bottom flex justify-end gap-2">
         <Button variant="secondary" onClick={onDraftCancel} disabled={isSavingDraft}>
           Cancel
