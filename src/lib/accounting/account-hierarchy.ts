@@ -138,6 +138,58 @@ export function buildHierarchyRowsMulti(rowSets: AccountRow[][]): HierarchyRowWi
   }));
 }
 
+export type RollupHierarchyRow = HierarchyRow & { isRealAccount: boolean };
+
+function subtreeTotal(node: TreeNode): number {
+  let total = node.inInput ? node.amount : 0;
+  for (const child of node.children.values()) {
+    total += subtreeTotal(child);
+  }
+  return total;
+}
+
+function flattenTreeWithRollup(
+  nodes: Map<string, TreeNode>,
+  depth: number,
+  result: RollupHierarchyRow[]
+): void {
+  const sorted = [...nodes.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+
+  for (const [, node] of sorted) {
+    const hasChildren = node.children.size > 0;
+    result.push({
+      label: node.label,
+      fullName: node.fullName,
+      amount: subtreeTotal(node),
+      depth,
+      hasChildren,
+      isRealAccount: node.inInput
+    });
+    if (hasChildren) {
+      flattenTreeWithRollup(node.children, depth + 1, result);
+    }
+  }
+}
+
+/**
+ * Chart-of-Accounts variant of buildHierarchyRows: unlike the report-facing
+ * version, a parent's `amount` here is the SUM of itself plus every
+ * descendant (so "Travel" shows total travel spend, not just whatever was
+ * posted directly to "Travel" itself), and a parent segment with no account
+ * of its own (e.g. "Travel" when only "Travel:Airfare" exists) still gets
+ * its own row -- `isRealAccount: false` -- rather than being skipped, since
+ * the Chart of Accounts needs to show every level of the tree, not just
+ * levels with their own balance. Reports intentionally don't use this
+ * (summing parent + children there would double-count on any statement that
+ * already lists both as separate lines).
+ */
+export function buildRollupHierarchyRows(rows: AccountRow[]): RollupHierarchyRow[] {
+  const tree = buildTree(rows);
+  const result: RollupHierarchyRow[] = [];
+  flattenTreeWithRollup(tree, 0, result);
+  return result;
+}
+
 /**
  * Removes rows whose nearest collapsed ancestor would hide them.
  *

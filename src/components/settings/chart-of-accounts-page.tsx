@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import Link from "next/link";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { InputField } from "@/components/ui/input-field";
 import { SelectField } from "@/components/bank-register/select-field";
@@ -10,6 +11,7 @@ import { ACCOUNT_CATEGORY_LABELS } from "@/constants/ui";
 import { ACCOUNT_ROOT_GROUPS } from "@/modules/accounting/domain/accounting-reports";
 import { isRegisterAccountCategory } from "@/modules/accounting/presentation/transaction-type-policy";
 import { getServiceContainer } from "@/lib/services/service-container-v2";
+import { buildRollupHierarchyRows, filterCollapsed } from "@/lib/accounting/account-hierarchy";
 import type { Account } from "@/modules/accounting/domain/models";
 
 const CATEGORY_OPTIONS = ACCOUNT_ROOT_GROUPS.flatMap((group) =>
@@ -46,6 +48,15 @@ export function ChartOfAccountsPage() {
   const [createError, setCreateError] = useState<string | null>(null);
 
   const [archivingId, setArchivingId] = useState<string | null>(null);
+  const [collapsedNames, setCollapsedNames] = useState<Set<string>>(new Set());
+
+  function toggleCollapse(fullName: string) {
+    setCollapsedNames((current) => {
+      const next = new Set(current);
+      next.has(fullName) ? next.delete(fullName) : next.add(fullName);
+      return next;
+    });
+  }
 
   const [bulkOpen, setBulkOpen] = useState(false);
   const [bulkCategory, setBulkCategory] = useState<Account["category"]>("EXPENSE");
@@ -74,14 +85,21 @@ export function ChartOfAccountsPage() {
 
   const activeAccounts = useMemo(() => accounts.filter((a) => a.status !== "ARCHIVED"), [accounts]);
 
+  // Real hierarchy tree (colon-segment parents roll up their children's
+  // balances), not a flat per-category list -- reuses the same helper the
+  // P&L/Balance Sheet/Trial Balance reports already use. A parent segment
+  // with no account of its own (e.g. "Travel" when only "Travel:Airfare"
+  // and "Travel:Hotels" exist) is a synthetic rollup row: shown with its
+  // children's summed balance, but no Archive button or register link,
+  // since there's no real account behind it to act on.
   const sections = useMemo(
     () =>
-      ACCOUNT_ROOT_GROUPS.map((group) => ({
-        ...group,
-        accounts: activeAccounts
-          .filter((a) => group.categories.has(a.category))
-          .sort((a, b) => a.name.localeCompare(b.name))
-      })),
+      ACCOUNT_ROOT_GROUPS.map((group) => {
+        const groupAccounts = activeAccounts.filter((a) => group.categories.has(a.category));
+        const rows = buildRollupHierarchyRows(groupAccounts.map((a) => ({ name: a.name, amount: a.currentBalance })));
+        const accountByName = new Map(groupAccounts.map((a) => [a.name, a]));
+        return { ...group, rows, accountByName };
+      }),
     [activeAccounts]
   );
 
@@ -229,41 +247,71 @@ export function ChartOfAccountsPage() {
         ) : (
           <div className="flex flex-col">
             {sections.map((section) =>
-              section.accounts.length === 0 ? null : (
+              section.rows.length === 0 ? null : (
                 <div key={section.key} className="border-b border-[var(--color-divider-tertiary)] py-3 last:border-b-0">
                   <p className="mb-2 text-sm font-semibold text-[var(--color-text-primary)]">{section.label}</p>
                   <ul className="flex flex-col divide-y divide-[var(--color-container-background-secondary)]">
-                    {section.accounts.map((account) => (
-                      <li key={account.id} className="flex items-center justify-between py-2">
-                        <div>
-                          <p className="text-sm text-[var(--color-text-global)]">{account.name}</p>
-                          <p className="text-xs text-[var(--color-icon-secondary)]">
-                            {ACCOUNT_CATEGORY_LABELS[account.category]}
-                          </p>
-                        </div>
-                        <div className="flex items-center gap-4">
-                          {isRegisterAccountCategory(account.category) ? (
-                            <Link
-                              href={`/register?account=${account.id}`}
-                              className="text-sm text-[var(--color-link-text)] hover:underline"
-                            >
-                              {formatMoney(account.currentBalance)}
-                            </Link>
-                          ) : (
-                            <span className="text-sm text-[var(--color-text-primary)]">
-                              {formatMoney(account.currentBalance)}
-                            </span>
-                          )}
-                          <Button
-                            variant="secondary"
-                            onClick={() => handleArchive(account)}
-                            disabled={archivingId === account.id}
-                          >
-                            {archivingId === account.id ? "Archiving…" : "Archive"}
-                          </Button>
-                        </div>
-                      </li>
-                    ))}
+                    {filterCollapsed(section.rows, collapsedNames).map((row) => {
+                      const account = section.accountByName.get(row.fullName);
+                      const isCollapsed = row.hasChildren && collapsedNames.has(row.fullName);
+                      return (
+                        <li
+                          key={row.fullName}
+                          className="flex items-center justify-between py-2"
+                          style={{ paddingLeft: `${0.75 + row.depth * 1.25}rem` }}
+                        >
+                          <div className="flex items-center gap-1.5">
+                            {row.hasChildren ? (
+                              <button
+                                type="button"
+                                onClick={() => toggleCollapse(row.fullName)}
+                                className="text-[var(--color-icon-secondary)]"
+                                aria-label={isCollapsed ? "Expand" : "Collapse"}
+                              >
+                                {isCollapsed ? (
+                                  <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
+                                ) : (
+                                  <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
+                                )}
+                              </button>
+                            ) : (
+                              <span className="inline-block w-3.5" />
+                            )}
+                            <div>
+                              <p className="text-sm text-[var(--color-text-global)]">{row.label}</p>
+                              {account ? (
+                                <p className="text-xs text-[var(--color-icon-secondary)]">
+                                  {ACCOUNT_CATEGORY_LABELS[account.category]}
+                                </p>
+                              ) : null}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-4">
+                            {account && isRegisterAccountCategory(account.category) ? (
+                              <Link
+                                href={`/register?account=${account.id}`}
+                                className="text-sm text-[var(--color-link-text)] hover:underline"
+                              >
+                                {formatMoney(row.amount)}
+                              </Link>
+                            ) : (
+                              <span className="text-sm text-[var(--color-text-primary)]">{formatMoney(row.amount)}</span>
+                            )}
+                            {account ? (
+                              <Button
+                                variant="secondary"
+                                onClick={() => handleArchive(account)}
+                                disabled={archivingId === account.id}
+                              >
+                                {archivingId === account.id ? "Archiving…" : "Archive"}
+                              </Button>
+                            ) : (
+                              <span className="w-[86px]" />
+                            )}
+                          </div>
+                        </li>
+                      );
+                    })}
                   </ul>
                 </div>
               )
