@@ -105,6 +105,39 @@ export function buildHierarchyRows(rows: AccountRow[]): HierarchyRow[] {
   return result;
 }
 
+export type HierarchyRowWithValues = HierarchyRow & { values: number[] };
+
+/**
+ * Multi-column variant of buildHierarchyRows: takes one { name, amount }[]
+ * per column (e.g. current period + compare period, or one per sub-period)
+ * and merges them into a single hierarchy where each row carries a
+ * `values` array (one number per input column, 0 where an account has no
+ * balance in that column) alongside the existing single-column `amount`
+ * (set to the first column's value, for callers that only read `amount`).
+ */
+export function buildHierarchyRowsMulti(rowSets: AccountRow[][]): HierarchyRowWithValues[] {
+  const columnCount = rowSets.length;
+  const valuesByName = new Map<string, number[]>();
+
+  rowSets.forEach((rows, column) => {
+    rows.forEach((row) => {
+      const values = valuesByName.get(row.name) ?? new Array(columnCount).fill(0);
+      values[column] = row.amount;
+      valuesByName.set(row.name, values);
+    });
+  });
+
+  const mergedRows: AccountRow[] = [...valuesByName.entries()].map(([name, values]) => ({
+    name,
+    amount: values[0]
+  }));
+
+  return buildHierarchyRows(mergedRows).map((row) => ({
+    ...row,
+    values: valuesByName.get(row.fullName) ?? new Array(columnCount).fill(0)
+  }));
+}
+
 /**
  * Removes rows whose nearest collapsed ancestor would hide them.
  *

@@ -9,6 +9,8 @@ type ReportSectionProps = {
   onToggle: () => void;
   /** Extra classes applied to the header <tr>. Defaults to the alt-row background. */
   headerClassName?: string;
+  /** Number of value columns to the right of the label (default 1, e.g. compare/columnar reports). */
+  valueColumnCount?: number;
   /** Rows rendered below the header when the section is open. */
   children?: ReactNode;
 };
@@ -33,6 +35,7 @@ export function ReportSection({
   isOpen,
   onToggle,
   headerClassName = "bg-[var(--color-report-row-alt)]",
+  valueColumnCount = 1,
   children
 }: ReportSectionProps) {
   return (
@@ -52,7 +55,7 @@ export function ReportSection({
             {label}
           </span>
         </td>
-        <td className="px-3 py-1" />
+        <td className="px-3 py-1" colSpan={valueColumnCount} />
       </tr>
       {isOpen ? children : null}
     </>
