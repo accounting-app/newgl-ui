@@ -1,7 +1,7 @@
-import { BarChart2, Scale } from "lucide-react";
+import { BarChart2, Scale, ListChecks } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
-export type ReportType = "profit_loss" | "balance_sheet";
+export type ReportType = "profit_loss" | "balance_sheet" | "trial_balance";
 
 export type ReportNavItem = {
   type: ReportType;
@@ -30,5 +30,12 @@ export const REPORT_NAV_ITEMS: ReportNavItem[] = [
     label: "Balance Sheet",
     description: "Assets, liabilities, and equity as of a date.",
     icon: Scale
+  },
+  {
+    type: "trial_balance",
+    href: "/reports/trial-balance",
+    label: "Trial Balance",
+    description: "Every account with a balance, debits and credits, as of a date.",
+    icon: ListChecks
   }
 ];
