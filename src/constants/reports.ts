@@ -1,7 +1,7 @@
-import { BarChart2, Scale, ListChecks } from "lucide-react";
+import { BarChart2, Scale, ListChecks, FileSearch } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
-export type ReportType = "profit_loss" | "balance_sheet" | "trial_balance";
+export type ReportType = "profit_loss" | "balance_sheet" | "trial_balance" | "pl_detail";
 
 export type ReportNavItem = {
   type: ReportType;
@@ -37,5 +37,12 @@ export const REPORT_NAV_ITEMS: ReportNavItem[] = [
     label: "Trial Balance",
     description: "Every account with a balance, debits and credits, as of a date.",
     icon: ListChecks
+  },
+  {
+    type: "pl_detail",
+    href: "/reports/pl-detail",
+    label: "P&L Detail",
+    description: "Every Profit and Loss account fully expanded to its individual transactions.",
+    icon: FileSearch
   }
 ];
