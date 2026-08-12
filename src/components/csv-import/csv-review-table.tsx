@@ -6,6 +6,7 @@ import type { SelectFieldOption } from "@/components/bank-register/select-field"
 import { Button } from "@/components/ui/button";
 import { InputField } from "@/components/ui/input-field";
 import type { ReviewRow, SignConvention } from "@/modules/accounting/domain/csv-import";
+import type { BankRule } from "@/modules/accounting/domain/models";
 
 type CsvReviewTableProps = {
   rows: ReviewRow[];
@@ -26,6 +27,8 @@ type CsvReviewTableProps = {
   isSuggestingCategories: boolean;
   suggestCategoriesError: string | null;
   aiEnabled: boolean;
+  /** Deterministic bank-rule match per row (PLAINGL_FEATURES_TO_IMPLEMENT.md #7), keyed by clientRowId. AI/learned-rule suggestions win by default -- this is surfaced as an override, not applied automatically. */
+  bankRuleMatches?: Map<string, BankRule>;
 };
 
 export function isRowSubmittable(row: ReviewRow, mainAccountId: string): boolean {
@@ -66,8 +69,10 @@ export function CsvReviewTable({
   onSuggestCategories,
   isSuggestingCategories,
   suggestCategoriesError,
-  aiEnabled
+  aiEnabled,
+  bankRuleMatches
 }: CsvReviewTableProps) {
+  const accountLabelById = new Map(accountOptions.map((option) => [option.value, option.label]));
   const selectedRows = rows.filter((row) => selectedRowIds.has(row.clientRowId));
   const selectedSubmittableCount = selectedRows.filter((row) => isRowSubmittable(row, mainAccountId)).length;
   const allSelectedAreReady = selectedRows.length > 0 && selectedSubmittableCount === selectedRows.length;
@@ -233,15 +238,40 @@ export function CsvReviewTable({
                       allowCustomValue={false}
                       optionSize="sm"
                     />
-                    {row.categorySource === "ai" || row.categorySource === "rule" ? (
+                    {row.categorySource === "ai" || row.categorySource === "rule" || row.categorySource === "bank-rule" ? (
                       <p className="mt-0.5 text-[11px] text-[var(--color-icon-secondary)]">
                         {row.categorySource === "rule"
                           ? "Remembered from a previous import"
-                          : row.categoryConfidence !== null
-                            ? `AI suggested · ${Math.round(row.categoryConfidence * 100)}% confident`
-                            : "AI suggested"}
+                          : row.categorySource === "bank-rule"
+                            ? "Set by a bank rule"
+                            : row.categoryConfidence !== null
+                              ? `AI suggested · ${Math.round(row.categoryConfidence * 100)}% confident`
+                              : "AI suggested"}
                       </p>
                     ) : null}
+                    {(() => {
+                      const match = bankRuleMatches?.get(row.clientRowId);
+                      if (!match || match.targetAccountId === row.categoryAccountId) return null;
+                      const accountLabel = accountLabelById.get(match.targetAccountId) ?? match.targetAccountId;
+                      return (
+                        <p className="mt-0.5 text-[11px] text-[var(--color-icon-secondary)]">
+                          Rule &ldquo;{match.name}&rdquo; suggests {accountLabel} ·{" "}
+                          <button
+                            type="button"
+                            className="text-[var(--color-link-text)] hover:underline"
+                            onClick={() =>
+                              onRowChange(row.clientRowId, {
+                                categoryAccountId: match.targetAccountId,
+                                categoryConfidence: null,
+                                categorySource: "bank-rule"
+                              })
+                            }
+                          >
+                            Use instead
+                          </button>
+                        </p>
+                      );
+                    })()}
                   </td>
                   <td className="p-2 align-top text-center">
                     <button

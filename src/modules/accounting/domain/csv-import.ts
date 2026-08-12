@@ -1,4 +1,8 @@
-export type CategorySource = "rule" | "ai" | "manual" | null;
+// "rule" = the learned exact-payee-match memory (AI's cascade, see
+// ai-service.ts / newgl-ai's payee_rules); "bank-rule" = a user-authored
+// deterministic BankRule (PLAINGL_FEATURES_TO_IMPLEMENT.md #7) the user
+// explicitly chose over whatever else was suggested for that row.
+export type CategorySource = "rule" | "bank-rule" | "ai" | "manual" | null;
 
 export type ParsedCsvRow = {
   clientRowId: string;

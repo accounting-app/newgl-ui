@@ -3,8 +3,10 @@ import { createClient } from "@/lib/supabase/client";
 import type {
   Account,
   AccountHierarchy,
+  BankRule,
   ChartOfAccount,
   CreateAccountInput,
+  CreateBankRuleInput,
   CreateTransactionInput,
   ImportTransactionsInput,
   ImportTransactionsResult,
@@ -13,10 +15,12 @@ import type {
   ReconcileStatus,
   RegisterEntry,
   Transaction,
-  UpdateAccountInput
+  UpdateAccountInput,
+  UpdateBankRuleInput
 } from "@/modules/accounting/domain/models";
 import type {
   AccountService,
+  BankRuleService,
   LedgerService,
   RegisterService,
   ServiceContainer,
@@ -277,15 +281,38 @@ export class HttpRegisterService implements RegisterService {
   }
 }
 
+export class HttpBankRuleService implements BankRuleService {
+  private readonly baseUrl = BASE_API_URL;
+  constructor() {}
+
+  listRules(): Promise<BankRule[]> {
+    return request(this.baseUrl, "/bank-rules");
+  }
+
+  createRule(input: CreateBankRuleInput): Promise<BankRule> {
+    return request(this.baseUrl, "/bank-rules", { method: "POST", body: JSON.stringify(input) });
+  }
+
+  updateRule(id: string, input: UpdateBankRuleInput): Promise<BankRule> {
+    return request(this.baseUrl, `/bank-rules/${id}`, { method: "PATCH", body: JSON.stringify(input) });
+  }
+
+  async deleteRule(id: string): Promise<void> {
+    await request(this.baseUrl, `/bank-rules/${id}`, { method: "DELETE" });
+  }
+}
+
 export function createHttpServiceContainer(): ServiceContainer {
   const accountService = new HttpAccountService();
   const transactionService = new HttpTransactionService();
   const ledgerService = new HttpLedgerService();
   const registerService = new HttpRegisterService();
+  const bankRuleService = new HttpBankRuleService();
   return {
     accountService,
     transactionService,
     ledgerService,
-    registerService
+    registerService,
+    bankRuleService
   };
 }

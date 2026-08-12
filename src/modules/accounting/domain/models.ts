@@ -253,3 +253,40 @@ export type ListTransactionsFilter = {
   status?: TransactionStatus;
   sourceAccountId?: string;
 };
+
+// Deterministic bank rules (PLAINGL_FEATURES_TO_IMPLEMENT.md #7) -- mirrors
+// newgl-api's src/domain/models.ts bank-rule schemas.
+export const bankRuleFieldSchema = z.enum(["payee", "memo", "amount"]);
+export const bankRuleTextOperatorSchema = z.enum(["contains", "not_contains", "equals", "starts_with", "regex"]);
+export const bankRuleAmountOperatorSchema = z.enum(["greater_than", "less_than", "between"]);
+export const bankRuleOperatorSchema = z.union([bankRuleTextOperatorSchema, bankRuleAmountOperatorSchema]);
+
+export const bankRuleConditionSchema = z.object({
+  field: bankRuleFieldSchema,
+  operator: bankRuleOperatorSchema,
+  value: z.string().min(1),
+  valueTo: z.string().min(1).optional()
+});
+
+export const bankRuleSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string().min(1),
+  targetAccountId: z.string().min(1),
+  conditions: z.array(bankRuleConditionSchema).min(1),
+  enabled: z.boolean(),
+  priority: z.number().int(),
+  createdAt: z.string(),
+  updatedAt: z.string()
+});
+
+export type BankRuleField = z.infer<typeof bankRuleFieldSchema>;
+export type BankRuleOperator = z.infer<typeof bankRuleOperatorSchema>;
+export type BankRuleCondition = z.infer<typeof bankRuleConditionSchema>;
+export type BankRule = z.infer<typeof bankRuleSchema>;
+
+export type CreateBankRuleInput = Pick<BankRule, "name" | "targetAccountId" | "conditions"> &
+  Partial<Pick<BankRule, "enabled" | "priority">>;
+
+export type UpdateBankRuleInput = Partial<
+  Pick<BankRule, "name" | "targetAccountId" | "conditions" | "enabled" | "priority">
+>;
