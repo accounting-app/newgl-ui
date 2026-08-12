@@ -333,7 +333,16 @@ function ByPayeePageInner() {
       </header>
 
       <section className="page-content">
-        <section className="mx-auto mt-8 w-full max-w-[840px] rounded border border-[var(--color-divider-tertiary)] bg-[var(--color-container-background-primary)] p-5 shadow-sm">
+        <section className="report-print-card mx-auto mt-8 w-full max-w-[840px] rounded border border-[var(--color-divider-tertiary)] bg-[var(--color-container-background-primary)] p-5 shadow-sm">
+          <div className="mb-4 flex justify-end">
+            <button
+              type="button"
+              onClick={() => window.print()}
+              className="no-print rounded border border-[var(--color-divider-tertiary)] px-2 py-1 text-xs text-[var(--color-text-primary)] hover:bg-[var(--color-container-background-accent)]"
+            >
+              Print
+            </button>
+          </div>
           <div className="mb-4 text-center">
             <h2 className="text-[28px] font-medium text-[var(--color-text-global)] mb-2">{REPORT_USER_NAME}</h2>
             <p className="text-[16px] text-[var(--color-text-primary)] mb-2">Income &amp; Expenses by Payee</p>

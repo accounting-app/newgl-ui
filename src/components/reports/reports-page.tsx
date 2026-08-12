@@ -909,13 +909,20 @@ function ReportsPageInner({ reportType }: ReportsPageProps) {
       </header>
 
       <section className="page-content">
-      <section className="mx-auto mt-8 w-full max-w-[840px] rounded border border-[var(--color-divider-tertiary)] bg-[var(--color-container-background-primary)] p-5 shadow-sm">
+      <section className="report-print-card mx-auto mt-8 w-full max-w-[840px] rounded border border-[var(--color-divider-tertiary)] bg-[var(--color-container-background-primary)] p-5 shadow-sm">
 
         {/* ── Report toolbar ── */}
         <div className="mb-4 flex flex-wrap items-center justify-end gap-2 border-b border-[var(--color-divider-tertiary)] pb-3">
           <span className="text-xs text-[var(--color-icon-secondary)]">
             {accountingMethod === "cash" ? "Cash basis" : "Accrual basis"}
           </span>
+          <button
+            type="button"
+            onClick={() => window.print()}
+            className="no-print rounded border border-[var(--color-divider-tertiary)] px-2 py-1 text-xs text-[var(--color-text-primary)] hover:bg-[var(--color-container-background-accent)]"
+          >
+            Print
+          </button>
         </div>
 
         {/* ── Report title block ── */}
