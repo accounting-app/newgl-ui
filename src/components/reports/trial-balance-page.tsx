@@ -11,26 +11,8 @@ import type { ReportValueColumn } from "@/components/reports/report-account-rows
 import { ReportSection } from "@/components/reports/report-section";
 import { ReportAccountRows } from "@/components/reports/report-account-rows";
 import { getServiceContainer } from "@/lib/services/service-container-v2";
-import { DEBIT_NORMAL_CATEGORIES } from "@/modules/accounting/domain/accounting-reports";
+import { ACCOUNT_ROOT_GROUPS, DEBIT_NORMAL_CATEGORIES } from "@/modules/accounting/domain/accounting-reports";
 import type { Account, LedgerPosting } from "@/modules/accounting/domain/models";
-
-// Trial Balance groups accounts by the same broad roots the rest of the app
-// uses for the P&L/Balance Sheet, but as a single flat statement: every
-// account with a non-zero balance, debit or credit, as of one date.
-const ASSET_CATEGORIES = new Set<Account["category"]>([
-  "BANK",
-  "ACCOUNTS_RECEIVABLE",
-  "OTHER_CURRENT_ASSET",
-  "FIXED_ASSET"
-]);
-const LIABILITY_CATEGORIES = new Set<Account["category"]>([
-  "CREDIT_CARD",
-  "OTHER_CURRENT_LIABILITY",
-  "LONG_TERM_LIABILITY"
-]);
-const EQUITY_CATEGORIES = new Set<Account["category"]>(["EQUITY"]);
-const INCOME_CATEGORIES = new Set<Account["category"]>(["INCOME", "OTHER_INCOME"]);
-const EXPENSE_CATEGORIES = new Set<Account["category"]>(["EXPENSE", "OTHER_EXPENSE"]);
 
 const TB_COLUMNS: ReportValueColumn[] = [
   { key: "debit", format: "money" },
@@ -158,21 +140,13 @@ function TrialBalancePageInner() {
   const sections = useMemo(() => {
     const balances = accountBalancesAsOf(accounts, postings, asOfDate || isoDate(new Date()));
 
-    const buildSection = (key: string, label: string, categories: Set<Account["category"]>) => {
+    return ACCOUNT_ROOT_GROUPS.map(({ key, label, categories }) => {
       const { debitRows, creditRows } = debitCreditRows(accounts, balances, categories);
       const rows = buildHierarchyRowsMulti([debitRows, creditRows]);
       const totalDebit = debitRows.reduce((s, r) => s + r.amount, 0);
       const totalCredit = creditRows.reduce((s, r) => s + r.amount, 0);
       return { key, label, rows, totalDebit, totalCredit };
-    };
-
-    return [
-      buildSection("assets", "Assets", ASSET_CATEGORIES),
-      buildSection("liabilities", "Liabilities", LIABILITY_CATEGORIES),
-      buildSection("equity", "Equity", EQUITY_CATEGORIES),
-      buildSection("income", "Income", INCOME_CATEGORIES),
-      buildSection("expenses", "Expenses", EXPENSE_CATEGORIES)
-    ];
+    });
   }, [accounts, postings, asOfDate]);
 
   const totalDebit = sections.reduce((s, section) => s + section.totalDebit, 0);

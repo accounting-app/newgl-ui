@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { AccountSelector } from "@/components/bank-register/account-selector";
 import { RegisterTable } from "@/components/bank-register/register-table";
 import { getRegisterTitle } from "@/components/bank-register/register-title";
@@ -12,6 +13,15 @@ import { isRegisterAccountCategory } from "@/modules/accounting/presentation/tra
 import { useBankRegister } from "@hooks/use-bank-register";
 
 export function BankRegisterLayout() {
+  return (
+    <Suspense fallback={null}>
+      <BankRegisterLayoutInner />
+    </Suspense>
+  );
+}
+
+function BankRegisterLayoutInner() {
+  const searchParams = useSearchParams();
   const {
     accounts,
     availableTransactionTypes,
@@ -46,6 +56,21 @@ export function BankRegisterLayout() {
     }
     setSavedImportRowCount(loadCsvImportSession(selectedAccountId)?.rows.length ?? 0);
   }, [selectedAccountId]);
+
+  // Deep-link from the Chart of Accounts page ("View register" per account):
+  // /register?account=<id>. Applied once accounts have loaded and the id is
+  // real -- gated on a ref (not just the URL) so a later account refresh
+  // (e.g. after saving a transaction) can't re-fire this and silently
+  // override an account the user has since switched to in the dropdown.
+  const appliedAccountParamRef = useRef(false);
+  useEffect(() => {
+    if (appliedAccountParamRef.current || accounts.length === 0) return;
+    const accountParam = searchParams.get("account");
+    if (accountParam && accounts.some((a) => a.id === accountParam)) {
+      setSelectedAccountId(accountParam);
+    }
+    appliedAccountParamRef.current = true;
+  }, [searchParams, accounts, setSelectedAccountId]);
 
   const registerTitle = getRegisterTitle(selectedAccount);
 

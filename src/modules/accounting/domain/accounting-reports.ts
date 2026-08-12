@@ -26,6 +26,27 @@ export const DEBIT_NORMAL_CATEGORIES = new Set<Account["category"]>([
   "OTHER_EXPENSE"
 ]);
 
+/**
+ * The five broad roots every account category rolls up to, shared by every
+ * screen that groups the chart of accounts this way (Trial Balance, Chart of
+ * Accounts). Order matches how they're conventionally presented.
+ */
+export const ACCOUNT_ROOT_GROUPS: { key: string; label: string; categories: Set<Account["category"]> }[] = [
+  {
+    key: "assets",
+    label: "Assets",
+    categories: new Set(["BANK", "ACCOUNTS_RECEIVABLE", "OTHER_CURRENT_ASSET", "FIXED_ASSET"])
+  },
+  {
+    key: "liabilities",
+    label: "Liabilities",
+    categories: new Set(["CREDIT_CARD", "OTHER_CURRENT_LIABILITY", "LONG_TERM_LIABILITY"])
+  },
+  { key: "equity", label: "Equity", categories: new Set(["EQUITY"]) },
+  { key: "income", label: "Income", categories: new Set(["INCOME", "OTHER_INCOME"]) },
+  { key: "expenses", label: "Expenses", categories: new Set(["EXPENSE", "OTHER_EXPENSE"]) }
+];
+
 export type PostingLike = { type: PostingEntryType; amount: number };
 
 const TOLERANCE = ACCOUNTING_CONFIG.roundingTolerance;

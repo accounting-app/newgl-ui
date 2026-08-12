@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 
 const SETTINGS_TABS = [
+  { label: "Chart of Accounts", href: "/settings/chart-of-accounts" },
   { label: "AI", href: "/settings/ai" },
   { label: "Ledger", href: "/settings/ledger" },
   { label: "Billing", href: "/settings/billing" },
