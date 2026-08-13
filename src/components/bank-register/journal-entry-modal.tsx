@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { InputField } from "@/components/ui/input-field";
 import { SelectField } from "@/components/bank-register/select-field";
 import type { SelectFieldOption } from "@/components/bank-register/select-field";
-import { parseAmount, splitCsvLine } from "@/modules/accounting/domain/parse-csv";
+import { parseAmount, splitPastedRows } from "@/modules/accounting/domain/parse-csv";
 
 export type JournalEntryLine = {
   clientId: string;
@@ -34,17 +34,6 @@ let lineIdCounter = 0;
 function newLine(): JournalEntryLine {
   lineIdCounter += 1;
   return { clientId: `je-line-${lineIdCounter}`, accountId: "", memo: "", debit: "", credit: "" };
-}
-
-// Excel copy/paste is tab-separated; plain CSV falls back to comma-separated
-// (reusing the same quoted-field splitter the CSV import wizard already has).
-function splitPastedRows(text: string): string[][] {
-  const rows = text
-    .replace(/\r\n?/g, "\n")
-    .split("\n")
-    .filter((line) => line.trim() !== "");
-  const useTab = rows.length > 0 && rows[0].includes("\t");
-  return rows.map((row) => (useTab ? row.split("\t").map((cell) => cell.trim()) : splitCsvLine(row)));
 }
 
 const KNOWN_HEADERS: Record<string, "account" | "debit" | "credit" | "memo" | "date" | "payee" | "ref"> = {

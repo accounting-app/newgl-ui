@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { InputField } from "@/components/ui/input-field";
+import { BulkPasteImport } from "@/components/settings/bulk-paste-import";
 import { SettingsCard } from "@/components/settings/settings-card";
 import { BASE_API_URL, PRIMARY_LEDGER_NAME } from "@/configuration";
 import { getAccessToken, request } from "@/lib/services/http-service-container";
@@ -216,6 +217,8 @@ export default function LedgerSettingsPage() {
         {uploadError ? <p className="mt-2 text-sm text-red-600">{uploadError}</p> : null}
         {uploadNotice ? <p className="mt-2 text-sm text-[var(--color-text-primary)]">{uploadNotice}</p> : null}
       </SettingsCard>
+
+      <BulkPasteImport />
 
       <SettingsCard title="Version history" description="Every replace creates a new version. Restoring adds a new version too, so history is never lost.">
         {loading ? (
