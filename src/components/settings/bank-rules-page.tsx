@@ -1,12 +1,45 @@
 "use client";
 
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { InputField } from "@/components/ui/input-field";
 import { SelectField } from "@/components/bank-register/select-field";
 import { SettingsCard } from "@/components/settings/settings-card";
 import { getServiceContainer } from "@/lib/services/service-container-v2";
 import type { Account, BankRule, BankRuleCondition, BankRuleField, BankRuleOperator } from "@/modules/accounting/domain/models";
+
+// Portable subset of a rule: what export/import/duplicate move around.
+// Deliberately excludes id/createdAt/updatedAt -- importing into another
+// company (or re-importing a backup) should always create fresh rules, not
+// try to reuse another tenant's ids.
+type PortableRule = {
+  name: string;
+  targetAccountId: string;
+  conditions: BankRuleCondition[];
+  enabled: boolean;
+  priority: number;
+};
+
+function toPortableRule(rule: BankRule): PortableRule {
+  return {
+    name: rule.name,
+    targetAccountId: rule.targetAccountId,
+    conditions: rule.conditions,
+    enabled: rule.enabled,
+    priority: rule.priority
+  };
+}
+
+function isPortableRule(value: unknown): value is PortableRule {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Record<string, unknown>;
+  return (
+    typeof candidate.name === "string" &&
+    typeof candidate.targetAccountId === "string" &&
+    Array.isArray(candidate.conditions) &&
+    candidate.conditions.length > 0
+  );
+}
 
 const FIELD_OPTIONS = [
   { value: "payee", label: "Payee" },
@@ -70,6 +103,11 @@ export function BankRulesPage() {
   const [createError, setCreateError] = useState<string | null>(null);
 
   const [busyId, setBusyId] = useState<string | null>(null);
+
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState<string | null>(null);
+  const [importError, setImportError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const accountOptions = useMemo(
     () =>
@@ -170,6 +208,80 @@ export function BankRulesPage() {
       await loadAll();
     } finally {
       setBusyId(null);
+    }
+  }
+
+  function handleDuplicate(rule: BankRule) {
+    setName(`${rule.name} (copy)`);
+    setTargetAccountId(rule.targetAccountId);
+    setConditions(
+      rule.conditions.map((c) => ({
+        field: c.field,
+        operator: c.operator,
+        value: c.value,
+        valueTo: c.valueTo ?? ""
+      }))
+    );
+    setCreateError(null);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function handleExport() {
+    const payload = { version: 1, rules: rules.map(toPortableRule) };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = "bank-rules.json";
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async function handleImportFile(file: File) {
+    setImporting(true);
+    setImportResult(null);
+    setImportError(null);
+    try {
+      const text = await file.text();
+      const parsed = JSON.parse(text) as unknown;
+      const candidates = Array.isArray(parsed)
+        ? parsed
+        : Array.isArray((parsed as { rules?: unknown })?.rules)
+          ? (parsed as { rules: unknown[] }).rules
+          : null;
+      if (!candidates) {
+        throw new Error("Not a recognized bank rules file.");
+      }
+
+      let created = 0;
+      const failures: string[] = [];
+      for (const candidate of candidates) {
+        if (!isPortableRule(candidate)) {
+          failures.push("Skipped a malformed rule entry.");
+          continue;
+        }
+        try {
+          await services.bankRuleService.createRule({
+            name: candidate.name,
+            targetAccountId: candidate.targetAccountId,
+            conditions: candidate.conditions,
+            enabled: candidate.enabled,
+            priority: candidate.priority
+          });
+          created += 1;
+        } catch (err) {
+          failures.push(`${candidate.name}: ${err instanceof Error ? err.message : "failed"}`);
+        }
+      }
+
+      await loadAll();
+      setImportResult(`Imported ${created} of ${candidates.length} rule${candidates.length === 1 ? "" : "s"}.`);
+      if (failures.length > 0) setImportError(failures.join("\n"));
+    } catch (err) {
+      setImportError(err instanceof Error ? err.message : "Could not read this file.");
+    } finally {
+      setImporting(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
     }
   }
 
@@ -280,6 +392,27 @@ export function BankRulesPage() {
       </SettingsCard>
 
       <SettingsCard title="Rules" description="Highest priority first. Disabled rules never match.">
+        <div className="mb-4 flex flex-wrap items-center gap-3 border-b border-[var(--color-divider-tertiary)] pb-4">
+          <Button type="button" variant="secondary" onClick={handleExport} disabled={rules.length === 0}>
+            Export rules
+          </Button>
+          <Button type="button" variant="secondary" onClick={() => fileInputRef.current?.click()} disabled={importing}>
+            {importing ? "Importing…" : "Import rules"}
+          </Button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".json,application/json"
+            className="hidden"
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              if (file) handleImportFile(file);
+            }}
+          />
+          {importResult ? <p className="text-sm text-[var(--color-text-primary)]">{importResult}</p> : null}
+        </div>
+        {importError ? <p className="mb-4 whitespace-pre-line text-sm text-red-600">{importError}</p> : null}
+
         {loading ? (
           <p className="text-sm text-[var(--color-text-primary)]">Loading…</p>
         ) : loadError ? (
@@ -302,6 +435,9 @@ export function BankRulesPage() {
                   </p>
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
+                  <Button variant="secondary" onClick={() => handleDuplicate(rule)}>
+                    Duplicate
+                  </Button>
                   <Button variant="secondary" onClick={() => handleToggleEnabled(rule)} disabled={busyId === rule.id}>
                     {rule.enabled ? "Disable" : "Enable"}
                   </Button>
