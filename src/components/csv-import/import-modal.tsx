@@ -15,6 +15,7 @@ import { useBodyScrollLock } from "@/hooks/use-body-scroll-lock";
 import { useTenant } from "@/lib/tenant/tenant-provider";
 import { getServiceContainer } from "@/lib/services/service-container-v2";
 import { findMatchingRule } from "@/lib/accounting/bank-rules";
+import { findDuplicateTransaction, findExclusionMatch } from "@/lib/accounting/feed-dedup";
 import { buildReviewRows, getColumnLabels, tokenizeCsvText } from "@/modules/accounting/domain/parse-csv";
 import { learnPayeeRules, suggestCategorization, suggestColumnMapping } from "@/lib/services/ai-service";
 import {
@@ -31,7 +32,13 @@ import {
   type SignConvention,
   type WizardStep
 } from "@/modules/accounting/domain/csv-import";
-import type { BankRule, ImportTransactionsInput, ImportTransactionsResult } from "@/modules/accounting/domain/models";
+import type {
+  BankRule,
+  ExcludedFeedRow,
+  ImportTransactionsInput,
+  ImportTransactionsResult,
+  Transaction
+} from "@/modules/accounting/domain/models";
 
 type ImportModalProps = {
   open: boolean;
@@ -77,6 +84,8 @@ export function ImportModal({
   const [selectedRowIds, setSelectedRowIds] = useState<Set<string>>(new Set());
   const [resumedFromSession, setResumedFromSession] = useState(false);
   const [bankRules, setBankRules] = useState<BankRule[]>([]);
+  const [existingTransactions, setExistingTransactions] = useState<Transaction[]>([]);
+  const [excludedFeedRows, setExcludedFeedRows] = useState<ExcludedFeedRow[]>([]);
 
   const [isConfirmDialogOpen, setIsConfirmDialogOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -104,6 +113,40 @@ export function ImportModal({
     });
     return matches;
   }, [reviewRows, bankRules]);
+
+  useEffect(() => {
+    if (!open || !mainAccountId) return;
+    // Powers both duplicate-import detection (date+payee+amount against
+    // existing POSTED transactions, computed on the fly, no persistence) and
+    // exclude-memory (payee+amount against the user's persisted exclusion
+    // list) -- see PLAINGL_FEATURES_TO_IMPLEMENT.md #11.
+    getServiceContainer()
+      .transactionService.listTransactions({ sourceAccountId: mainAccountId, status: "POSTED" })
+      .then(setExistingTransactions)
+      .catch(() => setExistingTransactions([]));
+    getServiceContainer()
+      .excludedFeedRowService.listExcludedRows(mainAccountId)
+      .then(setExcludedFeedRows)
+      .catch(() => setExcludedFeedRows([]));
+  }, [open, mainAccountId]);
+
+  const duplicateMatches = useMemo(() => {
+    const matches = new Map<string, Transaction>();
+    reviewRows.forEach((row) => {
+      const match = findDuplicateTransaction(existingTransactions, mainAccountId, row);
+      if (match) matches.set(row.clientRowId, match);
+    });
+    return matches;
+  }, [reviewRows, existingTransactions, mainAccountId]);
+
+  const exclusionMatches = useMemo(() => {
+    const matches = new Map<string, ExcludedFeedRow>();
+    reviewRows.forEach((row) => {
+      const match = findExclusionMatch(excludedFeedRows, mainAccountId, row);
+      if (match) matches.set(row.clientRowId, match);
+    });
+    return matches;
+  }, [reviewRows, excludedFeedRows, mainAccountId]);
 
   useEffect(() => {
     if (!open) return;
@@ -201,7 +244,13 @@ export function ImportModal({
     });
     setReviewRows(withRuleMatches);
     setSelectedRowIds(
-      new Set(withRuleMatches.filter((row) => row.parseErrors.length === 0).map((row) => row.clientRowId))
+      new Set(
+        withRuleMatches
+          .filter((row) => row.parseErrors.length === 0)
+          .filter((row) => !findDuplicateTransaction(existingTransactions, mainAccountId, row))
+          .filter((row) => !findExclusionMatch(excludedFeedRows, mainAccountId, row))
+          .map((row) => row.clientRowId)
+      )
     );
     setResumedFromSession(false);
     setStep("VERIFY");
@@ -236,6 +285,25 @@ export function ImportModal({
       setSuggestCategoriesError(err instanceof Error ? err.message : "Could not suggest categories right now.");
     } finally {
       setIsSuggestingCategories(false);
+    }
+  }
+
+  async function handleExcludeRow(row: ReviewRow) {
+    if (!mainAccountId || row.amount === null || row.payee.trim() === "") return;
+    try {
+      const created = await getServiceContainer().excludedFeedRowService.createExcludedRow({
+        mainAccountId,
+        payee: row.payee,
+        amount: row.amount
+      });
+      setExcludedFeedRows((current) => [...current, created]);
+      setSelectedRowIds((current) => {
+        const next = new Set(current);
+        next.delete(row.clientRowId);
+        return next;
+      });
+    } catch {
+      // Best-effort -- if this fails the row is simply left as-is.
     }
   }
 
@@ -410,6 +478,9 @@ export function ImportModal({
                 suggestCategoriesError={suggestCategoriesError}
                 aiEnabled={aiEnabled}
                 bankRuleMatches={bankRuleMatches}
+                duplicateMatches={duplicateMatches}
+                exclusionMatches={exclusionMatches}
+                onExcludeRow={handleExcludeRow}
               />
               {resumedFromSession ? (
                 <button

@@ -290,3 +290,16 @@ export type CreateBankRuleInput = Pick<BankRule, "name" | "targetAccountId" | "c
 export type UpdateBankRuleInput = Partial<
   Pick<BankRule, "name" | "targetAccountId" | "conditions" | "enabled" | "priority">
 >;
+
+// Bank feed exclude memory (PLAINGL_FEATURES_TO_IMPLEMENT.md #11) -- mirrors
+// newgl-api's src/domain/models.ts excluded-feed-row schemas.
+export const excludedFeedRowSchema = z.object({
+  id: z.string().uuid(),
+  mainAccountId: z.string().min(1),
+  payee: z.string().min(1),
+  amount: z.number(),
+  createdAt: z.string()
+});
+
+export type ExcludedFeedRow = z.infer<typeof excludedFeedRowSchema>;
+export type CreateExcludedFeedRowInput = Pick<ExcludedFeedRow, "mainAccountId" | "payee" | "amount">;

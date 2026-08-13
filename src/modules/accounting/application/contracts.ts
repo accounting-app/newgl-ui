@@ -4,7 +4,9 @@ import type {
   BankRule,
   CreateAccountInput,
   CreateBankRuleInput,
+  CreateExcludedFeedRowInput,
   CreateTransactionInput,
+  ExcludedFeedRow,
   ImportTransactionsInput,
   ImportTransactionsResult,
   LedgerPosting,
@@ -69,10 +71,17 @@ export interface BankRuleService {
   deleteRule(id: string): Promise<void>;
 }
 
+export interface ExcludedFeedRowService {
+  listExcludedRows(mainAccountId?: string): Promise<ExcludedFeedRow[]>;
+  createExcludedRow(input: CreateExcludedFeedRowInput): Promise<ExcludedFeedRow>;
+  deleteExcludedRow(id: string): Promise<void>;
+}
+
 export type ServiceContainer = {
   accountService: AccountService;
   transactionService: TransactionService;
   ledgerService: LedgerService;
   registerService: RegisterService;
   bankRuleService: BankRuleService;
+  excludedFeedRowService: ExcludedFeedRowService;
 };

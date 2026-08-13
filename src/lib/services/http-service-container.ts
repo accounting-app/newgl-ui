@@ -7,7 +7,9 @@ import type {
   ChartOfAccount,
   CreateAccountInput,
   CreateBankRuleInput,
+  CreateExcludedFeedRowInput,
   CreateTransactionInput,
+  ExcludedFeedRow,
   ImportTransactionsInput,
   ImportTransactionsResult,
   LedgerPosting,
@@ -21,6 +23,7 @@ import type {
 import type {
   AccountService,
   BankRuleService,
+  ExcludedFeedRowService,
   LedgerService,
   RegisterService,
   ServiceContainer,
@@ -302,17 +305,37 @@ export class HttpBankRuleService implements BankRuleService {
   }
 }
 
+export class HttpExcludedFeedRowService implements ExcludedFeedRowService {
+  private readonly baseUrl = BASE_API_URL;
+  constructor() {}
+
+  listExcludedRows(mainAccountId?: string): Promise<ExcludedFeedRow[]> {
+    const query = mainAccountId ? `?mainAccountId=${encodeURIComponent(mainAccountId)}` : "";
+    return request(this.baseUrl, `/excluded-feed-rows${query}`);
+  }
+
+  createExcludedRow(input: CreateExcludedFeedRowInput): Promise<ExcludedFeedRow> {
+    return request(this.baseUrl, "/excluded-feed-rows", { method: "POST", body: JSON.stringify(input) });
+  }
+
+  async deleteExcludedRow(id: string): Promise<void> {
+    await request(this.baseUrl, `/excluded-feed-rows/${id}`, { method: "DELETE" });
+  }
+}
+
 export function createHttpServiceContainer(): ServiceContainer {
   const accountService = new HttpAccountService();
   const transactionService = new HttpTransactionService();
   const ledgerService = new HttpLedgerService();
   const registerService = new HttpRegisterService();
   const bankRuleService = new HttpBankRuleService();
+  const excludedFeedRowService = new HttpExcludedFeedRowService();
   return {
     accountService,
     transactionService,
     ledgerService,
     registerService,
-    bankRuleService
+    bankRuleService,
+    excludedFeedRowService
   };
 }

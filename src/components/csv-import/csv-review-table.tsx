@@ -6,7 +6,7 @@ import type { SelectFieldOption } from "@/components/bank-register/select-field"
 import { Button } from "@/components/ui/button";
 import { InputField } from "@/components/ui/input-field";
 import type { ReviewRow, SignConvention } from "@/modules/accounting/domain/csv-import";
-import type { BankRule } from "@/modules/accounting/domain/models";
+import type { BankRule, ExcludedFeedRow, Transaction } from "@/modules/accounting/domain/models";
 
 type CsvReviewTableProps = {
   rows: ReviewRow[];
@@ -29,6 +29,12 @@ type CsvReviewTableProps = {
   aiEnabled: boolean;
   /** Deterministic bank-rule match per row (PLAINGL_FEATURES_TO_IMPLEMENT.md #7), keyed by clientRowId. AI/learned-rule suggestions win by default -- this is surfaced as an override, not applied automatically. */
   bankRuleMatches?: Map<string, BankRule>;
+  /** Rows that look like a re-import of an existing POSTED transaction (date+payee+amount), keyed by clientRowId (PLAINGL_FEATURES_TO_IMPLEMENT.md #11). Pre-unchecked by the caller, not by this component. */
+  duplicateMatches?: Map<string, Transaction>;
+  /** Rows matching a user's persisted "always exclude" pattern (payee+amount), keyed by clientRowId. */
+  exclusionMatches?: Map<string, ExcludedFeedRow>;
+  /** Marks a row's payee+amount as permanently excluded from future imports on this account. */
+  onExcludeRow?: (row: ReviewRow) => void;
 };
 
 export function isRowSubmittable(row: ReviewRow, mainAccountId: string): boolean {
@@ -70,7 +76,10 @@ export function CsvReviewTable({
   isSuggestingCategories,
   suggestCategoriesError,
   aiEnabled,
-  bankRuleMatches
+  bankRuleMatches,
+  duplicateMatches,
+  exclusionMatches,
+  onExcludeRow
 }: CsvReviewTableProps) {
   const accountLabelById = new Map(accountOptions.map((option) => [option.value, option.label]));
   const selectedRows = rows.filter((row) => selectedRowIds.has(row.clientRowId));
@@ -200,6 +209,11 @@ export function CsvReviewTable({
                       onChange={(event) => onRowChange(row.clientRowId, { memo: event.target.value })}
                       className="w-full"
                     />
+                    {exclusionMatches?.has(row.clientRowId) ? (
+                      <p className="mt-0.5 text-[11px] text-[var(--color-icon-secondary)]">Previously excluded</p>
+                    ) : duplicateMatches?.has(row.clientRowId) ? (
+                      <p className="mt-0.5 text-[11px] text-[var(--color-icon-secondary)]">Looks like a duplicate</p>
+                    ) : null}
                   </td>
                   <td className="p-2 align-top">
                     <InputField
@@ -282,6 +296,15 @@ export function CsvReviewTable({
                     >
                       <Trash2 className="h-4 w-4" aria-hidden="true" />
                     </button>
+                    {onExcludeRow && !exclusionMatches?.has(row.clientRowId) && row.payee.trim() !== "" ? (
+                      <button
+                        type="button"
+                        className="mt-1 block w-full text-[11px] text-[var(--color-link-text)] hover:underline"
+                        onClick={() => onExcludeRow(row)}
+                      >
+                        Exclude
+                      </button>
+                    ) : null}
                     {error ? <p className="mt-1 text-[11px] text-red-600">{error}</p> : null}
                   </td>
                 </tr>
