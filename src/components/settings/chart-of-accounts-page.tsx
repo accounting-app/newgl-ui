@@ -44,6 +44,7 @@ export function ChartOfAccountsPage() {
 
   const [newName, setNewName] = useState("");
   const [newCategory, setNewCategory] = useState<Account["category"]>("BANK");
+  const [newOpeningBalance, setNewOpeningBalance] = useState("");
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
 
@@ -109,13 +110,16 @@ export function ChartOfAccountsPage() {
     setCreating(true);
     setCreateError(null);
     try {
+      const openingBalance = Number(newOpeningBalance);
       await services.accountService.createAccount({
         code: nextAccountCode(accounts),
         name: newName.trim(),
         category: newCategory,
-        currency: "USD"
+        currency: "USD",
+        openingBalance: newOpeningBalance.trim() && Number.isFinite(openingBalance) ? openingBalance : undefined
       });
       setNewName("");
+      setNewOpeningBalance("");
       await loadAccounts();
     } catch (err) {
       setCreateError(err instanceof Error ? err.message : "Could not create this account");
@@ -195,6 +199,17 @@ export function ChartOfAccountsPage() {
               options={CATEGORY_OPTIONS}
               placeholder="Category"
               allowCustomValue={false}
+            />
+          </label>
+          <label className="flex w-40 flex-col gap-1 text-xs text-[var(--color-icon-secondary)]">
+            Opening balance
+            <InputField
+              type="number"
+              step="0.01"
+              min="0"
+              placeholder="0.00"
+              value={newOpeningBalance}
+              onChange={(e) => setNewOpeningBalance(e.target.value)}
             />
           </label>
           <Button type="submit" disabled={creating || newName.trim() === ""}>
