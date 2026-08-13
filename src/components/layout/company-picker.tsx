@@ -7,11 +7,16 @@ import { useCompany } from "@/lib/company/company-provider";
 
 // Sits in TopHeader, matching its existing dropdown pattern (avatar menu):
 // a button that opens a small panel, closed on outside click.
+type StartingPoint = "blank" | "template" | "duplicate";
+
 export function CompanyPicker() {
-  const { companies, activeCompany, loading, isSwitching, switchCompany, createCompany } = useCompany();
+  const { companies, templates, activeCompany, loading, isSwitching, switchCompany, createCompany } = useCompany();
   const [isOpen, setIsOpen] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [newName, setNewName] = useState("");
+  const [startingPoint, setStartingPoint] = useState<StartingPoint>("blank");
+  const [templateId, setTemplateId] = useState("");
+  const [duplicateFromName, setDuplicateFromName] = useState("");
   const [createError, setCreateError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -36,13 +41,25 @@ export function CompanyPicker() {
     await switchCompany(name); // triggers a full page reload on success
   }
 
+  function resetCreateForm() {
+    setNewName("");
+    setStartingPoint("blank");
+    setTemplateId("");
+    setDuplicateFromName("");
+    setCreateError(null);
+  }
+
   async function handleCreate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setCreateError(null);
     setIsSaving(true);
     try {
-      await createCompany(newName);
-      setNewName("");
+      await createCompany({
+        name: newName,
+        templateId: startingPoint === "template" ? templateId : undefined,
+        duplicateFromName: startingPoint === "duplicate" ? duplicateFromName : undefined
+      });
+      resetCreateForm();
       setIsCreating(false);
     } catch (err) {
       setCreateError(err instanceof Error ? err.message : "Could not create this company");
@@ -102,11 +119,60 @@ export function CompanyPicker() {
                   value={newName}
                   onChange={(event) => setNewName(event.target.value)}
                 />
+                <label className="flex flex-col gap-1 text-xs text-[var(--color-icon-secondary)]">
+                  Starting point
+                  <select
+                    value={startingPoint}
+                    onChange={(event) => setStartingPoint(event.target.value as StartingPoint)}
+                    className="input-field h-8 rounded px-2 text-xs text-[var(--color-text-primary)]"
+                  >
+                    <option value="blank">Blank</option>
+                    <option value="template" disabled={templates.length === 0}>
+                      Starter template
+                    </option>
+                    <option value="duplicate" disabled={companies.length === 0}>
+                      Duplicate an existing company
+                    </option>
+                  </select>
+                </label>
+                {startingPoint === "template" ? (
+                  <select
+                    value={templateId}
+                    onChange={(event) => setTemplateId(event.target.value)}
+                    className="input-field h-8 rounded px-2 text-xs text-[var(--color-text-primary)]"
+                  >
+                    <option value="">Select a template</option>
+                    {templates.map((template) => (
+                      <option key={template.id} value={template.id} title={template.description}>
+                        {template.label}
+                      </option>
+                    ))}
+                  </select>
+                ) : null}
+                {startingPoint === "duplicate" ? (
+                  <select
+                    value={duplicateFromName}
+                    onChange={(event) => setDuplicateFromName(event.target.value)}
+                    className="input-field h-8 rounded px-2 text-xs text-[var(--color-text-primary)]"
+                  >
+                    <option value="">Select a company</option>
+                    {companies.map((company) => (
+                      <option key={company.name} value={company.name}>
+                        {company.name}
+                      </option>
+                    ))}
+                  </select>
+                ) : null}
                 {createError ? <p className="text-xs text-red-600">{createError}</p> : null}
                 <div className="flex gap-2">
                   <button
                     type="submit"
-                    disabled={isSaving || newName.trim() === ""}
+                    disabled={
+                      isSaving ||
+                      newName.trim() === "" ||
+                      (startingPoint === "template" && templateId === "") ||
+                      (startingPoint === "duplicate" && duplicateFromName === "")
+                    }
                     className="rounded bg-[var(--color-link-action)] px-2 py-1 text-xs font-medium text-white disabled:opacity-50"
                   >
                     {isSaving ? "Creating…" : "Create"}
@@ -115,7 +181,7 @@ export function CompanyPicker() {
                     type="button"
                     onClick={() => {
                       setIsCreating(false);
-                      setCreateError(null);
+                      resetCreateForm();
                     }}
                     className="rounded px-2 py-1 text-xs text-[var(--color-text-primary)] hover:bg-[var(--color-action-passive-subtle-hover)]"
                   >

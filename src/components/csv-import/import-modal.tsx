@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { X } from "lucide-react";
 import type { SelectFieldOption } from "@/components/bank-register/select-field";
 import { CsvDropZone } from "@/components/csv-import/csv-drop-zone";
@@ -13,6 +13,9 @@ import type { WizardStepInfo } from "@/components/csv-import/import-wizard-steps
 import { SelectAccountStep } from "@/components/csv-import/select-account-step";
 import { useBodyScrollLock } from "@/hooks/use-body-scroll-lock";
 import { useTenant } from "@/lib/tenant/tenant-provider";
+import { getServiceContainer } from "@/lib/services/service-container-v2";
+import { findMatchingRule } from "@/lib/accounting/bank-rules";
+import { findDuplicateTransaction, findExclusionMatch } from "@/lib/accounting/feed-dedup";
 import { buildReviewRows, getColumnLabels, tokenizeCsvText } from "@/modules/accounting/domain/parse-csv";
 import { learnPayeeRules, suggestCategorization, suggestColumnMapping } from "@/lib/services/ai-service";
 import {
@@ -29,7 +32,13 @@ import {
   type SignConvention,
   type WizardStep
 } from "@/modules/accounting/domain/csv-import";
-import type { ImportTransactionsInput, ImportTransactionsResult } from "@/modules/accounting/domain/models";
+import type {
+  BankRule,
+  ExcludedFeedRow,
+  ImportTransactionsInput,
+  ImportTransactionsResult,
+  Transaction
+} from "@/modules/accounting/domain/models";
 
 type ImportModalProps = {
   open: boolean;
@@ -74,6 +83,9 @@ export function ImportModal({
   const [reviewRows, setReviewRows] = useState<ReviewRow[]>([]);
   const [selectedRowIds, setSelectedRowIds] = useState<Set<string>>(new Set());
   const [resumedFromSession, setResumedFromSession] = useState(false);
+  const [bankRules, setBankRules] = useState<BankRule[]>([]);
+  const [existingTransactions, setExistingTransactions] = useState<Transaction[]>([]);
+  const [excludedFeedRows, setExcludedFeedRows] = useState<ExcludedFeedRow[]>([]);
 
   const [isConfirmDialogOpen, setIsConfirmDialogOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -82,6 +94,59 @@ export function ImportModal({
   const [skippedCount, setSkippedCount] = useState(0);
 
   useBodyScrollLock(open);
+
+  useEffect(() => {
+    if (!open) return;
+    // Deterministic and free (no AI call), so loaded once whenever the
+    // wizard opens and applied automatically -- see handleMappingContinue.
+    getServiceContainer()
+      .bankRuleService.listRules()
+      .then(setBankRules)
+      .catch(() => setBankRules([]));
+  }, [open]);
+
+  const bankRuleMatches = useMemo(() => {
+    const matches = new Map<string, BankRule>();
+    reviewRows.forEach((row) => {
+      const match = findMatchingRule(bankRules, { payee: row.payee, memo: row.memo, amount: row.amount });
+      if (match) matches.set(row.clientRowId, match);
+    });
+    return matches;
+  }, [reviewRows, bankRules]);
+
+  useEffect(() => {
+    if (!open || !mainAccountId) return;
+    // Powers both duplicate-import detection (date+payee+amount against
+    // existing POSTED transactions, computed on the fly, no persistence) and
+    // exclude-memory (payee+amount against the user's persisted exclusion
+    // list) -- see PLAINGL_FEATURES_TO_IMPLEMENT.md #11.
+    getServiceContainer()
+      .transactionService.listTransactions({ sourceAccountId: mainAccountId, status: "POSTED" })
+      .then(setExistingTransactions)
+      .catch(() => setExistingTransactions([]));
+    getServiceContainer()
+      .excludedFeedRowService.listExcludedRows(mainAccountId)
+      .then(setExcludedFeedRows)
+      .catch(() => setExcludedFeedRows([]));
+  }, [open, mainAccountId]);
+
+  const duplicateMatches = useMemo(() => {
+    const matches = new Map<string, Transaction>();
+    reviewRows.forEach((row) => {
+      const match = findDuplicateTransaction(existingTransactions, mainAccountId, row);
+      if (match) matches.set(row.clientRowId, match);
+    });
+    return matches;
+  }, [reviewRows, existingTransactions, mainAccountId]);
+
+  const exclusionMatches = useMemo(() => {
+    const matches = new Map<string, ExcludedFeedRow>();
+    reviewRows.forEach((row) => {
+      const match = findExclusionMatch(excludedFeedRows, mainAccountId, row);
+      if (match) matches.set(row.clientRowId, match);
+    });
+    return matches;
+  }, [reviewRows, excludedFeedRows, mainAccountId]);
 
   useEffect(() => {
     if (!open) return;
@@ -167,8 +232,26 @@ export function ImportModal({
   function handleMappingContinue() {
     const dataRows = formatOptions.hasHeaderRow ? rawRows.slice(1) : rawRows;
     const built = buildReviewRows(dataRows, mapping, formatOptions, signConvention);
-    setReviewRows(built);
-    setSelectedRowIds(new Set(built.filter((row) => row.parseErrors.length === 0).map((row) => row.clientRowId)));
+    // Deterministic bank rules apply immediately, before any AI call --
+    // they're free and instant. Only fills rows with no category yet, so
+    // this never overwrites anything (nothing has been set yet here, but
+    // keeping the guard makes the intent explicit).
+    const withRuleMatches = built.map((row) => {
+      if (row.categoryAccountId !== null) return row;
+      const match = findMatchingRule(bankRules, { payee: row.payee, memo: row.memo, amount: row.amount });
+      if (!match) return row;
+      return { ...row, categoryAccountId: match.targetAccountId, categoryConfidence: null, categorySource: "bank-rule" as const };
+    });
+    setReviewRows(withRuleMatches);
+    setSelectedRowIds(
+      new Set(
+        withRuleMatches
+          .filter((row) => row.parseErrors.length === 0)
+          .filter((row) => !findDuplicateTransaction(existingTransactions, mainAccountId, row))
+          .filter((row) => !findExclusionMatch(excludedFeedRows, mainAccountId, row))
+          .map((row) => row.clientRowId)
+      )
+    );
     setResumedFromSession(false);
     setStep("VERIFY");
   }
@@ -202,6 +285,25 @@ export function ImportModal({
       setSuggestCategoriesError(err instanceof Error ? err.message : "Could not suggest categories right now.");
     } finally {
       setIsSuggestingCategories(false);
+    }
+  }
+
+  async function handleExcludeRow(row: ReviewRow) {
+    if (!mainAccountId || row.amount === null || row.payee.trim() === "") return;
+    try {
+      const created = await getServiceContainer().excludedFeedRowService.createExcludedRow({
+        mainAccountId,
+        payee: row.payee,
+        amount: row.amount
+      });
+      setExcludedFeedRows((current) => [...current, created]);
+      setSelectedRowIds((current) => {
+        const next = new Set(current);
+        next.delete(row.clientRowId);
+        return next;
+      });
+    } catch {
+      // Best-effort -- if this fails the row is simply left as-is.
     }
   }
 
@@ -375,6 +477,10 @@ export function ImportModal({
                 isSuggestingCategories={isSuggestingCategories}
                 suggestCategoriesError={suggestCategoriesError}
                 aiEnabled={aiEnabled}
+                bankRuleMatches={bankRuleMatches}
+                duplicateMatches={duplicateMatches}
+                exclusionMatches={exclusionMatches}
+                onExcludeRow={handleExcludeRow}
               />
               {resumedFromSession ? (
                 <button

@@ -1,8 +1,12 @@
 import type {
   Account,
   AccountHierarchy,
+  BankRule,
   CreateAccountInput,
+  CreateBankRuleInput,
+  CreateExcludedFeedRowInput,
   CreateTransactionInput,
+  ExcludedFeedRow,
   ImportTransactionsInput,
   ImportTransactionsResult,
   LedgerPosting,
@@ -10,7 +14,8 @@ import type {
   ReconcileStatus,
   RegisterEntry,
   Transaction,
-  UpdateAccountInput
+  UpdateAccountInput,
+  UpdateBankRuleInput
 } from "@/modules/accounting/domain/models";
 
 export interface AccountService {
@@ -59,9 +64,24 @@ export interface RegisterService {
   deleteRegisterEntry(entryId: string): Promise<RegisterEntry>;
 }
 
+export interface BankRuleService {
+  listRules(): Promise<BankRule[]>;
+  createRule(input: CreateBankRuleInput): Promise<BankRule>;
+  updateRule(id: string, input: UpdateBankRuleInput): Promise<BankRule>;
+  deleteRule(id: string): Promise<void>;
+}
+
+export interface ExcludedFeedRowService {
+  listExcludedRows(mainAccountId?: string): Promise<ExcludedFeedRow[]>;
+  createExcludedRow(input: CreateExcludedFeedRowInput): Promise<ExcludedFeedRow>;
+  deleteExcludedRow(id: string): Promise<void>;
+}
+
 export type ServiceContainer = {
   accountService: AccountService;
   transactionService: TransactionService;
   ledgerService: LedgerService;
   registerService: RegisterService;
+  bankRuleService: BankRuleService;
+  excludedFeedRowService: ExcludedFeedRowService;
 };

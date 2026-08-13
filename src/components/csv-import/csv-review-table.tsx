@@ -6,6 +6,7 @@ import type { SelectFieldOption } from "@/components/bank-register/select-field"
 import { Button } from "@/components/ui/button";
 import { InputField } from "@/components/ui/input-field";
 import type { ReviewRow, SignConvention } from "@/modules/accounting/domain/csv-import";
+import type { BankRule, ExcludedFeedRow, Transaction } from "@/modules/accounting/domain/models";
 
 type CsvReviewTableProps = {
   rows: ReviewRow[];
@@ -26,6 +27,14 @@ type CsvReviewTableProps = {
   isSuggestingCategories: boolean;
   suggestCategoriesError: string | null;
   aiEnabled: boolean;
+  /** Deterministic bank-rule match per row (PLAINGL_FEATURES_TO_IMPLEMENT.md #7), keyed by clientRowId. AI/learned-rule suggestions win by default -- this is surfaced as an override, not applied automatically. */
+  bankRuleMatches?: Map<string, BankRule>;
+  /** Rows that look like a re-import of an existing POSTED transaction (date+payee+amount), keyed by clientRowId (PLAINGL_FEATURES_TO_IMPLEMENT.md #11). Pre-unchecked by the caller, not by this component. */
+  duplicateMatches?: Map<string, Transaction>;
+  /** Rows matching a user's persisted "always exclude" pattern (payee+amount), keyed by clientRowId. */
+  exclusionMatches?: Map<string, ExcludedFeedRow>;
+  /** Marks a row's payee+amount as permanently excluded from future imports on this account. */
+  onExcludeRow?: (row: ReviewRow) => void;
 };
 
 export function isRowSubmittable(row: ReviewRow, mainAccountId: string): boolean {
@@ -66,8 +75,13 @@ export function CsvReviewTable({
   onSuggestCategories,
   isSuggestingCategories,
   suggestCategoriesError,
-  aiEnabled
+  aiEnabled,
+  bankRuleMatches,
+  duplicateMatches,
+  exclusionMatches,
+  onExcludeRow
 }: CsvReviewTableProps) {
+  const accountLabelById = new Map(accountOptions.map((option) => [option.value, option.label]));
   const selectedRows = rows.filter((row) => selectedRowIds.has(row.clientRowId));
   const selectedSubmittableCount = selectedRows.filter((row) => isRowSubmittable(row, mainAccountId)).length;
   const allSelectedAreReady = selectedRows.length > 0 && selectedSubmittableCount === selectedRows.length;
@@ -195,6 +209,11 @@ export function CsvReviewTable({
                       onChange={(event) => onRowChange(row.clientRowId, { memo: event.target.value })}
                       className="w-full"
                     />
+                    {exclusionMatches?.has(row.clientRowId) ? (
+                      <p className="mt-0.5 text-[11px] text-[var(--color-icon-secondary)]">Previously excluded</p>
+                    ) : duplicateMatches?.has(row.clientRowId) ? (
+                      <p className="mt-0.5 text-[11px] text-[var(--color-icon-secondary)]">Looks like a duplicate</p>
+                    ) : null}
                   </td>
                   <td className="p-2 align-top">
                     <InputField
@@ -233,15 +252,40 @@ export function CsvReviewTable({
                       allowCustomValue={false}
                       optionSize="sm"
                     />
-                    {row.categorySource === "ai" || row.categorySource === "rule" ? (
+                    {row.categorySource === "ai" || row.categorySource === "rule" || row.categorySource === "bank-rule" ? (
                       <p className="mt-0.5 text-[11px] text-[var(--color-icon-secondary)]">
                         {row.categorySource === "rule"
                           ? "Remembered from a previous import"
-                          : row.categoryConfidence !== null
-                            ? `AI suggested · ${Math.round(row.categoryConfidence * 100)}% confident`
-                            : "AI suggested"}
+                          : row.categorySource === "bank-rule"
+                            ? "Set by a bank rule"
+                            : row.categoryConfidence !== null
+                              ? `AI suggested · ${Math.round(row.categoryConfidence * 100)}% confident`
+                              : "AI suggested"}
                       </p>
                     ) : null}
+                    {(() => {
+                      const match = bankRuleMatches?.get(row.clientRowId);
+                      if (!match || match.targetAccountId === row.categoryAccountId) return null;
+                      const accountLabel = accountLabelById.get(match.targetAccountId) ?? match.targetAccountId;
+                      return (
+                        <p className="mt-0.5 text-[11px] text-[var(--color-icon-secondary)]">
+                          Rule &ldquo;{match.name}&rdquo; suggests {accountLabel} ·{" "}
+                          <button
+                            type="button"
+                            className="text-[var(--color-link-text)] hover:underline"
+                            onClick={() =>
+                              onRowChange(row.clientRowId, {
+                                categoryAccountId: match.targetAccountId,
+                                categoryConfidence: null,
+                                categorySource: "bank-rule"
+                              })
+                            }
+                          >
+                            Use instead
+                          </button>
+                        </p>
+                      );
+                    })()}
                   </td>
                   <td className="p-2 align-top text-center">
                     <button
@@ -252,6 +296,15 @@ export function CsvReviewTable({
                     >
                       <Trash2 className="h-4 w-4" aria-hidden="true" />
                     </button>
+                    {onExcludeRow && !exclusionMatches?.has(row.clientRowId) && row.payee.trim() !== "" ? (
+                      <button
+                        type="button"
+                        className="mt-1 block w-full text-[11px] text-[var(--color-link-text)] hover:underline"
+                        onClick={() => onExcludeRow(row)}
+                      >
+                        Exclude
+                      </button>
+                    ) : null}
                     {error ? <p className="mt-1 text-[11px] text-red-600">{error}</p> : null}
                   </td>
                 </tr>

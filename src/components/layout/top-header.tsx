@@ -47,7 +47,7 @@ export function TopHeader() {
   const avatarLetter = (userEmail ?? "U").trim().charAt(0).toUpperCase();
 
   return (
-    <header className="flex h-[57px] items-center justify-between gap-3 rounded-t-[var(--radius-x-large)] bg-[var(--color-container-background-primary)] px-5">
+    <header className="top-header flex h-[57px] items-center justify-between gap-3 rounded-t-[var(--radius-x-large)] bg-[var(--color-container-background-primary)] px-5">
       <CompanyPicker />
       <div className="flex items-center gap-3">
       <ThemeToggle />

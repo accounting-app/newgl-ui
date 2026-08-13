@@ -43,6 +43,16 @@ export type DraftTransactionErrors = Partial<
   Record<"date" | "payee" | "accountTypeId" | "payment" | "deposit" | "amount" | "form", string>
 >;
 
+// A register row's category side can be split across multiple accounts
+// (PLAINGL_FEATURES_TO_IMPLEMENT.md #5) instead of the usual single
+// accountTypeId -- the register's own account (selectedAccountId) always
+// stays a single posting for the full amount; only the offset side splits.
+export type DraftSplitLine = {
+  clientId: string;
+  accountId: string;
+  amount: string;
+};
+
 export type InlineEntryEditorInput = {
   date: string;
   refNo: string;
@@ -58,6 +68,12 @@ export function nextReconcileStatus(current: ReconcileStatus): ReconcileStatus {
   if (current === "") return "C";
   if (current === "C") return "R";
   return "";
+}
+
+let splitLineIdCounter = 0;
+function newSplitLine(): DraftSplitLine {
+  splitLineIdCounter += 1;
+  return { clientId: `split-line-${splitLineIdCounter}`, accountId: "", amount: "" };
 }
 
 function findCounterpartyAccount(
@@ -80,6 +96,8 @@ export function useBankRegister() {
   const [selectedTransactionType, setSelectedTransactionType] =
     useState<BankRegisterTransactionTypeId>("CHECK");
   const [draftTransaction, setDraftTransaction] = useState<DraftTransactionForm | null>(null);
+  const [draftSplits, setDraftSplits] = useState<DraftSplitLine[]>([]);
+  const [isSplitMode, setIsSplitMode] = useState(false);
   const [draftErrors, setDraftErrors] = useState<DraftTransactionErrors>({});
   const [isSavingDraft, setIsSavingDraft] = useState(false);
   const [entries, setEntries] = useState<RegisterEntry[]>([]);
@@ -195,11 +213,35 @@ export function useBankRegister() {
         deposit: "",
         reconcileStatus: ""
       });
+      setDraftSplits([]);
+      setIsSplitMode(false);
       setDraftErrors({});
       setError(null);
     },
     [availableTransactionTypes, existingRefNumbers, refreshRefNumbers, selectedAccountId]
   );
+
+  const toggleSplitMode = useCallback(() => {
+    setIsSplitMode((current) => {
+      const next = !current;
+      setDraftSplits(next ? [newSplitLine(), newSplitLine()] : []);
+      return next;
+    });
+    setDraftErrors((current) => ({ ...current, accountTypeId: undefined, amount: undefined, form: undefined }));
+  }, []);
+
+  const addDraftSplitLine = useCallback(() => {
+    setDraftSplits((current) => [...current, newSplitLine()]);
+  }, []);
+
+  const removeDraftSplitLine = useCallback((clientId: string) => {
+    setDraftSplits((current) => (current.length <= 2 ? current : current.filter((line) => line.clientId !== clientId)));
+  }, []);
+
+  const updateDraftSplitLine = useCallback((clientId: string, patch: Partial<Omit<DraftSplitLine, "clientId">>) => {
+    setDraftSplits((current) => current.map((line) => (line.clientId === clientId ? { ...line, ...patch } : line)));
+    setDraftErrors((current) => ({ ...current, amount: undefined, form: undefined }));
+  }, []);
 
   const updateDraftField = useCallback(
     (field: keyof Omit<DraftTransactionForm, "transactionTypeId" | "transactionTypeLabel">, value: string) => {
@@ -211,6 +253,8 @@ export function useBankRegister() {
 
   const cancelDraftTransaction = useCallback(() => {
     setDraftTransaction(null);
+    setDraftSplits([]);
+    setIsSplitMode(false);
     setDraftErrors({});
   }, []);
 
@@ -239,16 +283,33 @@ export function useBankRegister() {
     const isAccountFieldDisabled = isAccountFieldDisabledForTransactionType(
       draftTransaction.transactionTypeId
     );
+    // Splits replace the register's own account (fine, always self-excluded)
+    // instead of TRANSFER, which is inherently one account to another and
+    // doesn't have a "category" side to split.
+    const useSplits = isSplitMode && draftTransaction.transactionTypeId !== "TRANSFER";
+    const validSplits = draftSplits.filter((line) => line.accountId && Number(line.amount) > 0);
     const errors: DraftTransactionErrors = {};
 
     if (!draftTransaction.date) {
       errors.date = "Date is required.";
     }
-    if (!isAccountFieldDisabled && !draftTransaction.accountTypeId) {
+    if (!isAccountFieldDisabled && !useSplits && !draftTransaction.accountTypeId) {
       errors.accountTypeId = "Select an account.";
     }
-    if (!isAccountFieldDisabled && draftTransaction.accountTypeId === selectedAccountId) {
+    if (!isAccountFieldDisabled && !useSplits && draftTransaction.accountTypeId === selectedAccountId) {
       errors.accountTypeId = "An account can't be its own offset account.";
+    }
+    if (useSplits && validSplits.length < 2) {
+      errors.form = "Add at least two split lines, each with an account and an amount.";
+    }
+    if (useSplits && validSplits.some((line) => line.accountId === selectedAccountId)) {
+      errors.form = "A split line can't use the register's own account.";
+    }
+    if (useSplits && validSplits.length >= 2 && amount > 0) {
+      const splitTotal = Math.round(validSplits.reduce((sum, line) => sum + Number(line.amount), 0) * 100) / 100;
+      if (Math.round((splitTotal - amount) * 100) / 100 !== 0) {
+        errors.form = `Splits must total ${amount.toFixed(2)} (currently ${splitTotal.toFixed(2)}).`;
+      }
     }
     if (payment > 0 && deposit > 0) {
       errors.amount = "Use payment or deposit, not both.";
@@ -309,17 +370,26 @@ export function useBankRegister() {
               ]
         });
       } else if (isInflowTransactionType(draftTransaction.transactionTypeId)) {
-        const incomeAccount =
-          selectedCounterparty ??
-          findCounterpartyAccount(accounts, selectedAccountId, [
-            "Personal income",
-            "Owners investment",
-            "Retained Earnings"
-          ]);
-        if (!incomeAccount) {
+        const incomeAccount = useSplits
+          ? undefined
+          : selectedCounterparty ??
+            findCounterpartyAccount(accounts, selectedAccountId, [
+              "Personal income",
+              "Owners investment",
+              "Retained Earnings"
+            ]);
+        if (!useSplits && !incomeAccount) {
           setDraftErrors({ form: "Select an account for this transaction." });
           return;
         }
+        const offsetPostings = useSplits
+          ? validSplits.map((line) => ({
+              accountId: line.accountId,
+              type: "CREDIT" as const,
+              amount: Number(line.amount)
+            }))
+          : [{ accountId: incomeAccount!.id, type: "CREDIT" as const, amount }];
+        const accountLabel = useSplits ? "Split" : incomeAccount!.name;
 
         if (domainTransactionType === "DEPOSIT") {
           await services.transactionService.createDeposit({
@@ -327,13 +397,10 @@ export function useBankRegister() {
             referenceNumber,
             memo: draftTransaction.memo.trim() || undefined,
             payee: draftTransaction.payee.trim() || undefined,
-            accountLabel: incomeAccount.name,
+            accountLabel,
             sourceAccountId: selectedAccountId,
             reconcileStatus: draftTransaction.reconcileStatus || undefined,
-            postings: [
-              { accountId: selectedAccountId, type: "DEBIT", amount },
-              { accountId: incomeAccount.id, type: "CREDIT", amount }
-            ]
+            postings: [{ accountId: selectedAccountId, type: "DEBIT", amount }, ...offsetPostings]
           });
         } else {
           const transaction = await services.transactionService.createTransaction({
@@ -342,48 +409,53 @@ export function useBankRegister() {
             referenceNumber,
             memo: draftTransaction.memo.trim() || undefined,
             payee: draftTransaction.payee.trim() || undefined,
-            accountLabel: incomeAccount.name,
+            accountLabel,
             sourceAccountId: selectedAccountId,
             reconcileStatus: draftTransaction.reconcileStatus || undefined,
-            postings: [
-              { accountId: selectedAccountId, type: "DEBIT", amount },
-              { accountId: incomeAccount.id, type: "CREDIT", amount }
-            ]
+            postings: [{ accountId: selectedAccountId, type: "DEBIT", amount }, ...offsetPostings]
           });
           await services.transactionService.postTransaction(transaction.id);
         }
       } else {
-        const expenseOrOffset =
-          selectedCounterparty ??
-          findCounterpartyAccount(accounts, selectedAccountId, [
-            "Personal expense",
-            "Charitable donations",
-            "Retained Earnings"
-          ]);
-        if (!expenseOrOffset) {
+        const expenseOrOffset = useSplits
+          ? undefined
+          : selectedCounterparty ??
+            findCounterpartyAccount(accounts, selectedAccountId, [
+              "Personal expense",
+              "Charitable donations",
+              "Retained Earnings"
+            ]);
+        if (!useSplits && !expenseOrOffset) {
           setDraftErrors({ form: "Select an account for this transaction." });
           return;
         }
-        const selectedPostingType = payment > 0 ? "CREDIT" : "DEBIT";
-        const offsetPostingType = selectedPostingType === "CREDIT" ? "DEBIT" : "CREDIT";
+        const selectedPostingType: "DEBIT" | "CREDIT" = payment > 0 ? "CREDIT" : "DEBIT";
+        const offsetPostingType: "DEBIT" | "CREDIT" = selectedPostingType === "CREDIT" ? "DEBIT" : "CREDIT";
+        const offsetPostings = useSplits
+          ? validSplits.map((line) => ({
+              accountId: line.accountId,
+              type: offsetPostingType,
+              amount: Number(line.amount)
+            }))
+          : [{ accountId: expenseOrOffset!.id, type: offsetPostingType, amount }];
+        const accountLabel = useSplits ? "Split" : expenseOrOffset!.name;
         const transaction = await services.transactionService.createTransaction({
           type: domainTransactionType,
           transactionDate: draftTransaction.date,
           referenceNumber,
           memo: draftTransaction.memo.trim() || undefined,
           payee: draftTransaction.payee.trim() || undefined,
-          accountLabel: expenseOrOffset.name,
+          accountLabel,
           sourceAccountId: selectedAccountId,
           reconcileStatus: draftTransaction.reconcileStatus || undefined,
-          postings: [
-            { accountId: expenseOrOffset.id, type: offsetPostingType, amount },
-            { accountId: selectedAccountId, type: selectedPostingType, amount }
-          ]
+          postings: [...offsetPostings, { accountId: selectedAccountId, type: selectedPostingType, amount }]
         });
         await services.transactionService.postTransaction(transaction.id);
       }
 
       setDraftTransaction(null);
+      setDraftSplits([]);
+      setIsSplitMode(false);
       setDraftErrors({});
       setError(null);
       await Promise.all([refreshEntries(), refreshAccounts(), refreshRefNumbers()]);
@@ -397,6 +469,8 @@ export function useBankRegister() {
   }, [
     accounts,
     draftTransaction,
+    draftSplits,
+    isSplitMode,
     existingRefNumbers,
     isSavingDraft,
     refreshAccounts,
@@ -431,6 +505,28 @@ export function useBankRegister() {
       }
     },
     [refreshAccounts, refreshEntries, refreshRefNumbers, services.transactionService]
+  );
+
+  const createJournalEntry = useCallback(
+    async (input: {
+      date: string;
+      referenceNumber: string;
+      payee: string;
+      memo: string;
+      lines: { accountId: string; type: "DEBIT" | "CREDIT"; amount: number }[];
+    }) => {
+      const transaction = await services.transactionService.createTransaction({
+        type: "JOURNAL_ENTRY",
+        transactionDate: input.date,
+        referenceNumber: input.referenceNumber.trim() || generateNextRefNumber(existingRefNumbers),
+        memo: input.memo.trim() || undefined,
+        payee: input.payee.trim() || undefined,
+        postings: input.lines
+      });
+      await services.transactionService.postTransaction(transaction.id);
+      await Promise.all([refreshEntries(), refreshAccounts(), refreshRefNumbers()]);
+    },
+    [existingRefNumbers, refreshAccounts, refreshEntries, refreshRefNumbers, services.transactionService]
   );
 
   const importTransactions = useCallback(
@@ -521,6 +617,8 @@ export function useBankRegister() {
     selectedPostings,
     draftErrors,
     draftTransaction,
+    draftSplits,
+    isSplitMode,
     error,
     isSavingDraft,
     setSelectedAccountId,
@@ -536,6 +634,11 @@ export function useBankRegister() {
     updateDraftField,
     voidTransaction,
     reverseTransaction,
-    importTransactions
+    importTransactions,
+    createJournalEntry,
+    toggleSplitMode,
+    addDraftSplitLine,
+    removeDraftSplitLine,
+    updateDraftSplitLine
   };
 }

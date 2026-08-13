@@ -17,7 +17,8 @@ import {
 } from "@/constants/ui";
 import { REPORT_NAV_ITEMS } from "@/constants/reports";
 import type { ReportType } from "@/constants/reports";
-import { buildHierarchyRows } from "@/lib/accounting/account-hierarchy";
+import { buildHierarchyRowsMulti } from "@/lib/accounting/account-hierarchy";
+import type { ReportValueColumn } from "@/components/reports/report-account-rows";
 import { ReportSection } from "@/components/reports/report-section";
 import { ReportAccountRows } from "@/components/reports/report-account-rows";
 import { getTransactionsForAccount } from "@/lib/accounting/drill-down";
@@ -186,6 +187,27 @@ function formatMoney(value: number): string {
   });
 }
 
+function formatPercent(value: number): string {
+  return `${value.toLocaleString("en-US", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`;
+}
+
+function formatReportCell(value: number, format: "money" | "percent"): string {
+  return format === "percent" ? formatPercent(value) : formatMoney(value);
+}
+
+/** Renders one <td> per column for a totals/summary row (both single- and multi-column reports use this). */
+function ReportValueCells({ values, columns }: { values: number[]; columns: ReportValueColumn[] }) {
+  return (
+    <>
+      {columns.map((column, index) => (
+        <td key={column.key} className="px-3 py-1 text-right font-semibold text-[var(--color-text-primary)]">
+          {formatReportCell(values[index] ?? 0, column.format)}
+        </td>
+      ))}
+    </>
+  );
+}
+
 function formatDate(iso: string): string {
   const [y, m, d] = iso.split("-");
   return `${m}/${d}/${y}`;
@@ -219,6 +241,267 @@ function signedImpact(account: Account, posting: LedgerPosting): number {
     return posting.entryType === "DEBIT" ? posting.amount : -posting.amount;
   }
   return posting.entryType === "CREDIT" ? posting.amount : -posting.amount;
+}
+
+// ── Report compare + columnar statements (PLAINGL_FEATURES_TO_IMPLEMENT.md #3) ──
+// Both modes reuse the same single-period computation, just fed a different
+// date range: "compare" runs it once more against a shifted range, "columnar"
+// runs it once per sub-period. Mirrors PlainGL's balances()-as-shared-primitive
+// approach (plaingl/lib/beancount/report.ts).
+
+type PLTotals = {
+  incomeRows: { name: string; amount: number }[];
+  expenseRows: { name: string; amount: number }[];
+  totalIncome: number;
+  totalExpense: number;
+  operatingIncome: number;
+  netIncome: number;
+};
+
+function computeNetIncome(
+  postings: LedgerPosting[],
+  accountById: Map<string, Account>,
+  from: string,
+  to: string
+): number {
+  const incomeCategories = new Set(["INCOME", "OTHER_INCOME"]);
+  const expenseCategories = new Set(["EXPENSE", "OTHER_EXPENSE"]);
+  let incomeTotal = 0;
+  let expenseTotal = 0;
+  filterByDate(postings, from, to).forEach((posting) => {
+    const account = accountById.get(posting.accountId);
+    if (!account) return;
+    const impact = signedImpact(account, posting);
+    if (incomeCategories.has(account.category)) incomeTotal += impact;
+    if (expenseCategories.has(account.category)) expenseTotal += impact;
+  });
+  return incomeTotal - expenseTotal;
+}
+
+function computeProfitAndLoss(
+  postings: LedgerPosting[],
+  accountById: Map<string, Account>,
+  from: string,
+  to: string
+): PLTotals {
+  const incomeCategories = new Set(["INCOME", "OTHER_INCOME"]);
+  const expenseCategories = new Set(["EXPENSE", "OTHER_EXPENSE"]);
+  const incomeMap = new Map<string, number>();
+  const expenseMap = new Map<string, number>();
+
+  filterByDate(postings, from, to).forEach((posting) => {
+    const account = accountById.get(posting.accountId);
+    if (!account) return;
+    const impact = signedImpact(account, posting);
+    if (incomeCategories.has(account.category))
+      incomeMap.set(account.name, (incomeMap.get(account.name) ?? 0) + impact);
+    if (expenseCategories.has(account.category))
+      expenseMap.set(account.name, (expenseMap.get(account.name) ?? 0) + impact);
+  });
+
+  const incomeRows = [...incomeMap.entries()]
+    .map(([name, amount]) => ({ name, amount }))
+    .filter((r) => Math.abs(r.amount) > 0.0001)
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  const expenseRows = [...expenseMap.entries()]
+    .map(([name, amount]) => ({ name, amount }))
+    .filter((r) => Math.abs(r.amount) > 0.0001)
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  const totalIncome = incomeRows.reduce((s, r) => s + r.amount, 0);
+  const totalExpense = expenseRows.reduce((s, r) => s + r.amount, 0);
+  const operatingIncome = totalIncome - totalExpense;
+
+  return { incomeRows, expenseRows, totalIncome, totalExpense, operatingIncome, netIncome: operatingIncome };
+}
+
+type BSTotals = {
+  bankAccounts: { name: string; amount: number }[];
+  totalBankAccounts: number;
+  totalCurrentAssets: number;
+  totalAssets: number;
+  liabilities: { name: string; amount: number }[];
+  totalLiabilities: number;
+  equityRows: { name: string; amount: number }[];
+  totalEquity: number;
+  totalLiabilitiesAndEquity: number;
+  netIncome: number;
+};
+
+function computeBalanceSheet(
+  accounts: Account[],
+  accountById: Map<string, Account>,
+  postings: LedgerPosting[],
+  netIncomeFrom: string,
+  asOfDate: string
+): BSTotals {
+  const resolvedAsOf = asOfDate || isoDate(new Date());
+  const asOfPostings = postings.filter((p) => p.status === "POSTED" && p.postingDate <= resolvedAsOf);
+
+  const balances = new Map<string, number>();
+  accounts.forEach((a) => balances.set(a.id, a.openingBalance ?? 0));
+  asOfPostings.forEach((posting) => {
+    const account = accountById.get(posting.accountId);
+    if (!account) return;
+    balances.set(posting.accountId, (balances.get(posting.accountId) ?? 0) + signedImpact(account, posting));
+  });
+
+  const byCategory = (categories: Set<Account["category"]>) =>
+    accounts
+      .filter((a) => categories.has(a.category))
+      .map((a) => ({ name: a.name, amount: balances.get(a.id) ?? 0 }))
+      .filter((r) => Math.abs(r.amount) > 0.0001)
+      .sort((a, b) => a.name.localeCompare(b.name));
+
+  const bankAccounts = byCategory(new Set(["BANK"]));
+  const currentAssets = byCategory(new Set(["BANK", "ACCOUNTS_RECEIVABLE", "OTHER_CURRENT_ASSET"]));
+  const liabilities = byCategory(new Set(["CREDIT_CARD", "LONG_TERM_LIABILITY", "OTHER_CURRENT_LIABILITY"]));
+  const equityRows = byCategory(new Set(["EQUITY"]));
+
+  const totalBankAccounts = bankAccounts.reduce((s, r) => s + r.amount, 0);
+  const totalCurrentAssets = currentAssets.reduce((s, r) => s + r.amount, 0);
+  const totalAssets = totalCurrentAssets;
+  const totalLiabilities = liabilities.reduce((s, r) => s + r.amount, 0);
+  const totalEquityWithoutNetIncome = equityRows.reduce((s, r) => s + r.amount, 0);
+  const netIncome = computeNetIncome(postings, accountById, netIncomeFrom, resolvedAsOf);
+  const totalEquity = totalEquityWithoutNetIncome + netIncome;
+  const totalLiabilitiesAndEquity = totalLiabilities + totalEquity;
+
+  return {
+    bankAccounts,
+    totalBankAccounts,
+    totalCurrentAssets,
+    totalAssets,
+    liabilities,
+    totalLiabilities,
+    equityRows,
+    totalEquity,
+    totalLiabilitiesAndEquity,
+    netIncome
+  };
+}
+
+// Only the true period granularities support columnar mode — the rest of
+// REPORT_DISPLAY_COLUMNS_OPTIONS (customer/employee/product_service/vendor)
+// is a different, not-yet-built feature (columnar-by-dimension); selecting
+// one of those falls back to the normal single-column view, same as "none".
+type Granularity = "weeks" | "months" | "quarter" | "years";
+const COLUMNAR_GRANULARITIES = new Set<string>(["weeks", "months", "quarter", "years"]);
+
+// Same reasoning for compareTo: only the prior-period-style options describe
+// the "$ and % change vs. another period" feature from the spec. The
+// percent_row/percent_column/percent_expense/percent_income options are a
+// different QBO feature (% of a total elsewhere in the same statement) and
+// are left inert, same as "none".
+const COMPARE_PERIOD_MODES = new Set<string>([
+  "previous_year",
+  "previous_period",
+  "year_to_date",
+  "previous_year_to_date"
+]);
+
+function shiftDate(iso: string, days: number): string {
+  const date = new Date(`${iso}T00:00:00`);
+  date.setDate(date.getDate() + days);
+  return isoDate(date);
+}
+
+function shiftYears(iso: string, years: number): string {
+  const date = new Date(`${iso}T00:00:00`);
+  date.setFullYear(date.getFullYear() + years);
+  return isoDate(date);
+}
+
+function periodLengthDays(from: string, to: string): number {
+  const start = new Date(`${from}T00:00:00`);
+  const end = new Date(`${to}T00:00:00`);
+  return Math.round((end.getTime() - start.getTime()) / 86_400_000) + 1;
+}
+
+function compareRangeFor(
+  compareTo: string,
+  from: string,
+  to: string
+): { from: string; to: string; label: string } | null {
+  if (!from || !to || !COMPARE_PERIOD_MODES.has(compareTo)) return null;
+
+  switch (compareTo) {
+    case "previous_year":
+      return { from: shiftYears(from, -1), to: shiftYears(to, -1), label: "Previous Year" };
+    case "previous_period": {
+      const length = periodLengthDays(from, to);
+      return { from: shiftDate(from, -length), to: shiftDate(to, -length), label: "Previous Period" };
+    }
+    case "year_to_date": {
+      const year = to.slice(0, 4);
+      return { from: `${year}-01-01`, to, label: "Year-to-Date" };
+    }
+    case "previous_year_to_date": {
+      const priorTo = shiftYears(to, -1);
+      const year = priorTo.slice(0, 4);
+      return { from: `${year}-01-01`, to: priorTo, label: "Prior Year-to-Date" };
+    }
+    default:
+      return null;
+  }
+}
+
+// Calendar-aligned sub-periods across [from, to], clipped to the requested
+// range at the edges (e.g. "months" from Jan 15 starts its first column at
+// Jan 15, not Jan 1). Capped so a huge date range can't blow up the table.
+const MAX_COLUMNAR_PERIODS = 60;
+
+function buildPeriods(from: string, to: string, granularity: Granularity): { from: string; to: string; label: string }[] {
+  if (!from || !to) return [];
+  const rangeStart = new Date(`${from}T00:00:00`);
+  const rangeEnd = new Date(`${to}T00:00:00`);
+  if (rangeStart > rangeEnd) return [];
+
+  let unitStart: Date =
+    granularity === "weeks"
+      ? new Date(rangeStart)
+      : granularity === "months"
+        ? new Date(rangeStart.getFullYear(), rangeStart.getMonth(), 1)
+        : granularity === "quarter"
+          ? new Date(rangeStart.getFullYear(), Math.floor(rangeStart.getMonth() / 3) * 3, 1)
+          : new Date(rangeStart.getFullYear(), 0, 1);
+
+  const periods: { from: string; to: string; label: string }[] = [];
+
+  while (unitStart <= rangeEnd && periods.length < MAX_COLUMNAR_PERIODS) {
+    let unitEnd: Date;
+    let label: string;
+
+    if (granularity === "weeks") {
+      unitEnd = new Date(unitStart);
+      unitEnd.setDate(unitEnd.getDate() + 6);
+      label = unitStart.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+    } else if (granularity === "months") {
+      unitEnd = new Date(unitStart.getFullYear(), unitStart.getMonth() + 1, 0);
+      label = unitStart.toLocaleDateString("en-US", { month: "short", year: "numeric" });
+    } else if (granularity === "quarter") {
+      unitEnd = new Date(unitStart.getFullYear(), unitStart.getMonth() + 3, 0);
+      label = `Q${Math.floor(unitStart.getMonth() / 3) + 1} ${unitStart.getFullYear()}`;
+    } else {
+      unitEnd = new Date(unitStart.getFullYear(), 11, 31);
+      label = `${unitStart.getFullYear()}`;
+    }
+
+    const clippedFrom = unitStart < rangeStart ? rangeStart : unitStart;
+    const clippedTo = unitEnd > rangeEnd ? rangeEnd : unitEnd;
+    periods.push({ from: isoDate(clippedFrom), to: isoDate(clippedTo), label });
+
+    unitStart = new Date(unitEnd);
+    unitStart.setDate(unitStart.getDate() + 1);
+  }
+
+  return periods;
+}
+
+function percentChange(current: number, compare: number): number {
+  if (compare === 0) return current === 0 ? 0 : 100;
+  return ((current - compare) / Math.abs(compare)) * 100;
 }
 
 export function ReportsPage({ reportType }: ReportsPageProps) {
@@ -314,109 +597,202 @@ function ReportsPageInner({ reportType }: ReportsPageProps) {
     setToDate(value);
   }
 
-  const postingsInRange = useMemo(() => filterByDate(postings, fromDate, toDate), [postings, fromDate, toDate]);
-
   const accountById = useMemo(() => {
     const map = new Map<string, Account>();
     accounts.forEach((a) => map.set(a.id, a));
     return map;
   }, [accounts]);
 
-  const netIncome = useMemo(() => {
-    const incomeCategories = new Set(["INCOME", "OTHER_INCOME"]);
-    const expenseCategories = new Set(["EXPENSE", "OTHER_EXPENSE"]);
-    let incomeTotal = 0;
-    let expenseTotal = 0;
-    postingsInRange.forEach((posting) => {
-      const account = accountById.get(posting.accountId);
-      if (!account) return;
-      const impact = signedImpact(account, posting);
-      if (incomeCategories.has(account.category)) incomeTotal += impact;
-      if (expenseCategories.has(account.category)) expenseTotal += impact;
-    });
-    return incomeTotal - expenseTotal;
-  }, [accountById, postingsInRange]);
+  const netIncome = useMemo(
+    () => computeNetIncome(postings, accountById, fromDate, toDate),
+    [postings, accountById, fromDate, toDate]
+  );
 
-  const profitAndLossData = useMemo(() => {
-    const incomeCategories = new Set(["INCOME", "OTHER_INCOME"]);
-    const expenseCategories = new Set(["EXPENSE", "OTHER_EXPENSE"]);
-    const incomeMap = new Map<string, number>();
-    const expenseMap = new Map<string, number>();
+  const profitAndLossData = useMemo(
+    () => computeProfitAndLoss(postings, accountById, fromDate, toDate),
+    [postings, accountById, fromDate, toDate]
+  );
 
-    postingsInRange.forEach((posting) => {
-      const account = accountById.get(posting.accountId);
-      if (!account) return;
-      const impact = signedImpact(account, posting);
-      if (incomeCategories.has(account.category))
-        incomeMap.set(account.name, (incomeMap.get(account.name) ?? 0) + impact);
-      if (expenseCategories.has(account.category))
-        expenseMap.set(account.name, (expenseMap.get(account.name) ?? 0) + impact);
-    });
+  const balanceSheetData = useMemo(
+    () => computeBalanceSheet(accounts, accountById, postings, fromDate, toDate),
+    [accounts, accountById, postings, fromDate, toDate]
+  );
 
-    const incomeRows = [...incomeMap.entries()]
-      .map(([name, amount]) => ({ name, amount }))
-      .filter((r) => Math.abs(r.amount) > 0.0001)
-      .sort((a, b) => a.name.localeCompare(b.name));
+  // Columnar mode wins over compare mode when both are selected, matching
+  // PlainGL's StatementView (they're alternate views, not composable there).
+  const isColumnar = COLUMNAR_GRANULARITIES.has(displayColumnsBy);
+  const compareRange = isColumnar ? null : compareRangeFor(compareTo, fromDate, toDate);
+  const isComparing = compareRange !== null;
 
-    const expenseRows = [...expenseMap.entries()]
-      .map(([name, amount]) => ({ name, amount }))
-      .filter((r) => Math.abs(r.amount) > 0.0001)
-      .sort((a, b) => a.name.localeCompare(b.name));
+  const columnarPeriods = useMemo(
+    () => (isColumnar ? buildPeriods(fromDate, toDate, displayColumnsBy as Granularity) : []),
+    [isColumnar, displayColumnsBy, fromDate, toDate]
+  );
 
-    const totalIncome = incomeRows.reduce((s, r) => s + r.amount, 0);
-    const totalExpense = expenseRows.reduce((s, r) => s + r.amount, 0);
-    const operatingIncome = totalIncome - totalExpense;
+  const plColumnarPeriods = useMemo(
+    () =>
+      columnarPeriods.map((period) => ({
+        ...period,
+        data: computeProfitAndLoss(postings, accountById, period.from, period.to)
+      })),
+    [columnarPeriods, postings, accountById]
+  );
 
-    return { incomeRows, expenseRows, totalIncome, totalExpense, operatingIncome, netIncome: operatingIncome };
-  }, [accountById, postingsInRange]);
+  const bsColumnarPeriods = useMemo(
+    () =>
+      columnarPeriods.map((period) => ({
+        ...period,
+        data: computeBalanceSheet(accounts, accountById, postings, fromDate, period.to)
+      })),
+    [columnarPeriods, accounts, accountById, postings, fromDate]
+  );
 
-  const balanceSheetData = useMemo(() => {
-    const asOfDate = toDate || isoDate(new Date());
-    const asOfPostings = postings.filter(
-      (p) => p.status === "POSTED" && p.postingDate <= asOfDate
-    );
+  const plCompareData = useMemo(
+    () => (compareRange ? computeProfitAndLoss(postings, accountById, compareRange.from, compareRange.to) : null),
+    [compareRange, postings, accountById]
+  );
 
-    const balances = new Map<string, number>();
-    accounts.forEach((a) => balances.set(a.id, a.openingBalance ?? 0));
-    asOfPostings.forEach((posting) => {
-      const account = accountById.get(posting.accountId);
-      if (!account) return;
-      balances.set(posting.accountId, (balances.get(posting.accountId) ?? 0) + signedImpact(account, posting));
-    });
+  const bsCompareData = useMemo(
+    () =>
+      compareRange
+        ? computeBalanceSheet(accounts, accountById, postings, compareRange.from, compareRange.to)
+        : null,
+    [compareRange, accounts, accountById, postings]
+  );
 
-    const byCategory = (categories: Set<Account["category"]>) =>
-      accounts
-        .filter((a) => categories.has(a.category))
-        .map((a) => ({ name: a.name, amount: balances.get(a.id) ?? 0 }))
-        .filter((r) => Math.abs(r.amount) > 0.0001)
-        .sort((a, b) => a.name.localeCompare(b.name));
-
-    const bankAccounts = byCategory(new Set(["BANK"]));
-    const currentAssets = byCategory(new Set(["BANK", "ACCOUNTS_RECEIVABLE", "OTHER_CURRENT_ASSET"]));
-    const liabilities = byCategory(new Set(["CREDIT_CARD", "LONG_TERM_LIABILITY", "OTHER_CURRENT_LIABILITY"]));
-    const equityRows = byCategory(new Set(["EQUITY"]));
-
-    const totalBankAccounts = bankAccounts.reduce((s, r) => s + r.amount, 0);
-    const totalCurrentAssets = currentAssets.reduce((s, r) => s + r.amount, 0);
-    const totalAssets = totalCurrentAssets;
-    const totalLiabilities = liabilities.reduce((s, r) => s + r.amount, 0);
-    const totalEquityWithoutNetIncome = equityRows.reduce((s, r) => s + r.amount, 0);
-    const totalEquity = totalEquityWithoutNetIncome + netIncome;
-    const totalLiabilitiesAndEquity = totalLiabilities + totalEquity;
-
+  // Multi-column view models, shared shape for compare and columnar so the
+  // JSX below only branches once. Null when the report is single-column.
+  const plReport = useMemo(() => {
+    if (isColumnar && plColumnarPeriods.length > 0) {
+      const columns: ReportValueColumn[] = [
+        ...plColumnarPeriods.map((_, i) => ({ key: `period-${i}`, format: "money" as const })),
+        { key: "total", format: "money" as const }
+      ];
+      const columnLabels = [...plColumnarPeriods.map((p) => p.label), "Total"];
+      const withTotal = (values: number[]) => [...values, values.reduce((s, v) => s + v, 0)];
+      return {
+        columns,
+        columnLabels,
+        incomeRows: buildHierarchyRowsMulti(plColumnarPeriods.map((p) => p.data.incomeRows)).map((r) => ({
+          ...r,
+          values: withTotal(r.values)
+        })),
+        expenseRows: buildHierarchyRowsMulti(plColumnarPeriods.map((p) => p.data.expenseRows)).map((r) => ({
+          ...r,
+          values: withTotal(r.values)
+        })),
+        totalIncome: withTotal(plColumnarPeriods.map((p) => p.data.totalIncome)),
+        totalExpense: withTotal(plColumnarPeriods.map((p) => p.data.totalExpense)),
+        operatingIncome: withTotal(plColumnarPeriods.map((p) => p.data.operatingIncome)),
+        netIncome: withTotal(plColumnarPeriods.map((p) => p.data.netIncome))
+      };
+    }
+    if (isComparing && plCompareData && compareRange) {
+      const columns: ReportValueColumn[] = [
+        { key: "current", format: "money" },
+        { key: "compare", format: "money" },
+        { key: "change-amount", format: "money" },
+        { key: "change-percent", format: "percent" }
+      ];
+      const columnLabels = [formatAsRange(fromDate, toDate), compareRange.label, "Change ($)", "Change (%)"];
+      const withChange = (cur: number, cmp: number) => [cur, cmp, cur - cmp, percentChange(cur, cmp)];
+      const rowsWithChange = (rows: ReturnType<typeof buildHierarchyRowsMulti>) =>
+        rows.map((r) => ({ ...r, values: withChange(r.values[0], r.values[1]) }));
+      return {
+        columns,
+        columnLabels,
+        incomeRows: rowsWithChange(buildHierarchyRowsMulti([profitAndLossData.incomeRows, plCompareData.incomeRows])),
+        expenseRows: rowsWithChange(
+          buildHierarchyRowsMulti([profitAndLossData.expenseRows, plCompareData.expenseRows])
+        ),
+        totalIncome: withChange(profitAndLossData.totalIncome, plCompareData.totalIncome),
+        totalExpense: withChange(profitAndLossData.totalExpense, plCompareData.totalExpense),
+        operatingIncome: withChange(profitAndLossData.operatingIncome, plCompareData.operatingIncome),
+        netIncome: withChange(profitAndLossData.netIncome, plCompareData.netIncome)
+      };
+    }
+    // Default: single "Total" column, same numbers the original single-column
+    // report showed.
+    const columns: ReportValueColumn[] = [{ key: "total", format: "money" }];
     return {
-      bankAccounts,
-      totalBankAccounts,
-      totalCurrentAssets,
-      totalAssets,
-      liabilities,
-      totalLiabilities,
-      equityRows,
-      totalEquity,
-      totalLiabilitiesAndEquity,
-      netIncome,
+      columns,
+      columnLabels: ["Total"],
+      incomeRows: buildHierarchyRowsMulti([profitAndLossData.incomeRows]),
+      expenseRows: buildHierarchyRowsMulti([profitAndLossData.expenseRows]),
+      totalIncome: [profitAndLossData.totalIncome],
+      totalExpense: [profitAndLossData.totalExpense],
+      operatingIncome: [profitAndLossData.operatingIncome],
+      netIncome: [profitAndLossData.netIncome]
     };
-  }, [accounts, accountById, postings, toDate, netIncome]);
+  }, [isColumnar, plColumnarPeriods, isComparing, plCompareData, compareRange, profitAndLossData, fromDate, toDate]);
+
+  const bsReport = useMemo(() => {
+    if (isColumnar && bsColumnarPeriods.length > 0) {
+      const columns: ReportValueColumn[] = bsColumnarPeriods.map((_, i) => ({
+        key: `period-${i}`,
+        format: "money" as const
+      }));
+      const columnLabels = bsColumnarPeriods.map((p) => p.label);
+      return {
+        columns,
+        columnLabels,
+        bankAccounts: buildHierarchyRowsMulti(bsColumnarPeriods.map((p) => p.data.bankAccounts)),
+        liabilities: buildHierarchyRowsMulti(bsColumnarPeriods.map((p) => p.data.liabilities)),
+        equityRows: buildHierarchyRowsMulti(bsColumnarPeriods.map((p) => p.data.equityRows)),
+        totalBankAccounts: bsColumnarPeriods.map((p) => p.data.totalBankAccounts),
+        totalCurrentAssets: bsColumnarPeriods.map((p) => p.data.totalCurrentAssets),
+        totalAssets: bsColumnarPeriods.map((p) => p.data.totalAssets),
+        totalLiabilities: bsColumnarPeriods.map((p) => p.data.totalLiabilities),
+        totalEquity: bsColumnarPeriods.map((p) => p.data.totalEquity),
+        totalLiabilitiesAndEquity: bsColumnarPeriods.map((p) => p.data.totalLiabilitiesAndEquity),
+        netIncome: bsColumnarPeriods.map((p) => p.data.netIncome)
+      };
+    }
+    if (isComparing && bsCompareData && compareRange) {
+      const columns: ReportValueColumn[] = [
+        { key: "current", format: "money" },
+        { key: "compare", format: "money" },
+        { key: "change-amount", format: "money" },
+        { key: "change-percent", format: "percent" }
+      ];
+      const columnLabels = [`As of ${toDate}`, `As of ${compareRange.to}`, "Change ($)", "Change (%)"];
+      const withChange = (cur: number, cmp: number) => [cur, cmp, cur - cmp, percentChange(cur, cmp)];
+      const rowsWithChange = (rows: ReturnType<typeof buildHierarchyRowsMulti>) =>
+        rows.map((r) => ({ ...r, values: withChange(r.values[0], r.values[1]) }));
+      return {
+        columns,
+        columnLabels,
+        bankAccounts: rowsWithChange(buildHierarchyRowsMulti([balanceSheetData.bankAccounts, bsCompareData.bankAccounts])),
+        liabilities: rowsWithChange(buildHierarchyRowsMulti([balanceSheetData.liabilities, bsCompareData.liabilities])),
+        equityRows: rowsWithChange(buildHierarchyRowsMulti([balanceSheetData.equityRows, bsCompareData.equityRows])),
+        totalBankAccounts: withChange(balanceSheetData.totalBankAccounts, bsCompareData.totalBankAccounts),
+        totalCurrentAssets: withChange(balanceSheetData.totalCurrentAssets, bsCompareData.totalCurrentAssets),
+        totalAssets: withChange(balanceSheetData.totalAssets, bsCompareData.totalAssets),
+        totalLiabilities: withChange(balanceSheetData.totalLiabilities, bsCompareData.totalLiabilities),
+        totalEquity: withChange(balanceSheetData.totalEquity, bsCompareData.totalEquity),
+        totalLiabilitiesAndEquity: withChange(
+          balanceSheetData.totalLiabilitiesAndEquity,
+          bsCompareData.totalLiabilitiesAndEquity
+        ),
+        netIncome: withChange(balanceSheetData.netIncome, bsCompareData.netIncome)
+      };
+    }
+    const columns: ReportValueColumn[] = [{ key: "total", format: "money" }];
+    return {
+      columns,
+      columnLabels: ["Total"],
+      bankAccounts: buildHierarchyRowsMulti([balanceSheetData.bankAccounts]),
+      liabilities: buildHierarchyRowsMulti([balanceSheetData.liabilities]),
+      equityRows: buildHierarchyRowsMulti([balanceSheetData.equityRows]),
+      totalBankAccounts: [balanceSheetData.totalBankAccounts],
+      totalCurrentAssets: [balanceSheetData.totalCurrentAssets],
+      totalAssets: [balanceSheetData.totalAssets],
+      totalLiabilities: [balanceSheetData.totalLiabilities],
+      totalEquity: [balanceSheetData.totalEquity],
+      totalLiabilitiesAndEquity: [balanceSheetData.totalLiabilitiesAndEquity],
+      netIncome: [balanceSheetData.netIncome]
+    };
+  }, [isColumnar, bsColumnarPeriods, isComparing, bsCompareData, compareRange, balanceSheetData, toDate]);
 
   const reportLabel = reportType === "profit_loss" ? "Profit and Loss" : "Balance Sheet";
 
@@ -533,13 +909,20 @@ function ReportsPageInner({ reportType }: ReportsPageProps) {
       </header>
 
       <section className="page-content">
-      <section className="mx-auto mt-8 w-full max-w-[840px] rounded border border-[var(--color-divider-tertiary)] bg-[var(--color-container-background-primary)] p-5 shadow-sm">
+      <section className="report-print-card mx-auto mt-8 w-full max-w-[840px] rounded border border-[var(--color-divider-tertiary)] bg-[var(--color-container-background-primary)] p-5 shadow-sm">
 
         {/* ── Report toolbar ── */}
         <div className="mb-4 flex flex-wrap items-center justify-end gap-2 border-b border-[var(--color-divider-tertiary)] pb-3">
           <span className="text-xs text-[var(--color-icon-secondary)]">
             {accountingMethod === "cash" ? "Cash basis" : "Accrual basis"}
           </span>
+          <button
+            type="button"
+            onClick={() => window.print()}
+            className="no-print rounded border border-[var(--color-divider-tertiary)] px-2 py-1 text-xs text-[var(--color-text-primary)] hover:bg-[var(--color-container-background-accent)]"
+          >
+            Print
+          </button>
         </div>
 
         {/* ── Report title block ── */}
@@ -635,7 +1018,11 @@ function ReportsPageInner({ reportType }: ReportsPageProps) {
             <thead>
               <tr className="border-y border-[var(--color-divider-tertiary)] bg-[var(--color-container-background-accent)]">
                 <th className="px-3 py-1 text-left font-medium text-[var(--color-text-primary)]"> </th>
-                <th className="px-3 py-1 text-right font-medium text-[var(--color-text-primary)]">Total</th>
+                {plReport.columnLabels.map((label, i) => (
+                  <th key={plReport.columns[i].key} className="px-3 py-1 text-right font-medium text-[var(--color-text-primary)]">
+                    {label}
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>
@@ -643,9 +1030,11 @@ function ReportsPageInner({ reportType }: ReportsPageProps) {
                 label="Income"
                 isOpen={openSections.income ?? true}
                 onToggle={() => toggleSection("income")}
+                valueColumnCount={plReport.columns.length}
               >
                 <ReportAccountRows
-                  rows={buildHierarchyRows(profitAndLossData.incomeRows)}
+                  rows={plReport.incomeRows}
+                  columns={plReport.columns}
                   collapsedNames={collapsedAccounts}
                   rowKeyPrefix="income"
                   onToggleCollapse={toggleAccountCollapse}
@@ -658,22 +1047,24 @@ function ReportsPageInner({ reportType }: ReportsPageProps) {
                 />
                 <tr className="border-b border-[var(--color-divider-tertiary)]">
                   <td className="px-3 py-1 font-semibold text-[var(--color-text-primary)]">Total for Income</td>
-                  <td className="px-3 py-1 text-right font-semibold">{formatMoney(profitAndLossData.totalIncome)}</td>
+                  <ReportValueCells values={plReport.totalIncome} columns={plReport.columns} />
                 </tr>
               </ReportSection>
 
               <tr className="border-b border-[var(--color-divider-tertiary)] bg-[var(--color-report-row-alt)]">
                 <td className="px-3 py-1 font-semibold text-[var(--color-text-primary)]">Gross Profit</td>
-                <td className="px-3 py-1 text-right font-semibold">{formatMoney(profitAndLossData.totalIncome)}</td>
+                <ReportValueCells values={plReport.totalIncome} columns={plReport.columns} />
               </tr>
 
               <ReportSection
                 label="Expenses"
                 isOpen={openSections.expenses ?? true}
                 onToggle={() => toggleSection("expenses")}
+                valueColumnCount={plReport.columns.length}
               >
                 <ReportAccountRows
-                  rows={buildHierarchyRows(profitAndLossData.expenseRows)}
+                  rows={plReport.expenseRows}
+                  columns={plReport.columns}
                   collapsedNames={collapsedAccounts}
                   rowKeyPrefix="expense"
                   onToggleCollapse={toggleAccountCollapse}
@@ -686,17 +1077,17 @@ function ReportsPageInner({ reportType }: ReportsPageProps) {
                 />
                 <tr className="border-b border-[var(--color-divider-tertiary)]">
                   <td className="px-3 py-1 font-semibold text-[var(--color-text-primary)]">Total for Expenses</td>
-                  <td className="px-3 py-1 text-right font-semibold">{formatMoney(profitAndLossData.totalExpense)}</td>
+                  <ReportValueCells values={plReport.totalExpense} columns={plReport.columns} />
                 </tr>
               </ReportSection>
 
               <tr className="border-b border-[var(--color-divider-tertiary)] bg-[var(--color-report-row-alt)]">
                 <td className="px-3 py-1 font-semibold text-[var(--color-text-primary)]">Net Operating Income</td>
-                <td className="px-3 py-1 text-right font-semibold">{formatMoney(profitAndLossData.operatingIncome)}</td>
+                <ReportValueCells values={plReport.operatingIncome} columns={plReport.columns} />
               </tr>
               <tr className="border-b border-[var(--color-divider-tertiary)] bg-[var(--color-report-row-alt)]">
                 <td className="px-3 py-1 font-semibold text-[var(--color-text-primary)]">Net Income</td>
-                <td className="px-3 py-1 text-right font-semibold">{formatMoney(profitAndLossData.netIncome)}</td>
+                <ReportValueCells values={plReport.netIncome} columns={plReport.columns} />
               </tr>
             </tbody>
           </table>
@@ -707,7 +1098,11 @@ function ReportsPageInner({ reportType }: ReportsPageProps) {
             <thead>
               <tr className="border-y border-[var(--color-divider-tertiary)] bg-[var(--color-container-background-accent)]">
                 <th className="px-3 py-1 text-left font-medium text-[var(--color-text-primary)]"> </th>
-                <th className="px-3 py-1 text-right font-medium text-[var(--color-text-primary)]">Total</th>
+                {bsReport.columnLabels.map((label, i) => (
+                  <th key={bsReport.columns[i].key} className="px-3 py-1 text-right font-medium text-[var(--color-text-primary)]">
+                    {label}
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>
@@ -716,17 +1111,19 @@ function ReportsPageInner({ reportType }: ReportsPageProps) {
                 label="Assets"
                 isOpen={openSections.bs_assets ?? true}
                 onToggle={() => toggleSection("bs_assets")}
+                valueColumnCount={bsReport.columns.length}
               >
                 <tr className="border-b border-[var(--color-container-background-secondary)]">
                   <td className="px-4 py-1 font-medium text-[var(--color-text-primary)]">Current Assets</td>
-                  <td />
+                  <td colSpan={bsReport.columns.length} />
                 </tr>
                 <tr className="border-b border-[var(--color-container-background-secondary)]">
                   <td className="px-6 py-1 font-medium text-[var(--color-text-primary)]">Bank Accounts</td>
-                  <td />
+                  <td colSpan={bsReport.columns.length} />
                 </tr>
                 <ReportAccountRows
-                  rows={buildHierarchyRows(balanceSheetData.bankAccounts)}
+                  rows={bsReport.bankAccounts}
+                  columns={bsReport.columns}
                   collapsedNames={collapsedAccounts}
                   rowKeyPrefix="bank"
                   baseIndentRem={2}
@@ -740,15 +1137,15 @@ function ReportsPageInner({ reportType }: ReportsPageProps) {
                 />
                 <tr className="border-b border-[var(--color-container-background-secondary)]">
                   <td className="px-6 py-1 font-semibold text-[var(--color-text-primary)]">Total for Bank Accounts</td>
-                  <td className="px-3 py-1 text-right font-semibold">{formatMoney(balanceSheetData.totalBankAccounts)}</td>
+                  <ReportValueCells values={bsReport.totalBankAccounts} columns={bsReport.columns} />
                 </tr>
                 <tr className="border-b border-[var(--color-container-background-secondary)]">
                   <td className="px-4 py-1 font-semibold text-[var(--color-text-primary)]">Total for Current Assets</td>
-                  <td className="px-3 py-1 text-right font-semibold">{formatMoney(balanceSheetData.totalCurrentAssets)}</td>
+                  <ReportValueCells values={bsReport.totalCurrentAssets} columns={bsReport.columns} />
                 </tr>
                 <tr className="border-b border-[var(--color-divider-tertiary)]">
                   <td className="px-3 py-1 font-semibold text-[var(--color-text-primary)]">Total for Assets</td>
-                  <td className="px-3 py-1 text-right font-semibold">{formatMoney(balanceSheetData.totalAssets)}</td>
+                  <ReportValueCells values={bsReport.totalAssets} columns={bsReport.columns} />
                 </tr>
               </ReportSection>
 
@@ -757,15 +1154,18 @@ function ReportsPageInner({ reportType }: ReportsPageProps) {
                 label="Liabilities and Equity"
                 isOpen={openSections.bs_liabilities_equity ?? true}
                 onToggle={() => toggleSection("bs_liabilities_equity")}
+                valueColumnCount={bsReport.columns.length}
               >
                 <ReportSection
                   label="Liabilities"
                   isOpen={openSections.bs_liabilities ?? true}
                   onToggle={() => toggleSection("bs_liabilities")}
                   headerClassName="bg-[var(--color-container-background-secondary)]"
+                  valueColumnCount={bsReport.columns.length}
                 >
                   <ReportAccountRows
-                    rows={buildHierarchyRows(balanceSheetData.liabilities)}
+                    rows={bsReport.liabilities}
+                    columns={bsReport.columns}
                     collapsedNames={collapsedAccounts}
                     rowKeyPrefix="liability"
                     onToggleCollapse={toggleAccountCollapse}
@@ -778,7 +1178,7 @@ function ReportsPageInner({ reportType }: ReportsPageProps) {
                   />
                   <tr className="border-b border-[var(--color-container-background-secondary)]">
                     <td className="px-4 py-1 font-semibold text-[var(--color-text-primary)]">Total for Liabilities</td>
-                    <td className="px-3 py-1 text-right font-semibold">{formatMoney(balanceSheetData.totalLiabilities)}</td>
+                    <ReportValueCells values={bsReport.totalLiabilities} columns={bsReport.columns} />
                   </tr>
                 </ReportSection>
 
@@ -787,9 +1187,11 @@ function ReportsPageInner({ reportType }: ReportsPageProps) {
                   isOpen={openSections.bs_equity ?? true}
                   onToggle={() => toggleSection("bs_equity")}
                   headerClassName="bg-[var(--color-container-background-secondary)]"
+                  valueColumnCount={bsReport.columns.length}
                 >
                   <ReportAccountRows
-                    rows={buildHierarchyRows(balanceSheetData.equityRows)}
+                    rows={bsReport.equityRows}
+                    columns={bsReport.columns}
                     collapsedNames={collapsedAccounts}
                     rowKeyPrefix="equity"
                     onToggleCollapse={toggleAccountCollapse}
@@ -802,17 +1204,17 @@ function ReportsPageInner({ reportType }: ReportsPageProps) {
                   />
                   <tr className="border-b border-[var(--color-container-background-secondary)]">
                     <td className="px-6 py-1 text-[var(--color-text-primary)]">Net Income</td>
-                    <td className="px-3 py-1 text-right">{formatMoney(balanceSheetData.netIncome)}</td>
+                    <ReportValueCells values={bsReport.netIncome} columns={bsReport.columns} />
                   </tr>
                   <tr className="border-b border-[var(--color-container-background-secondary)]">
                     <td className="px-4 py-1 font-semibold text-[var(--color-text-primary)]">Total for Equity</td>
-                    <td className="px-3 py-1 text-right font-semibold">{formatMoney(balanceSheetData.totalEquity)}</td>
+                    <ReportValueCells values={bsReport.totalEquity} columns={bsReport.columns} />
                   </tr>
                 </ReportSection>
 
                 <tr className="border-b border-[var(--color-divider-tertiary)]">
                   <td className="px-3 py-1 font-semibold text-[var(--color-text-primary)]">Total for Liabilities and Equity</td>
-                  <td className="px-3 py-1 text-right font-semibold">{formatMoney(balanceSheetData.totalLiabilitiesAndEquity)}</td>
+                  <ReportValueCells values={bsReport.totalLiabilitiesAndEquity} columns={bsReport.columns} />
                 </tr>
               </ReportSection>
             </tbody>

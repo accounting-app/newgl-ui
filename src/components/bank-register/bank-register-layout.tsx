@@ -1,17 +1,28 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { AccountSelector } from "@/components/bank-register/account-selector";
 import { RegisterTable } from "@/components/bank-register/register-table";
 import { getRegisterTitle } from "@/components/bank-register/register-title";
 import type { SelectFieldOption } from "@/components/bank-register/select-field";
 import { ImportModal } from "@/components/csv-import/import-modal";
+import { JournalEntryModal } from "@/components/bank-register/journal-entry-modal";
 import { ACCOUNT_CATEGORY_LABELS, DEFAULT_TOP_HEADER_USER_NAME } from "@/constants/ui";
 import { loadCsvImportSession } from "@/modules/accounting/domain/csv-import-session";
 import { isRegisterAccountCategory } from "@/modules/accounting/presentation/transaction-type-policy";
 import { useBankRegister } from "@hooks/use-bank-register";
 
 export function BankRegisterLayout() {
+  return (
+    <Suspense fallback={null}>
+      <BankRegisterLayoutInner />
+    </Suspense>
+  );
+}
+
+function BankRegisterLayoutInner() {
+  const searchParams = useSearchParams();
   const {
     accounts,
     availableTransactionTypes,
@@ -35,8 +46,17 @@ export function BankRegisterLayout() {
     updateRegisterEntryInline,
     updateDraftField,
     importTransactions,
+    createJournalEntry,
+    isSplitMode,
+    draftSplits,
+    toggleSplitMode,
+    addDraftSplitLine,
+    removeDraftSplitLine,
+    updateDraftSplitLine,
   } = useBankRegister();
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [isJournalEntryModalOpen, setIsJournalEntryModalOpen] = useState(false);
+  const [isSavingJournalEntry, setIsSavingJournalEntry] = useState(false);
   const [savedImportRowCount, setSavedImportRowCount] = useState(0);
 
   useEffect(() => {
@@ -46,6 +66,21 @@ export function BankRegisterLayout() {
     }
     setSavedImportRowCount(loadCsvImportSession(selectedAccountId)?.rows.length ?? 0);
   }, [selectedAccountId]);
+
+  // Deep-link from the Chart of Accounts page ("View register" per account):
+  // /register?account=<id>. Applied once accounts have loaded and the id is
+  // real -- gated on a ref (not just the URL) so a later account refresh
+  // (e.g. after saving a transaction) can't re-fire this and silently
+  // override an account the user has since switched to in the dropdown.
+  const appliedAccountParamRef = useRef(false);
+  useEffect(() => {
+    if (appliedAccountParamRef.current || accounts.length === 0) return;
+    const accountParam = searchParams.get("account");
+    if (accountParam && accounts.some((a) => a.id === accountParam)) {
+      setSelectedAccountId(accountParam);
+    }
+    appliedAccountParamRef.current = true;
+  }, [searchParams, accounts, setSelectedAccountId]);
 
   const registerTitle = getRegisterTitle(selectedAccount);
 
@@ -121,6 +156,13 @@ export function BankRegisterLayout() {
           printUserName={DEFAULT_TOP_HEADER_USER_NAME}
           onOpenImport={() => setIsImportModalOpen(true)}
           savedImportRowCount={savedImportRowCount}
+          onOpenJournalEntry={() => setIsJournalEntryModalOpen(true)}
+          isSplitMode={isSplitMode}
+          draftSplits={draftSplits}
+          onToggleSplitMode={toggleSplitMode}
+          onAddSplitLine={addDraftSplitLine}
+          onRemoveSplitLine={removeDraftSplitLine}
+          onUpdateSplitLine={updateDraftSplitLine}
         />
       </section>
 
@@ -131,6 +173,21 @@ export function BankRegisterLayout() {
         accountOptions={accountOptions}
         onImportTransactions={importTransactions}
         onSessionChange={setSavedImportRowCount}
+      />
+
+      <JournalEntryModal
+        open={isJournalEntryModalOpen}
+        accountOptions={accountOptions}
+        isSaving={isSavingJournalEntry}
+        onClose={() => setIsJournalEntryModalOpen(false)}
+        onSave={async (input) => {
+          setIsSavingJournalEntry(true);
+          try {
+            await createJournalEntry(input);
+          } finally {
+            setIsSavingJournalEntry(false);
+          }
+        }}
       />
     </main>
   );

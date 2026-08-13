@@ -503,3 +503,29 @@
   background-color: var(--gbsg-nav-bar-action-color-hover);
   color: var(--gbsg-nav-bar-icon-color-inverse);
 }
+
+/* Report print stylesheet (PLAINGL_FEATURES_TO_IMPLEMENT.md addendum #17):
+   printing a report page should show only the statement itself -- no side
+   nav, no top bar, no filter controls, no Print button, just the card. */
+@media print {
+  .side-nav,
+  .top-header,
+  .header-reports,
+  .no-print {
+    display: none !important;
+  }
+  body,
+  .tw-override.main {
+    background: white !important;
+  }
+  .report-print-card {
+    margin: 0 !important;
+    max-width: none !important;
+    border: none !important;
+    box-shadow: none !important;
+  }
+  .page-content {
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+}

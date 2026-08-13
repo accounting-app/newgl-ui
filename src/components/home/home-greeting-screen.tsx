@@ -1,42 +1,128 @@
-import Image from "next/image";
+"use client";
+
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, Sparkles } from "lucide-react";
+import type { ComponentType } from "react";
+import {
+  BookOpen,
+  Building2,
+  CreditCard,
+  Database,
+  FilePlus2,
+  Landmark,
+  PlusCircle,
+  Sparkles,
+  Upload,
+  Users,
+  Wallet
+} from "lucide-react";
+import { DashboardMetrics } from "@/components/home/dashboard-metrics";
+import { createClient } from "@/lib/supabase/client";
+
+type NavPillItem = {
+  label: string;
+  href: string;
+  icon: ComponentType<{ className?: string }>;
+};
+
+// Modeled after QuickBooks Online's dashboard top nav (a horizontal row of
+// product-area pills) -- mapped to this app's actual sections rather than
+// QBO's own product names, since features like invoicing/payroll/lending
+// don't exist here.
+const NAV_PILLS: NavPillItem[] = [
+  { label: "Register", href: "/register", icon: Wallet },
+  { label: "Reports", href: "/reports", icon: BookOpen },
+  { label: "Chart of Accounts", href: "/settings/chart-of-accounts", icon: Building2 },
+  { label: "Bank Rules", href: "/settings/bank-rules", icon: Landmark },
+  { label: "AI", href: "/settings/ai", icon: Sparkles },
+  { label: "Ledger", href: "/settings/ledger", icon: Database },
+  { label: "Billing", href: "/settings/billing", icon: CreditCard },
+  { label: "Organization", href: "/settings/organization", icon: Users }
+];
+
+type CreateActionItem = {
+  label: string;
+  href: string;
+  icon: ComponentType<{ className?: string }>;
+};
+
+const CREATE_ACTIONS: CreateActionItem[] = [
+  { label: "Add Check", href: "/register", icon: PlusCircle },
+  { label: "New Journal Entry", href: "/register", icon: FilePlus2 },
+  { label: "Add an account", href: "/settings/chart-of-accounts", icon: Building2 },
+  { label: "Bulk paste import", href: "/settings/ledger", icon: Upload }
+];
+
+function greetingForHour(hour: number): string {
+  if (hour < 12) return "Good morning";
+  if (hour < 18) return "Good afternoon";
+  return "Good evening";
+}
+
+function displayNameFromEmail(email: string): string {
+  const local = email.split("@")[0] ?? email;
+  const firstSegment = local.split(/[.\-_+]/)[0] ?? local;
+  return firstSegment.charAt(0).toUpperCase() + firstSegment.slice(1);
+}
 
 export function HomeGreetingScreen() {
-  return (
-    <main className="h-full bg-[var(--color-container-background-accent)] px-6 py-8 md:px-10">
-      <div className="mx-auto grid w-full max-w-6xl gap-6 md:grid-cols-2">
-        <section className="rounded-xl border border-[var(--color-divider-tertiary)] bg-[var(--color-container-background-primary)] p-8">
-          <div className="mb-6 flex flex-col gap-4">
-            <Image style={{height: 'auto', width: 'auto'}} src="/logo-big.png" alt="Simple" width={180} height={180} priority />
-            <h2 className="text-4xl font-semibold text-[var(--color-text-global)]">
-              Hello, John. Welcome to Simple.
-            </h2>
-          </div>
-          <p className="mx-auto max-w-2xl text-lg text-[var(--color-text-primary)]">
-          This is your home screen. From here, you can quickly navigate to the register and start working on your transactions.
-          </p>
-        </section>
+  const [greeting, setGreeting] = useState("Welcome");
+  const [displayName, setDisplayName] = useState<string | null>(null);
 
-        <section>
-          <article className="h-full w-full rounded-xl border border-[var(--color-divider-tertiary)] bg-[var(--color-container-background-primary)] p-6">
-            <div className="mb-3 inline-flex rounded-lg bg-[var(--color-highlight-badge-background)] p-2 text-[var(--color-highlight-badge-text)]">
-              <Sparkles className="h-5 w-5" />
-            </div>
-            <h2 className="mb-2 text-xl font-semibold text-[var(--color-text-global)]">Start your workflow</h2>
-            <p className="mb-4 text-[var(--color-text-primary)]">
-              First recommended task: register a transaction to start building your accounting history.
-            </p>
-            <div className="mb-5 rounded-lg bg-[var(--color-container-background-accent)] p-4 text-sm text-[var(--color-text-primary)]">
-              <p>- Select transaction type</p>
-              <p>- Complete amount and associated account</p>
-              <p>- Save and validate the balance</p>
-            </div>
-            <Link href="/register" className="inline-flex items-center gap-1 text-[var(--color-link-action)] hover:underline">
-              Go to Register <ArrowRight className="h-4 w-4" />
-            </Link>
-          </article>
-        </section>
+  useEffect(() => {
+    setGreeting(greetingForHour(new Date().getHours()));
+    const supabase = createClient();
+    supabase.auth.getUser().then(({ data }) => {
+      const user = data.user;
+      if (!user) return;
+      const fullName = typeof user.user_metadata?.full_name === "string" ? user.user_metadata.full_name : null;
+      const firstName = fullName ? fullName.split(" ")[0] : user.email ? displayNameFromEmail(user.email) : null;
+      setDisplayName(firstName);
+    });
+  }, []);
+
+  return (
+    <main className="h-full overflow-auto bg-[var(--color-container-background-accent)] px-6 py-8 md:px-10">
+      <div className="mx-auto w-full max-w-6xl">
+        <h1 className="mb-6 text-center text-4xl font-semibold text-[var(--color-text-global)] md:text-5xl">
+          {greeting}
+          {displayName ? `, ${displayName}` : ""}!
+        </h1>
+
+        <nav aria-label="Quick sections" className="mb-8 flex flex-wrap items-center justify-center gap-3">
+          {NAV_PILLS.map((item) => {
+            const Icon = item.icon;
+            return (
+              <Link
+                key={item.href + item.label}
+                href={item.href}
+                className="flex items-center gap-2 rounded-full border border-[var(--color-divider-tertiary)] bg-[var(--color-container-background-primary)] px-4 py-2 text-sm font-medium text-[var(--color-text-global)] transition-colors hover:bg-[var(--color-action-passive-subtle-hover)]"
+              >
+                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[var(--color-container-background-accent)] text-[var(--color-link-action)]">
+                  <Icon className="h-3.5 w-3.5" aria-hidden="true" />
+                </span>
+                {item.label}
+              </Link>
+            );
+          })}
+        </nav>
+
+        <div className="mb-8">
+          <p className="mb-3 text-sm font-semibold text-[var(--color-text-global)]">Create actions</p>
+          <div className="flex flex-wrap items-center gap-2">
+            {CREATE_ACTIONS.map((item) => (
+              <Link
+                key={item.href + item.label}
+                href={item.href}
+                className="rounded-full border border-[var(--color-divider-tertiary)] bg-[var(--color-container-background-primary)] px-3.5 py-1.5 text-sm text-[var(--color-text-primary)] transition-colors hover:bg-[var(--color-action-passive-subtle-hover)] hover:text-[var(--color-text-global)]"
+              >
+                {item.label}
+              </Link>
+            ))}
+          </div>
+        </div>
+
+        <DashboardMetrics />
       </div>
     </main>
   );

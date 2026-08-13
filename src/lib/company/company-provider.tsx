@@ -12,18 +12,34 @@ export type Company = {
   updatedAt: string;
 };
 
+export type CompanyTemplate = {
+  id: string;
+  label: string;
+  description: string;
+};
+
+// At most one of templateId / duplicateFromName; omitting both creates a
+// blank company (PLAINGL_FEATURES_TO_IMPLEMENT.md #13).
+export type CreateCompanyInput = {
+  name: string;
+  templateId?: string;
+  duplicateFromName?: string;
+};
+
 type CompanyContextValue = {
   companies: Company[];
+  templates: CompanyTemplate[];
   activeCompany: Company | null;
   loading: boolean;
   error: string | null;
   isSwitching: boolean;
   switchCompany: (name: string) => Promise<void>;
-  createCompany: (name: string) => Promise<void>;
+  createCompany: (input: CreateCompanyInput) => Promise<void>;
 };
 
 const CompanyContext = createContext<CompanyContextValue>({
   companies: [],
+  templates: [],
   activeCompany: null,
   loading: true,
   error: null,
@@ -44,6 +60,7 @@ type CompanyProviderProps = Readonly<{
 export function CompanyProvider({ children }: CompanyProviderProps) {
   const { tenant, loading: tenantLoading } = useTenant();
   const [companies, setCompanies] = useState<Company[]>([]);
+  const [templates, setTemplates] = useState<CompanyTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isSwitching, setIsSwitching] = useState(false);
@@ -64,6 +81,11 @@ export function CompanyProvider({ children }: CompanyProviderProps) {
   useEffect(() => {
     if (tenantLoading || !tenant) return;
     load();
+    // Static per session, not tied to the active company -- fetched once
+    // alongside the company list rather than re-fetched on every switch.
+    request<CompanyTemplate[]>(BASE_API_URL, "/company-templates")
+      .then(setTemplates)
+      .catch(() => setTemplates([]));
   }, [tenantLoading, tenant, load]);
 
   async function switchCompany(name: string) {
@@ -76,8 +98,8 @@ export function CompanyProvider({ children }: CompanyProviderProps) {
     window.location.reload();
   }
 
-  async function createCompany(name: string) {
-    await request<Company>(BASE_API_URL, "/companies", { method: "POST", body: JSON.stringify({ name }) });
+  async function createCompany(input: CreateCompanyInput) {
+    await request<Company>(BASE_API_URL, "/companies", { method: "POST", body: JSON.stringify(input) });
     await load();
   }
 
@@ -85,7 +107,7 @@ export function CompanyProvider({ children }: CompanyProviderProps) {
 
   return (
     <CompanyContext.Provider
-      value={{ companies, activeCompany, loading, error, isSwitching, switchCompany, createCompany }}
+      value={{ companies, templates, activeCompany, loading, error, isSwitching, switchCompany, createCompany }}
     >
       {children}
     </CompanyContext.Provider>

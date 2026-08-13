@@ -31,6 +31,18 @@ export function splitCsvLine(line: string): string[] {
   return fields.map((field) => field.trim());
 }
 
+// Excel copy/paste is tab-separated; plain CSV falls back to comma-separated
+// (reuses splitCsvLine above). Shared by Journal Entry's paste handler and
+// the generic multi-account paste import (PLAINGL_FEATURES_TO_IMPLEMENT.md #18).
+export function splitPastedRows(text: string): string[][] {
+  const rows = text
+    .replace(/\r\n?/g, "\n")
+    .split("\n")
+    .filter((line) => line.trim() !== "");
+  const useTab = rows.length > 0 && rows[0].includes("\t");
+  return rows.map((row) => (useTab ? row.split("\t").map((cell) => cell.trim()) : splitCsvLine(row)));
+}
+
 export function tokenizeCsvText(text: string): string[][] {
   const lines = text
     .replace(/^﻿/, "")
