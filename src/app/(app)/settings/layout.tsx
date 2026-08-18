@@ -3,31 +3,26 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
-import { APP_CATEGORIES } from "@/constants/apps";
+import { SETTINGS_GROUPS } from "@/constants/apps";
 
 type SettingsLayoutProps = Readonly<{
   children: ReactNode;
 }>;
 
-// Sourced from the same APP_CATEGORIES the Apps flyout and home dashboard
-// read from (UI_DESIGN_SYSTEM_PLAN.md Part 3) -- this sidebar is a *view*
-// over that shared list (filtered to /settings/* destinations), not an
-// independent copy of it.
+// AI, Billing, Organization -- account/preferences/user settings, as
+// distinct from the books themselves (Chart of Accounts/Bank Rules/Ledger
+// live under /all-apps now, not here). Sourced from SETTINGS_GROUPS in
+// src/constants/apps.ts.
 export default function SettingsLayout({ children }: SettingsLayoutProps) {
   const pathname = usePathname();
-
-  const groups = APP_CATEGORIES.map((category) => ({
-    label: category.label,
-    items: category.items.filter((item) => item.href.startsWith("/settings"))
-  })).filter((group) => group.items.length > 0);
 
   return (
     <div className="flex h-full min-h-0">
       <aside className="flex h-full w-64 shrink-0 flex-col overflow-y-auto border-r border-[var(--color-divider-tertiary)] bg-[var(--color-container-background-primary)] px-4 py-8">
         <h1 className="mb-6 px-2 text-xl font-semibold text-[var(--color-text-global)]">Settings</h1>
         <nav className="flex flex-col gap-6">
-          {groups.map((group) => (
-            <div key={group.label}>
+          {SETTINGS_GROUPS.map((group) => (
+            <div key={group.id}>
               <p className="mb-2 px-2 text-[11px] font-semibold uppercase tracking-wide text-[var(--color-icon-secondary)]">
                 {group.label}
               </p>

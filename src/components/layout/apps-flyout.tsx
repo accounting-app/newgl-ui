@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
-import { APP_CATEGORIES } from "@/constants/apps";
+import { ALL_APPS_CATEGORIES } from "@/constants/apps";
 
 type AppsFlyoutProps = {
   onNavigate: () => void;
@@ -13,9 +13,11 @@ type AppsFlyoutProps = {
 // apps" menu (screenshots in UI_DESIGN_SYSTEM_PLAN.md Part 3): a category
 // list, each expandable to its own sub-items panel to the right. Every
 // category here is a real, working section -- no locked/"coming soon"
-// placeholders, per the confirmed decision.
+// placeholders, per the confirmed decision. Register and Reports are
+// intentionally not in ALL_APPS_CATEGORIES -- both already have their own
+// top-level rail icon.
 export function AppsFlyout({ onNavigate }: AppsFlyoutProps) {
-  const [hoveredId, setHoveredId] = useState<string | null>(APP_CATEGORIES[0]?.id ?? null);
+  const [hoveredId, setHoveredId] = useState<string | null>(ALL_APPS_CATEGORIES[0]?.id ?? null);
 
   return (
     <div role="menu" className="flex items-start">
@@ -23,14 +25,14 @@ export function AppsFlyout({ onNavigate }: AppsFlyoutProps) {
         <p className="px-4 pb-2 pt-1 text-xs font-semibold uppercase tracking-wide text-[var(--color-icon-secondary)]">
           All apps
         </p>
-        {APP_CATEGORIES.map((category) => {
+        {ALL_APPS_CATEGORIES.map((category) => {
           const Icon = category.icon;
           const hasItems = category.items.length > 0;
           const isHovered = hoveredId === category.id;
           return (
             <div key={category.id} onMouseEnter={() => setHoveredId(category.id)} className="relative">
               <Link
-                href={category.href ?? category.items[0]?.href ?? "#"}
+                href={category.items[0]?.href ?? "/all-apps"}
                 onClick={onNavigate}
                 role="menuitem"
                 className={`flex items-center justify-between gap-3 px-4 py-2.5 text-sm text-[var(--color-text-global)] transition-colors ${

@@ -3,25 +3,23 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import type { ComponentType } from "react";
-import { Building2, FilePlus2, PlusCircle, Upload } from "lucide-react";
+import { BookOpen, Building2, FilePlus2, PlusCircle, Upload, Wallet } from "lucide-react";
 import { DashboardMetrics } from "@/components/home/dashboard-metrics";
-import { APP_CATEGORIES } from "@/constants/apps";
+import { ALL_APPS_CATEGORIES, SETTINGS_GROUPS } from "@/constants/apps";
 import type { AppNavItem } from "@/constants/apps";
 import { createClient } from "@/lib/supabase/client";
 
 // Modeled after QuickBooks Online's dashboard top nav (a horizontal row of
-// product-area pills) -- derived from the same APP_CATEGORIES the Apps
-// flyout and Settings sidebar read from (UI_DESIGN_SYSTEM_PLAN.md Part 3),
-// not its own duplicate list. A category with no sub-items (Reports, which
-// keeps its own established sub-nav) becomes a single pill for the
-// category itself.
-const NAV_PILLS: AppNavItem[] = APP_CATEGORIES.flatMap((category) =>
-  category.items.length > 0
-    ? category.items
-    : category.href
-      ? [{ label: category.label, href: category.href, icon: category.icon }]
-      : []
-);
+// product-area pills) -- Register and Reports are their own top-level rail
+// items so aren't in either constants list, added here explicitly; the
+// rest comes straight from ALL_APPS_CATEGORIES + SETTINGS_GROUPS
+// (UI_DESIGN_SYSTEM_PLAN.md Part 3) rather than a separately-maintained copy.
+const NAV_PILLS: AppNavItem[] = [
+  { label: "Register", href: "/register", icon: Wallet },
+  { label: "Reports", href: "/reports", icon: BookOpen },
+  ...ALL_APPS_CATEGORIES.flatMap((category) => category.items),
+  ...SETTINGS_GROUPS.flatMap((group) => group.items)
+];
 
 type CreateActionItem = {
   label: string;
@@ -32,8 +30,8 @@ type CreateActionItem = {
 const CREATE_ACTIONS: CreateActionItem[] = [
   { label: "Add Check", href: "/register", icon: PlusCircle },
   { label: "New Journal Entry", href: "/register", icon: FilePlus2 },
-  { label: "Add an account", href: "/settings/chart-of-accounts", icon: Building2 },
-  { label: "Bulk paste import", href: "/settings/ledger", icon: Upload }
+  { label: "Add an account", href: "/all-apps/chart-of-accounts", icon: Building2 },
+  { label: "Bulk paste import", href: "/all-apps/ledger", icon: Upload }
 ];
 
 function greetingForHour(hour: number): string {
