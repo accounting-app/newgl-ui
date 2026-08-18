@@ -10,6 +10,7 @@ import { NumberField } from "@/components/ui/number-field";
 import { Select } from "@/components/ui/select";
 import { Table } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
+import { useToast } from "@/components/ui/toast/toast-context";
 import { ACCOUNT_CATEGORY_LABELS } from "@/constants/ui";
 import { ACCOUNT_ROOT_GROUPS } from "@/modules/accounting/domain/accounting-reports";
 import { isRegisterAccountCategory } from "@/modules/accounting/presentation/transaction-type-policy";
@@ -42,6 +43,7 @@ function nextAccountCode(accounts: Account[]): string {
 
 export function ChartOfAccountsPage() {
   const services = useMemo(() => getServiceContainer(), []);
+  const { toast } = useToast();
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -50,7 +52,6 @@ export function ChartOfAccountsPage() {
   const [newCategory, setNewCategory] = useState<Account["category"]>("BANK");
   const [newOpeningBalance, setNewOpeningBalance] = useState("");
   const [creating, setCreating] = useState(false);
-  const [createError, setCreateError] = useState<string | null>(null);
 
   const [archivingId, setArchivingId] = useState<string | null>(null);
   const [collapsedNames, setCollapsedNames] = useState<Set<string>>(new Set());
@@ -67,8 +68,6 @@ export function ChartOfAccountsPage() {
   const [bulkCategory, setBulkCategory] = useState<Account["category"]>("EXPENSE");
   const [bulkText, setBulkText] = useState("");
   const [bulkImporting, setBulkImporting] = useState(false);
-  const [bulkResult, setBulkResult] = useState<string | null>(null);
-  const [bulkError, setBulkError] = useState<string | null>(null);
 
   async function loadAccounts() {
     setLoading(true);
@@ -112,7 +111,6 @@ export function ChartOfAccountsPage() {
     event.preventDefault();
     if (!newName.trim()) return;
     setCreating(true);
-    setCreateError(null);
     try {
       const openingBalance = Number(newOpeningBalance);
       await services.accountService.createAccount({
@@ -125,8 +123,9 @@ export function ChartOfAccountsPage() {
       setNewName("");
       setNewOpeningBalance("");
       await loadAccounts();
+      toast({ variant: "success", title: "Account created", description: `"${newName.trim()}" was added to the chart of accounts.` });
     } catch (err) {
-      setCreateError(err instanceof Error ? err.message : "Could not create this account");
+      toast({ variant: "error", title: "Could not create this account", description: err instanceof Error ? err.message : undefined });
     } finally {
       setCreating(false);
     }
@@ -137,6 +136,9 @@ export function ChartOfAccountsPage() {
     try {
       await services.accountService.updateAccount(account.id, { status: "ARCHIVED" });
       await loadAccounts();
+      toast({ variant: "success", title: "Account archived", description: `"${account.name}" is no longer active.` });
+    } catch (err) {
+      toast({ variant: "error", title: "Could not archive this account", description: err instanceof Error ? err.message : undefined });
     } finally {
       setArchivingId(null);
     }
@@ -151,8 +153,6 @@ export function ChartOfAccountsPage() {
     if (names.length === 0) return;
 
     setBulkImporting(true);
-    setBulkResult(null);
-    setBulkError(null);
     let created = 0;
     let nextCode = Number(nextAccountCode(accounts));
     const failures: string[] = [];
@@ -174,9 +174,14 @@ export function ChartOfAccountsPage() {
 
     await loadAccounts();
     setBulkImporting(false);
-    setBulkResult(`Imported ${created} of ${names.length} account${names.length === 1 ? "" : "s"}.`);
-    if (failures.length > 0) setBulkError(failures.join("\n"));
-    if (failures.length === 0) {
+    if (failures.length > 0) {
+      toast({
+        variant: "error",
+        title: `Imported ${created} of ${names.length} account${names.length === 1 ? "" : "s"}`,
+        description: failures.join("\n")
+      });
+    } else {
+      toast({ variant: "success", title: `Imported ${created} account${created === 1 ? "" : "s"}` });
       setBulkText("");
       setBulkOpen(false);
     }
@@ -215,7 +220,6 @@ export function ChartOfAccountsPage() {
             {bulkOpen ? "Cancel bulk import" : "Bulk import"}
           </Button>
         </form>
-        {createError ? <p className="mt-2 text-sm text-red-600">{createError}</p> : null}
 
         {bulkOpen ? (
           <form onSubmit={handleBulkImport} className="mt-4 flex flex-col gap-3 border-t border-[var(--color-divider-tertiary)] pt-4">
@@ -243,8 +247,6 @@ export function ChartOfAccountsPage() {
                 {bulkImporting ? "Importing…" : "Import accounts"}
               </Button>
             </div>
-            {bulkResult ? <p className="text-sm text-[var(--color-text-primary)]">{bulkResult}</p> : null}
-            {bulkError ? <p className="whitespace-pre-line text-sm text-red-600">{bulkError}</p> : null}
           </form>
         ) : null}
       </Card>
