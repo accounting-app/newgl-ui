@@ -1,5 +1,10 @@
 import type { ReactNode } from "react";
+import { Card } from "@/components/ui/card";
 
+// Generalized to src/components/ui/card.tsx (UI_DESIGN_SYSTEM_PLAN.md Part
+// 1). Kept as a thin re-export -- with the mb-6 stacking margin every
+// settings page currently relies on -- so existing call sites don't need to
+// change as part of Stage 1; they migrate to Card directly in later stages.
 type SettingsCardProps = Readonly<{
   title: string;
   description?: string;
@@ -8,10 +13,8 @@ type SettingsCardProps = Readonly<{
 
 export function SettingsCard({ title, description, children }: SettingsCardProps) {
   return (
-    <section className="mb-6 rounded-xl border border-[var(--color-divider-tertiary)] bg-[var(--color-container-background-primary)] p-6">
-      <h2 className="text-lg font-semibold text-[var(--color-text-global)]">{title}</h2>
-      {description ? <p className="mt-1 text-sm text-[var(--color-text-primary)]">{description}</p> : null}
-      <div className="mt-4">{children}</div>
-    </section>
+    <Card title={title} description={description} className="mb-6">
+      {children}
+    </Card>
   );
 }

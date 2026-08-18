@@ -125,65 +125,13 @@
   Use this wrapper class on any container where you want strong overrides:
   <div className="tw-override">...</div>
 */
-.tw-override .selector-field {
-  height: 32px;
-  padding: 0.5rem 0.75rem;
-  font-size: var(--font-size-input-text) !important;
-  line-height: 1.2;
-  border-radius: var(--radius-x-small);
-  border: 1px solid var(--color-input-border-primary) !important;
-  background-color: var(--color-input-background) !important;
-  color: var(--color-input-text) !important;
-  transition: background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
-}
-
-.tw-override .selector-field::placeholder {
-  font-size: var(--font-size-input-text);
-  color: var(--color-text-disabled);
-}
-
-.tw-override .selector-field:focus-visible {
-  outline: none;
-  border-color: var(--override-focus) !important;
-  box-shadow: 0 0 0 1px var(--override-focus) !important;
-}
-
-.tw-override .selector-field:disabled {
-  border-color: var(--color-input-disabled-border) !important;
-  background-color: var(--color-input-disabled-background) !important;
-  color: var(--color-input-disabled-text) !important;
-  cursor: not-allowed;
-}
-
-.tw-override .input-field {
-  height: 32px;
-  padding: 0.5rem 0.75rem;
-  font-size: var(--font-size-input-text) !important;
-  line-height: 1.2;
-  border-radius: var(--radius-x-small);
-  border: 1px solid var(--color-input-border-primary) !important;
-  background-color: var(--color-input-background) !important;
-  color: var(--color-input-text) !important;
-  transition: background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
-}
-
-.tw-override .input-field::placeholder {
-  font-size: var(--font-size-input-text);
-  color: var(--color-text-disabled);
-}
-
-.tw-override .input-field:focus-visible {
-  outline: none;
-  border-color: var(--override-focus) !important;
-  box-shadow: 0 0 0 1px var(--override-focus) !important;
-}
-
-.tw-override .input-field:disabled {
-  border-color: var(--color-input-disabled-border) !important;
-  background-color: var(--color-input-disabled-background) !important;
-  color: var(--color-input-disabled-text) !important;
-  cursor: not-allowed;
-}
+/*
+  .selector-field / .input-field sizing used to live only here (see
+  UI_DESIGN_SYSTEM_PLAN.md Part 2) -- both are now baked directly into
+  src/components/ui/input-field.tsx and select.tsx, so those component
+  classNames no longer include the bare "input-field"/"selector-field"
+  strings and these rules would never match. Removed rather than left dead.
+*/
 
 .tw-override .payee-modal-select {
   height: 32px;
@@ -261,36 +209,6 @@
   font-size: 2.2rem;
   line-height: 2.2rem;
   font-weight: 400;
-}
-.tw-override .selector-field {
-  border: 1px solid var(--color-input-border-primary);
-  border-color: var(--color-input-border-primary);
-  font-size: var(--font-size-input-text);
-}
-
-.tw-override .selector-option {
-  font-size: var(--font-size-component-medium);
-}
-
-.tw-override .selector-option-selected {
-  background-color: var(--color-action-passive-subtle-active);
-  font-size: var(--font-size-component-medium);
-}
-
-.tw-override .selector-option-selected:hover {
-  background-color: var(--color-action-passive-subtle-hover);
-}
-
-.tw-override .selector-option-selected:focus-visible {
-  background-color: var(--color-action-passive-subtle-focus);
-}
-
-.tw-override .selector-option-selected:active {
-  background-color: var(--color-action-passive-subtle-active);
-}
-
-.tw-override .selector-option-selected .selector-option-label {
-  font-weight: 700;
 }
 .tw-override .page-content {
   margin: 0 30px 30px 30px;
@@ -417,69 +335,13 @@
   padding: 0 14px 14px;
 }
 
-.tw-override .button,
-.tw-override .button:link,
-.tw-override .submit-button,
-.tw-override [type=button].button,
-.tw-override [type=submit].button {
-  border-radius: var(--radius-full);
-  background-clip: padding-box;
-  min-width: 80px;
-  cursor: pointer;
-  font-size: 14px;
-  font-weight: var(--font-weight-component-bold);
-  height: 34px;
-  line-height: 34px;
-  padding: 0 20px;
-  border: 0;
-  margin: 0;
-  box-sizing: border-box;
-  color: var(--color-text-primary);
-  box-shadow: inset 0 0 0 1px var(--color-button-border);
-  background-image: -webkit-linear-gradient(top, var(--color-button-gradient-from) 0%, var(--color-button-gradient-to) 100%);
-  background-image: linear-gradient(to bottom, var(--color-button-gradient-from) 0%, var(--color-button-gradient-to) 100%);
-  -webkit-font-smoothing: subpixel-antialiased;
-  -webkit-user-select: none;
-  -moz-user-select: none;
-  -ms-user-select: none;
-  user-select: none;
-  white-space: nowrap;
-}
-
-.tw-override .button.primary,
-.tw-override [type=button].button.primary {
-  background-image: none;
-  background-color: var(--color-action-standard);
-  color: var(--color-text-inverse);
-  border-radius: var(--radius-full);
-  box-shadow: none;
-  border: 1px solid var(--color-ui-primary);
-}
-
-.tw-override .button.primary:hover,
-.tw-override [type=button].button.primary:hover {
-  background-color: var(--color-ui-positive);
-  border-color: var(--color-ui-positive);
-  color: var(--color-text-inverse);
-}
-
-.tw-override .button.secondary {
-  border: 1px solid var(--color-button-border);
-  color: var(--color-text-primary);
-  background-image: none;
-  background-color: transparent;
-  box-shadow: none;
-}
-
-.tw-override .button.secondary:hover {
-  box-shadow: inset 0 0 0 1px var(--color-container-border-primary);
-  background-color: var(--color-action-standard-subtle-hover);
-}
-
-.tw-override .button:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
+/*
+  Button styling used to live only here (see UI_DESIGN_SYSTEM_PLAN.md Part
+  2) -- it was the ONLY styling src/components/ui/button.tsx had anywhere,
+  gated behind a `.tw-override` ancestor most pages never had (a live bug:
+  Login/Signup rendered a completely unstyled button). Now baked directly
+  into the component; this class name is no longer emitted, so removed.
+*/
 
 .side-nav .side-nav-icon-shell {
   transition: color var(--duration-fade-moderate) var(--ease-fade),
