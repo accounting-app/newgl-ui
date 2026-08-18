@@ -52,9 +52,7 @@ export default function SettingsLayout({ children }: SettingsLayoutProps) {
         </nav>
       </aside>
 
-      <div className="min-w-0 flex-1 overflow-y-auto bg-[var(--color-container-background-accent)] px-6 py-8 md:px-10">
-        <div className="mx-auto w-full max-w-3xl">{children}</div>
-      </div>
+      <div className="min-w-0 flex-1 overflow-y-auto bg-[var(--color-container-background-accent)] p-5">{children}</div>
     </div>
   );
 }

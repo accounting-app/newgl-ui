@@ -241,14 +241,14 @@ export function DashboardMetrics() {
 
   if (loading) {
     return (
-      <section className="mx-auto mt-2 w-full max-w-6xl">
+      <section className="mt-2 w-full">
         <p className="text-sm text-[var(--color-text-primary)]">Loading dashboard…</p>
       </section>
     );
   }
 
   return (
-    <section className="mx-auto w-full max-w-6xl">
+    <section className="w-full">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-xl font-semibold text-[var(--color-text-global)]">Business at a glance</h2>
         <div className="w-44">
