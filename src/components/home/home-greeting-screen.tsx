@@ -3,42 +3,25 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import type { ComponentType } from "react";
-import {
-  BookOpen,
-  Building2,
-  CreditCard,
-  Database,
-  FilePlus2,
-  Landmark,
-  PlusCircle,
-  Sparkles,
-  Upload,
-  Users,
-  Wallet
-} from "lucide-react";
+import { Building2, FilePlus2, PlusCircle, Upload } from "lucide-react";
 import { DashboardMetrics } from "@/components/home/dashboard-metrics";
+import { APP_CATEGORIES } from "@/constants/apps";
+import type { AppNavItem } from "@/constants/apps";
 import { createClient } from "@/lib/supabase/client";
 
-type NavPillItem = {
-  label: string;
-  href: string;
-  icon: ComponentType<{ className?: string }>;
-};
-
 // Modeled after QuickBooks Online's dashboard top nav (a horizontal row of
-// product-area pills) -- mapped to this app's actual sections rather than
-// QBO's own product names, since features like invoicing/payroll/lending
-// don't exist here.
-const NAV_PILLS: NavPillItem[] = [
-  { label: "Register", href: "/register", icon: Wallet },
-  { label: "Reports", href: "/reports", icon: BookOpen },
-  { label: "Chart of Accounts", href: "/settings/chart-of-accounts", icon: Building2 },
-  { label: "Bank Rules", href: "/settings/bank-rules", icon: Landmark },
-  { label: "AI", href: "/settings/ai", icon: Sparkles },
-  { label: "Ledger", href: "/settings/ledger", icon: Database },
-  { label: "Billing", href: "/settings/billing", icon: CreditCard },
-  { label: "Organization", href: "/settings/organization", icon: Users }
-];
+// product-area pills) -- derived from the same APP_CATEGORIES the Apps
+// flyout and Settings sidebar read from (UI_DESIGN_SYSTEM_PLAN.md Part 3),
+// not its own duplicate list. A category with no sub-items (Reports, which
+// keeps its own established sub-nav) becomes a single pill for the
+// category itself.
+const NAV_PILLS: AppNavItem[] = APP_CATEGORIES.flatMap((category) =>
+  category.items.length > 0
+    ? category.items
+    : category.href
+      ? [{ label: category.label, href: category.href, icon: category.icon }]
+      : []
+);
 
 type CreateActionItem = {
   label: string;
