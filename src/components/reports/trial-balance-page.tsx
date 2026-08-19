@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+import { Button } from "@/components/ui/button";
 import { InputField } from "@/components/ui/input-field";
 import { REPORT_NAV_ITEMS } from "@/constants/reports";
 import { REPORT_USER_NAME } from "@/constants/ui";
@@ -204,13 +205,9 @@ function TrialBalancePageInner() {
       <section className="page-content">
         <section className="report-print-card mx-auto mt-8 w-full max-w-[840px] rounded border border-[var(--color-divider-tertiary)] bg-[var(--color-container-background-primary)] p-5 shadow-sm">
           <div className="mb-4 flex justify-end">
-            <button
-              type="button"
-              onClick={() => window.print()}
-              className="no-print rounded border border-[var(--color-divider-tertiary)] px-2 py-1 text-xs text-[var(--color-text-primary)] hover:bg-[var(--color-container-background-accent)]"
-            >
+            <Button variant="secondary" size="sm" className="no-print" onClick={() => window.print()}>
               Print
-            </button>
+            </Button>
           </div>
           <div className="mb-4 text-center">
             <h2 className="text-[28px] font-medium text-[var(--color-text-global)] mb-2">{REPORT_USER_NAME}</h2>

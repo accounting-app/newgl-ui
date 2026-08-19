@@ -4,6 +4,7 @@ import { Suspense, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { InputField } from "@/components/ui/input-field";
 import { SelectField } from "@/components/bank-register/select-field";
 import {
@@ -916,13 +917,9 @@ function ReportsPageInner({ reportType }: ReportsPageProps) {
           <span className="text-xs text-[var(--color-icon-secondary)]">
             {accountingMethod === "cash" ? "Cash basis" : "Accrual basis"}
           </span>
-          <button
-            type="button"
-            onClick={() => window.print()}
-            className="no-print rounded border border-[var(--color-divider-tertiary)] px-2 py-1 text-xs text-[var(--color-text-primary)] hover:bg-[var(--color-container-background-accent)]"
-          >
+          <Button variant="secondary" size="sm" className="no-print" onClick={() => window.print()}>
             Print
-          </button>
+          </Button>
         </div>
 
         {/* ── Report title block ── */}
