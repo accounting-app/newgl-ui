@@ -2,7 +2,9 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { InputField } from "@/components/ui/input-field";
+import { Textarea } from "@/components/ui/textarea";
 import { SelectField } from "@/components/bank-register/select-field";
 import type { SelectFieldOption } from "@/components/bank-register/select-field";
 import { SettingsCard } from "@/components/settings/settings-card";
@@ -227,14 +229,14 @@ export function BulkPasteImport() {
       description="Paste rows with Date, Account, Offset Account, Amount, and Memo columns. Each row becomes its own two-account transaction -- useful for one-time bulk loads of historical data, unlike the CSV import wizard (one shared account per file)."
     >
       <div className="flex flex-col gap-3">
-        <textarea
+        <Textarea
           value={pasteText}
           onChange={(e) => setPasteText(e.target.value)}
           rows={5}
           placeholder={
             "Date\tAccount\tOffset Account\tAmount\tMemo\n2024-01-15\tChecking\tOffice Supplies\t-42.50\tStaples\n2024-01-16\tChecking\tConsulting Income\t1200.00\tInvoice #1"
           }
-          className="rounded border border-[var(--color-input-border-primary)] bg-[var(--color-container-background-primary)] px-3 py-2 font-mono text-xs text-[var(--color-text-primary)]"
+          className="font-mono text-xs"
         />
         <div>
           <Button type="button" onClick={applyPaste} disabled={pasteText.trim() === ""}>
@@ -262,8 +264,7 @@ export function BulkPasteImport() {
                     return (
                       <tr key={row.clientRowId} className="border-b border-[var(--color-container-background-secondary)]">
                         <td className="px-2 py-1.5 align-top">
-                          <input
-                            type="checkbox"
+                          <Checkbox
                             checked={selectedRowIds.has(row.clientRowId)}
                             onChange={(e) => toggleRow(row.clientRowId, e.target.checked)}
                           />

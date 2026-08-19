@@ -26,8 +26,19 @@ type CsvMappingStepProps = {
   aiEnabled: boolean;
 };
 
-const NATIVE_SELECT_CLASS =
-  "input-field h-9 w-full rounded px-3 font-normal leading-[1.2] transition-[background-color,border-color,box-shadow] duration-200 focus:outline-none";
+const YES_NO_OPTIONS = [
+  { value: "yes", label: "Yes" },
+  { value: "no", label: "No" }
+];
+
+const AMOUNT_COLUMNS_MODE_OPTIONS = [
+  { value: "SINGLE", label: "One column" },
+  { value: "DEBIT_CREDIT", label: "Two columns (Debit & Credit)" }
+];
+
+function dateFormatOptions() {
+  return DATE_FORMAT_OPTIONS.map((format) => ({ value: format, label: format }));
+}
 
 function columnOptions(columnLabels: string[]) {
   return columnLabels.map((label, index) => ({
@@ -100,46 +111,32 @@ export function CsvMappingStep({
           Step 1: Tell us about the format of your data
         </p>
         <div className="flex flex-col gap-4">
-          <label className="flex flex-col gap-1">
-            <span className="text-sm text-[var(--color-text-primary)]">Is the first row in your file a header?</span>
-            <select
-              className={NATIVE_SELECT_CLASS}
-              value={formatOptions.hasHeaderRow ? "yes" : "no"}
-              onChange={(event) => onFormatOptionsChange({ hasHeaderRow: event.target.value === "yes" })}
-            >
-              <option value="yes">Yes</option>
-              <option value="no">No</option>
-            </select>
-          </label>
+          <SelectField
+            label="Is the first row in your file a header?"
+            value={formatOptions.hasHeaderRow ? "yes" : "no"}
+            onChange={(value) => onFormatOptionsChange({ hasHeaderRow: value === "yes" })}
+            options={YES_NO_OPTIONS}
+            placeholder="Select an option"
+            allowCustomValue={false}
+          />
 
-          <label className="flex flex-col gap-1">
-            <span className="text-sm text-[var(--color-text-primary)]">How many columns show amounts?</span>
-            <select
-              className={NATIVE_SELECT_CLASS}
-              value={formatOptions.amountColumnsMode}
-              onChange={(event) =>
-                onFormatOptionsChange({ amountColumnsMode: event.target.value as AmountColumnsMode })
-              }
-            >
-              <option value="SINGLE">One column</option>
-              <option value="DEBIT_CREDIT">Two columns (Debit &amp; Credit)</option>
-            </select>
-          </label>
+          <SelectField
+            label="How many columns show amounts?"
+            value={formatOptions.amountColumnsMode}
+            onChange={(value) => onFormatOptionsChange({ amountColumnsMode: value as AmountColumnsMode })}
+            options={AMOUNT_COLUMNS_MODE_OPTIONS}
+            placeholder="Select an option"
+            allowCustomValue={false}
+          />
 
-          <label className="flex flex-col gap-1">
-            <span className="text-sm text-[var(--color-text-primary)]">What&apos;s the date format used in your file?</span>
-            <select
-              className={NATIVE_SELECT_CLASS}
-              value={formatOptions.dateFormat}
-              onChange={(event) => onFormatOptionsChange({ dateFormat: event.target.value as DateFormatOption })}
-            >
-              {DATE_FORMAT_OPTIONS.map((format) => (
-                <option key={format} value={format}>
-                  {format}
-                </option>
-              ))}
-            </select>
-          </label>
+          <SelectField
+            label="What's the date format used in your file?"
+            value={formatOptions.dateFormat}
+            onChange={(value) => onFormatOptionsChange({ dateFormat: value as DateFormatOption })}
+            options={dateFormatOptions()}
+            placeholder="Select a date format"
+            allowCustomValue={false}
+          />
         </div>
       </section>
 
