@@ -1,6 +1,6 @@
 "use client";
 
-import { SettingsCard } from "@/components/settings/settings-card";
+import { Card } from "@/components/ui/card";
 import { useTenant } from "@/lib/tenant/tenant-provider";
 
 const PLAN_LABELS: Record<string, string> = {
@@ -19,12 +19,12 @@ export default function BillingSettingsPage() {
   }
 
   return (
-    <SettingsCard title="Plan" description="What your account is currently on.">
+    <Card title="Plan" description="What your account is currently on." className="mb-6">
       <p className="text-sm text-[var(--color-text-global)]">{PLAN_LABELS[tenant.planId] ?? tenant.planId} plan</p>
       <p className="mt-2 text-sm text-[var(--color-text-primary)]">
         Paid plans aren&apos;t available yet — every account is on the free plan today. You can bring your own
         Anthropic key at any time from the AI tab for unlimited AI usage.
       </p>
-    </SettingsCard>
+    </Card>
   );
 }

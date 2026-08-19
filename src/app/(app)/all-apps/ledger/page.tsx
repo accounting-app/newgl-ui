@@ -2,9 +2,9 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { InputField } from "@/components/ui/input-field";
 import { BulkPasteImport } from "@/components/settings/bulk-paste-import";
-import { SettingsCard } from "@/components/settings/settings-card";
 import { BASE_API_URL, PRIMARY_LEDGER_NAME } from "@/configuration";
 import { getAccessToken, request } from "@/lib/services/http-service-container";
 
@@ -170,9 +170,10 @@ export default function LedgerSettingsPage() {
 
   return (
     <>
-      <SettingsCard
+      <Card
         title="Your .bean file"
         description="Download your ledger to edit it directly, or upload a replacement. Uploads are validated before anything is saved — a malformed file is rejected and your current ledger is left untouched."
+        className="mb-6"
       >
         <div className="mb-3 flex flex-wrap items-end gap-3">
           <label className="flex flex-col gap-1 text-xs text-[var(--color-icon-secondary)]">
@@ -216,11 +217,11 @@ export default function LedgerSettingsPage() {
         {copyNotice ? <p className="mt-2 text-sm text-[var(--color-text-primary)]">{copyNotice}</p> : null}
         {uploadError ? <p className="mt-2 text-sm text-red-600">{uploadError}</p> : null}
         {uploadNotice ? <p className="mt-2 text-sm text-[var(--color-text-primary)]">{uploadNotice}</p> : null}
-      </SettingsCard>
+      </Card>
 
       <BulkPasteImport />
 
-      <SettingsCard title="Version history" description="Every replace creates a new version. Restoring adds a new version too, so history is never lost.">
+      <Card title="Version history" description="Every replace creates a new version. Restoring adds a new version too, so history is never lost.">
         {loading ? (
           <p className="text-sm text-[var(--color-text-primary)]">Loading…</p>
         ) : loadError ? (
@@ -257,7 +258,7 @@ export default function LedgerSettingsPage() {
             </ul>
           </>
         )}
-      </SettingsCard>
+      </Card>
     </>
   );
 }

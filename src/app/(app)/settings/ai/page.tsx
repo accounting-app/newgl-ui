@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { InputField } from "@/components/ui/input-field";
-import { SettingsCard } from "@/components/settings/settings-card";
 import { BASE_API_URL } from "@/configuration";
 import { request } from "@/lib/services/http-service-container";
 import { setAiFeaturesEnabled } from "@/lib/services/ai-service";
@@ -120,9 +120,10 @@ export default function AiSettingsPage() {
 
   return (
     <>
-      <SettingsCard
+      <Card
         title="AI features"
         description="Turn AI suggestions off entirely -- column mapping, categorization, and payee learning all stop, and no data is sent to Anthropic."
+        className="mb-6"
       >
         <div className="flex items-center justify-between">
           <p className="text-sm text-[var(--color-text-global)]">
@@ -133,9 +134,9 @@ export default function AiSettingsPage() {
           </Button>
         </div>
         {toggleError ? <p className="mt-2 text-sm text-red-600">{toggleError}</p> : null}
-      </SettingsCard>
+      </Card>
 
-      <SettingsCard title="AI key" description="Bring your own Anthropic key, or use New GL's free-plan key.">
+      <Card title="AI key" description="Bring your own Anthropic key, or use New GL's free-plan key." className="mb-6">
         {status?.keySource === "byok" ? (
           <div className="flex items-center justify-between">
             <div>
@@ -163,17 +164,15 @@ export default function AiSettingsPage() {
 
         {showKeyForm ? (
           <form onSubmit={handleSaveKey} className="mt-4 flex flex-col gap-2 border-t border-[var(--color-divider-tertiary)] pt-4">
-            <label className="flex flex-col gap-1">
-              <span className="text-sm text-[var(--color-text-primary)]">Anthropic API key</span>
-              <InputField
-                type="password"
-                placeholder="sk-ant-..."
-                required
-                minLength={20}
-                value={apiKey}
-                onChange={(event) => setApiKey(event.target.value)}
-              />
-            </label>
+            <InputField
+              label="Anthropic API key"
+              type="password"
+              placeholder="sk-ant-..."
+              required
+              minLength={20}
+              value={apiKey}
+              onChange={(event) => setApiKey(event.target.value)}
+            />
             {keyError ? <p className="text-sm text-red-600">{keyError}</p> : null}
             <div>
               <Button type="submit" variant="primary" disabled={savingKey}>
@@ -182,9 +181,9 @@ export default function AiSettingsPage() {
             </div>
           </form>
         ) : null}
-      </SettingsCard>
+      </Card>
 
-      <SettingsCard title="Usage this period">
+      <Card title="Usage this period" className="mb-6">
         {actionsLimit !== null ? (
           <>
             <div className="mb-2 flex items-baseline justify-between text-sm text-[var(--color-text-primary)]">
@@ -205,9 +204,9 @@ export default function AiSettingsPage() {
             {actionsUsed} actions used this period — no limit applies with your own key.
           </p>
         )}
-      </SettingsCard>
+      </Card>
 
-      <SettingsCard
+      <Card
         title="What we send to Anthropic"
         description="When AI suggestions run, only the fields needed for that suggestion are sent -- payee, memo, amount, and date for categorization, for example. We never send account balances or your full ledger."
       >
@@ -215,7 +214,7 @@ export default function AiSettingsPage() {
           Requests go through New GL&apos;s AI service to Anthropic. If you&apos;ve added your own key, requests are
           billed to your Anthropic account instead of New GL&apos;s.
         </p>
-      </SettingsCard>
+      </Card>
     </>
   );
 }

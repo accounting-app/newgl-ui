@@ -2,12 +2,12 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { InputField } from "@/components/ui/input-field";
 import { Textarea } from "@/components/ui/textarea";
 import { SelectField } from "@/components/bank-register/select-field";
 import type { SelectFieldOption } from "@/components/bank-register/select-field";
-import { SettingsCard } from "@/components/settings/settings-card";
 import { ACCOUNT_CATEGORY_LABELS } from "@/constants/ui";
 import { getServiceContainer } from "@/lib/services/service-container-v2";
 import { parseAmount, splitPastedRows } from "@/modules/accounting/domain/parse-csv";
@@ -224,9 +224,10 @@ export function BulkPasteImport() {
   }
 
   return (
-    <SettingsCard
+    <Card
       title="Bulk paste import"
       description="Paste rows with Date, Account, Offset Account, Amount, and Memo columns. Each row becomes its own two-account transaction -- useful for one-time bulk loads of historical data, unlike the CSV import wizard (one shared account per file)."
+      className="mb-6"
     >
       <div className="flex flex-col gap-3">
         <Textarea
@@ -362,6 +363,6 @@ export function BulkPasteImport() {
           </>
         ) : null}
       </div>
-    </SettingsCard>
+    </Card>
   );
 }

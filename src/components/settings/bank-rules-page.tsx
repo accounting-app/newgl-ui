@@ -2,9 +2,9 @@
 
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { InputField } from "@/components/ui/input-field";
 import { SelectField } from "@/components/bank-register/select-field";
-import { SettingsCard } from "@/components/settings/settings-card";
 import { useToast } from "@/components/ui/toast/toast-context";
 import { getServiceContainer } from "@/lib/services/service-container-v2";
 import type { Account, BankRule, BankRuleCondition, BankRuleField, BankRuleOperator } from "@/modules/accounting/domain/models";
@@ -297,9 +297,10 @@ export function BankRulesPage() {
 
   return (
     <>
-      <SettingsCard
+      <Card
         title="New rule"
         description="Every condition must match (AND). Rules run alongside AI suggestions during CSV import — AI's suggestion is used by default when both apply, with the rule shown as an option to switch to instead."
+        className="mb-6"
       >
         <form onSubmit={handleCreate} className="flex flex-col gap-4">
           <div className="flex flex-wrap items-end gap-3">
@@ -396,9 +397,9 @@ export function BankRulesPage() {
             </Button>
           </div>
         </form>
-      </SettingsCard>
+      </Card>
 
-      <SettingsCard title="Rules" description="Highest priority first. Disabled rules never match.">
+      <Card title="Rules" description="Highest priority first. Disabled rules never match.">
         <div className="mb-4 flex flex-wrap items-center gap-3 border-b border-[var(--color-divider-tertiary)] pb-4">
           <Button type="button" variant="secondary" onClick={handleExport} disabled={rules.length === 0}>
             Export rules
@@ -454,7 +455,7 @@ export function BankRulesPage() {
             ))}
           </ul>
         )}
-      </SettingsCard>
+      </Card>
     </>
   );
 }

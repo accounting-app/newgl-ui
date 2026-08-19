@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { SettingsCard } from "@/components/settings/settings-card";
+import { Card } from "@/components/ui/card";
 import { createClient } from "@/lib/supabase/client";
 import { useTenant } from "@/lib/tenant/tenant-provider";
 
@@ -25,7 +25,7 @@ export default function OrganizationSettingsPage() {
   }
 
   return (
-    <SettingsCard title="Organization" description="Your account and who has access to it.">
+    <Card title="Organization" description="Your account and who has access to it." className="mb-6">
       <dl className="flex flex-col gap-3 text-sm">
         <div>
           <dt className="text-[var(--color-text-primary)]">Organization name</dt>
@@ -39,6 +39,6 @@ export default function OrganizationSettingsPage() {
       <p className="mt-4 text-sm text-[var(--color-text-primary)]">
         Inviting teammates isn&apos;t available yet — each organization has a single member for now.
       </p>
-    </SettingsCard>
+    </Card>
   );
 }
