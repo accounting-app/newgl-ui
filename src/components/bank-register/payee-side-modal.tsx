@@ -3,7 +3,9 @@
 import type { ReactNode } from "react";
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { InputField } from "@/components/ui/input-field";
+import { Select } from "@/components/ui/select";
 import {
   PAYEE_MODAL_INITIAL_CUSTOMER_FORM,
   PAYEE_MODAL_INITIAL_EMPLOYEE_FORM,
@@ -24,15 +26,10 @@ type PayeeSideModalProps = {
   onSave: (payee: PayeeOption) => void;
 };
 
-const PAYEE_MODAL_LABEL_CLASS = "flex flex-col gap-1 text-xs text-[var(--color-text-primary)]";
-const PAYEE_MODAL_INPUT_CLASS = "input-field w-full";
-const PAYEE_MODAL_SELECT_CLASS = "payee-modal-select w-full";
 const PAYEE_MODAL_SECTION_CLASS = "rounded border border-[var(--color-divider-tertiary)] p-3";
 const PAYEE_MODAL_SUBHEADING_CLASS = "mb-2 text-xs font-semibold text-[var(--color-text-primary)]";
 const PAYEE_MODAL_GROUP_HEADING_CLASS = "mb-1 text-xs font-medium text-[var(--color-text-primary)]";
 const PAYEE_MODAL_HELPER_TEXT_CLASS = "mt-1 text-[11px] text-[var(--color-icon-secondary)]";
-const PAYEE_MODAL_CHECKBOX_LABEL_CLASS =
-  "mt-2 flex items-center gap-2 text-xs text-[var(--color-text-primary)]";
 const PAYEE_MODAL_INFO_BOX_CLASS =
   "rounded border border-dashed border-[var(--color-container-border-secondary)] bg-[var(--color-container-background-accent)] p-4 text-center text-xs text-[var(--color-icon-secondary)]";
 
@@ -76,17 +73,7 @@ function Field({
   onChange: (value: string) => void;
   type?: string;
 }) {
-  return (
-    <label className={PAYEE_MODAL_LABEL_CLASS}>
-      <span>{label}</span>
-      <InputField
-        type={type}
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        className={PAYEE_MODAL_INPUT_CLASS}
-      />
-    </label>
-  );
+  return <InputField label={label} type={type} value={value} onChange={(event) => onChange(event.target.value)} />;
 }
 
 function SelectField({
@@ -101,20 +88,14 @@ function SelectField({
   options: string[];
 }) {
   return (
-    <label className={PAYEE_MODAL_LABEL_CLASS}>
-      <span>{label}</span>
-      <select
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        className={PAYEE_MODAL_SELECT_CLASS}
-      >
-        {options.map((option) => (
-          <option key={option} value={option}>
-            {option}
-          </option>
-        ))}
-      </select>
-    </label>
+    <Select
+      label={label}
+      value={value}
+      onChange={onChange}
+      options={options.map((option) => ({ value: option, label: option }))}
+      placeholder={`Select ${label.toLowerCase()}`}
+      allowCustomValue={false}
+    />
   );
 }
 
@@ -165,12 +146,12 @@ export function PayeeSideModal({ open, onClose, onSave }: PayeeSideModalProps) {
   return (
     <div className="fixed inset-0 z-50 flex">
       <button type="button" aria-label="Close payee modal" onClick={handleClose} className="h-full flex-1 bg-black/40" />
-      <aside className="tw-override payee-side-modal h-screen w-[752px] overflow-y-auto bg-[var(--color-container-background-accent)] p-5 text-[var(--color-text-primary)] shadow-2xl">
+      <aside className="h-screen w-[752px] overflow-y-auto bg-[var(--color-container-background-accent)] p-5 text-[var(--color-text-primary)] shadow-2xl">
         <header className="mb-4 flex items-center justify-between">
           <h2 className="text-lg font-semibold text-[var(--color-text-primary)]">Add new payee</h2>
-          <button type="button" onClick={handleClose} className="button secondary !h-auto !min-w-0 px-2 py-1 text-xs">
+          <Button variant="secondary" size="sm" onClick={handleClose}>
             Close
-          </button>
+          </Button>
         </header>
 
         <div className="mb-4">
@@ -309,14 +290,13 @@ export function PayeeSideModal({ open, onClose, onSave }: PayeeSideModalProps) {
                 <Field label="Website" value={customer.website} onChange={(value) => setCustomer((prev) => ({ ...prev, website: value }))} />
                 <Field label="Name to print on checks" value={customer.nameOnChecks} onChange={(value) => setCustomer((prev) => ({ ...prev, nameOnChecks: value }))} />
               </div>
-              <label className={PAYEE_MODAL_CHECKBOX_LABEL_CLASS}>
-                <input
-                  type="checkbox"
+              <div className="mt-2">
+                <Checkbox
+                  label="Is a sub-customer"
                   checked={customer.isSubCustomer}
                   onChange={(event) => setCustomer((prev) => ({ ...prev, isSubCustomer: event.target.checked }))}
                 />
-                Is a sub-customer
-              </label>
+              </div>
             </CollapsibleCard>
 
             <CollapsibleCard title="Communication permissions" icon="✉️">
@@ -335,16 +315,15 @@ export function PayeeSideModal({ open, onClose, onSave }: PayeeSideModalProps) {
                 <Field label="ZIP code" value={customer.zip} onChange={(value) => setCustomer((prev) => ({ ...prev, zip: value }))} />
                 <Field label="Country" value={customer.country} onChange={(value) => setCustomer((prev) => ({ ...prev, country: value }))} />
               </div>
-              <label className={PAYEE_MODAL_CHECKBOX_LABEL_CLASS}>
-                <input
-                  type="checkbox"
+              <div className="mt-2">
+                <Checkbox
+                  label="Same as billing address"
                   checked={customer.shippingSameAsBilling}
                   onChange={(event) =>
                     setCustomer((prev) => ({ ...prev, shippingSameAsBilling: event.target.checked }))
                   }
                 />
-                Same as billing address
-              </label>
+              </div>
             </CollapsibleCard>
 
             <CollapsibleCard title="Notes and attachments" icon="📝">

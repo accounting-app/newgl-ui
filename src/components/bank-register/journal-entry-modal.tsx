@@ -3,7 +3,9 @@
 import { useMemo, useState } from "react";
 import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { IconButton } from "@/components/ui/icon-button";
 import { InputField } from "@/components/ui/input-field";
+import { Textarea } from "@/components/ui/textarea";
 import { SelectField } from "@/components/bank-register/select-field";
 import type { SelectFieldOption } from "@/components/bank-register/select-field";
 import { parseAmount, splitPastedRows } from "@/modules/accounting/domain/parse-csv";
@@ -185,14 +187,7 @@ export function JournalEntryModal({ open, accountOptions, isSaving, onClose, onS
     <div className="fixed inset-0 z-50 flex flex-col bg-[var(--color-container-background-primary)]">
       <div className="flex items-center justify-between border-b border-[var(--color-divider-tertiary)] px-6 py-4">
         <p className="text-sm font-medium text-[var(--color-text-primary)]">New Journal Entry</p>
-        <button
-          type="button"
-          aria-label="Close journal entry"
-          className="text-[var(--color-icon-secondary)] hover:text-[var(--color-text-primary)]"
-          onClick={resetAndClose}
-        >
-          <X className="h-5 w-5" aria-hidden="true" />
-        </button>
+        <IconButton icon={X} label="Close journal entry" onClick={resetAndClose} />
       </div>
 
       <div className="flex-1 overflow-auto px-6 py-8">
@@ -229,12 +224,12 @@ export function JournalEntryModal({ open, accountOptions, isSaving, onClose, onS
                 Paste rows with Account, Debit, Credit columns (a header row is optional but recommended so
                 columns don&apos;t need to be in that exact order).
               </p>
-              <textarea
+              <Textarea
                 value={pasteText}
                 onChange={(e) => setPasteText(e.target.value)}
                 rows={5}
                 placeholder={"Account\tDebit\tCredit\nOffice Supplies\t60.00\t\nSoftware & Apps\t40.00\t\nCash\t\t100.00"}
-                className="rounded border border-[var(--color-input-border-primary)] bg-[var(--color-container-background-primary)] px-3 py-2 font-mono text-xs text-[var(--color-text-primary)]"
+                className="font-mono text-xs"
               />
               <div>
                 <Button type="button" onClick={applyPaste} disabled={pasteText.trim() === ""}>

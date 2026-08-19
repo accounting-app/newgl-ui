@@ -62,28 +62,24 @@ export default function SignupPage() {
       </p>
 
       <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
-        <label className="flex flex-col gap-1">
-          <span className="text-sm text-[var(--color-text-primary)]">Email</span>
-          <InputField
-            type="email"
-            autoComplete="email"
-            required
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-          />
-        </label>
+        <InputField
+          label="Email"
+          type="email"
+          autoComplete="email"
+          required
+          value={email}
+          onChange={(event) => setEmail(event.target.value)}
+        />
 
-        <label className="flex flex-col gap-1">
-          <span className="text-sm text-[var(--color-text-primary)]">Password</span>
-          <InputField
-            type="password"
-            autoComplete="new-password"
-            required
-            minLength={6}
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-          />
-        </label>
+        <InputField
+          label="Password"
+          type="password"
+          autoComplete="new-password"
+          required
+          minLength={6}
+          value={password}
+          onChange={(event) => setPassword(event.target.value)}
+        />
 
         {error ? <p className="text-sm text-red-600">{error}</p> : null}
 

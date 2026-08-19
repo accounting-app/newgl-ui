@@ -15,6 +15,7 @@ import type { SelectFieldOption } from "@/components/bank-register/select-field"
 import { TablePagination } from "@/components/bank-register/table-pagination";
 import Link from "next/link";
 import { BookOpenText, Database, Download, FileUp, Funnel, Printer, Settings } from "lucide-react";
+import { IconButton } from "@/components/ui/icon-button";
 import { Tooltip } from "@/components/ui/tooltip";
 import {
   REGISTER_INFLOW_ROW_TYPES,
@@ -504,53 +505,27 @@ export function RegisterTable({
         </div>
         <div className="flex h-full items-center gap-4 text-[var(--color-icon-muted)]">
           <Tooltip label="Print">
-            <button
-              type="button"
-              className="flex h-full items-center hover:text-[var(--color-icon-secondary)]"
-              aria-label="Print"
-              onClick={handlePrintRegister}
-            >
-              <Printer className="h-[18px] w-[18px]" aria-hidden="true" />
-            </button>
+            <IconButton icon={Printer} label="Print" onClick={handlePrintRegister} />
           </Tooltip>
           <Tooltip label="Export">
-            <button
-              type="button"
-              className="flex h-full items-center hover:text-[var(--color-icon-secondary)]"
-              aria-label="Export"
-              onClick={handleExportRegister}
-            >
-              <Download className="h-[18px] w-[18px]" aria-hidden="true" />
-            </button>
+            <IconButton icon={Download} label="Export" onClick={handleExportRegister} />
           </Tooltip>
           <Tooltip label="Import">
-            <button
-              type="button"
-              className="relative flex h-full items-center hover:text-[var(--color-icon-secondary)]"
-              aria-label="Import"
-              onClick={onOpenImport}
-            >
-              <FileUp className="h-[18px] w-[18px]" aria-hidden="true" />
+            <span className="relative inline-flex">
+              <IconButton icon={FileUp} label="Import" onClick={onOpenImport} />
               {savedImportRowCount > 0 ? (
-                <span className="absolute -right-1.5 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-[var(--color-ui-primary)] px-1 text-[10px] font-medium leading-none text-white">
+                <span className="pointer-events-none absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-[var(--color-ui-primary)] px-1 text-[10px] font-medium leading-none text-white">
                   {savedImportRowCount}
                 </span>
               ) : null}
-            </button>
+            </span>
           </Tooltip>
           <Tooltip label="Journal Entry">
-            <button
-              type="button"
-              className="flex h-full items-center hover:text-[var(--color-icon-secondary)]"
-              aria-label="New Journal Entry"
-              onClick={onOpenJournalEntry}
-            >
-              <BookOpenText className="h-[18px] w-[18px]" aria-hidden="true" />
-            </button>
+            <IconButton icon={BookOpenText} label="New Journal Entry" onClick={onOpenJournalEntry} />
           </Tooltip>
           <Tooltip label="Manage .bean file">
             <Link
-              href="/settings/ledger"
+              href="/all-apps/ledger"
               className="flex h-full items-center hover:text-[var(--color-icon-secondary)]"
               aria-label="Manage .bean file"
             >
@@ -559,14 +534,11 @@ export function RegisterTable({
           </Tooltip>
           <div className="relative flex h-full items-center" data-settings-popover-root>
             <Tooltip label="Settings">
-              <button
-                type="button"
-                className="flex h-full items-center hover:text-[var(--color-icon-secondary)]"
-                aria-label="Settings"
+              <IconButton
+                icon={Settings}
+                label="Settings"
                 onClick={() => setIsSettingsPopoverOpen((current) => !current)}
-              >
-                <Settings className="h-[18px] w-[18px]" aria-hidden="true" />
-              </button>
+              />
             </Tooltip>
             {isSettingsPopoverOpen ? (
               <div className="dgrid-03 absolute">

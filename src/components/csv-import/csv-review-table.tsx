@@ -4,7 +4,10 @@ import { Sparkles, Trash2 } from "lucide-react";
 import { SelectField } from "@/components/bank-register/select-field";
 import type { SelectFieldOption } from "@/components/bank-register/select-field";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { IconButton } from "@/components/ui/icon-button";
 import { InputField } from "@/components/ui/input-field";
+import { RadioGroup } from "@/components/ui/radio-group";
 import type { ReviewRow, SignConvention } from "@/modules/accounting/domain/csv-import";
 import type { BankRule, ExcludedFeedRow, Transaction } from "@/modules/accounting/domain/models";
 
@@ -110,26 +113,15 @@ export function CsvReviewTable({
           expense transactions post as <strong>negative</strong> ones. Occasionally, some banks send files with
           this reversed. Do the transactions below correctly indicate income and expenses?
         </p>
-        <div className="flex flex-col gap-2">
-          <label className="flex items-center gap-2 text-sm text-[var(--color-text-primary)]">
-            <input
-              type="radio"
-              name="sign-convention"
-              checked={signConvention === "ORIGINAL"}
-              onChange={() => onSignConventionChange("ORIGINAL")}
-            />
-            Keep original values
-          </label>
-          <label className="flex items-center gap-2 text-sm text-[var(--color-text-primary)]">
-            <input
-              type="radio"
-              name="sign-convention"
-              checked={signConvention === "REVERSED"}
-              onChange={() => onSignConventionChange("REVERSED")}
-            />
-            Reverse all values
-          </label>
-        </div>
+        <RadioGroup
+          name="sign-convention"
+          value={signConvention}
+          onChange={(value) => onSignConventionChange(value as SignConvention)}
+          options={[
+            { value: "ORIGINAL", label: "Keep original values" },
+            { value: "REVERSED", label: "Reverse all values" }
+          ]}
+        />
       </div>
 
       <div className="flex items-center justify-between gap-4">
@@ -161,7 +153,7 @@ export function CsvReviewTable({
           <thead className="sticky top-0 bg-[var(--color-container-background-accent)]">
             <tr className="border-b border-[var(--color-divider-tertiary)]">
               <th className="px-3 py-2">
-                <input type="checkbox" checked={allChecked} onChange={(event) => toggleAll(event.target.checked)} />
+                <Checkbox checked={allChecked} onChange={(event) => toggleAll(event.target.checked)} />
               </th>
               <th className="px-3 py-2 text-left font-medium text-[var(--color-text-primary)]">Date</th>
               <th className="px-3 py-2 text-left font-medium text-[var(--color-text-primary)]">Description</th>
@@ -182,11 +174,7 @@ export function CsvReviewTable({
                   }`}
                 >
                   <td className="px-3 py-2 align-top">
-                    <input
-                      type="checkbox"
-                      checked={isChecked}
-                      onChange={(event) => toggleRow(row.clientRowId, event.target.checked)}
-                    />
+                    <Checkbox checked={isChecked} onChange={(event) => toggleRow(row.clientRowId, event.target.checked)} />
                   </td>
                   <td className="p-2 align-top">
                     <InputField
@@ -288,14 +276,12 @@ export function CsvReviewTable({
                     })()}
                   </td>
                   <td className="p-2 align-top text-center">
-                    <button
-                      type="button"
-                      aria-label="Delete row"
-                      className="text-[var(--color-icon-secondary)] hover:text-red-600"
+                    <IconButton
+                      icon={Trash2}
+                      label="Delete row"
+                      size="sm"
                       onClick={() => onRowDelete(row.clientRowId)}
-                    >
-                      <Trash2 className="h-4 w-4" aria-hidden="true" />
-                    </button>
+                    />
                     {onExcludeRow && !exclusionMatches?.has(row.clientRowId) && row.payee.trim() !== "" ? (
                       <button
                         type="button"

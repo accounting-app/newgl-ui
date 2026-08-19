@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { ArrowLeft, ChevronRight, X } from "lucide-react";
+import { IconButton } from "@/components/ui/icon-button";
 import { getServiceContainer } from "@/lib/services/service-container-v2";
 import { getTransactionsForAccount } from "@/lib/accounting/drill-down";
 import type { DrillTransaction } from "@/lib/accounting/drill-down";
@@ -344,22 +345,8 @@ export function DrillDownPanel({
 
           {/* Nav buttons */}
           <div className="flex shrink-0 items-center gap-0.5">
-            {stack.length > 1 && (
-              <button
-                onClick={onBack}
-                aria-label="Go back"
-                className="flex h-7 w-7 items-center justify-center rounded text-[var(--color-icon-secondary)] hover:bg-[var(--color-container-background-secondary)]"
-              >
-                <ArrowLeft className="h-4 w-4" />
-              </button>
-            )}
-            <button
-              onClick={onClose}
-              aria-label="Close panel"
-              className="flex h-7 w-7 items-center justify-center rounded text-[var(--color-icon-secondary)] hover:bg-[var(--color-container-background-secondary)]"
-            >
-              <X className="h-4 w-4" />
-            </button>
+            {stack.length > 1 && <IconButton icon={ArrowLeft} label="Go back" size="sm" onClick={onBack} />}
+            <IconButton icon={X} label="Close panel" size="sm" onClick={onClose} />
           </div>
         </div>
 

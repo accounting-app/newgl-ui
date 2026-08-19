@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import Image from "next/image";
+import { Card } from "@/components/ui/card";
 
 type AuthGroupLayoutProps = Readonly<{
   children: ReactNode;
@@ -21,9 +22,7 @@ export default function AuthGroupLayout({ children }: AuthGroupLayoutProps) {
             priority
           />
         </div>
-        <div className="rounded-xl border border-[var(--color-divider-tertiary)] bg-[var(--color-container-background-primary)] p-8">
-          {children}
-        </div>
+        <Card padding="lg">{children}</Card>
       </div>
     </main>
   );

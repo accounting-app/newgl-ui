@@ -2,9 +2,10 @@
 
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { InputField } from "@/components/ui/input-field";
 import { SelectField } from "@/components/bank-register/select-field";
-import { SettingsCard } from "@/components/settings/settings-card";
+import { useToast } from "@/components/ui/toast/toast-context";
 import { getServiceContainer } from "@/lib/services/service-container-v2";
 import type { Account, BankRule, BankRuleCondition, BankRuleField, BankRuleOperator } from "@/modules/accounting/domain/models";
 
@@ -91,6 +92,7 @@ function summarizeCondition(condition: BankRuleCondition): string {
 
 export function BankRulesPage() {
   const services = useMemo(() => getServiceContainer(), []);
+  const { toast } = useToast();
   const [rules, setRules] = useState<BankRule[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [loading, setLoading] = useState(true);
@@ -100,13 +102,10 @@ export function BankRulesPage() {
   const [targetAccountId, setTargetAccountId] = useState("");
   const [conditions, setConditions] = useState<DraftCondition[]>([emptyCondition()]);
   const [creating, setCreating] = useState(false);
-  const [createError, setCreateError] = useState<string | null>(null);
 
   const [busyId, setBusyId] = useState<string | null>(null);
 
   const [importing, setImporting] = useState(false);
-  const [importResult, setImportResult] = useState<string | null>(null);
-  const [importError, setImportError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const accountOptions = useMemo(
@@ -163,12 +162,11 @@ export function BankRulesPage() {
     if (!name.trim() || !targetAccountId) return;
     const validConditions = conditions.filter((c) => c.value.trim() !== "");
     if (validConditions.length === 0) {
-      setCreateError("Add at least one condition with a value.");
+      toast({ variant: "error", title: "Add at least one condition with a value." });
       return;
     }
 
     setCreating(true);
-    setCreateError(null);
     try {
       await services.bankRuleService.createRule({
         name: name.trim(),
@@ -180,12 +178,13 @@ export function BankRulesPage() {
           valueTo: c.operator === "between" ? c.valueTo.trim() || undefined : undefined
         }))
       });
+      toast({ variant: "success", title: "Rule created", description: `"${name.trim()}" was added.` });
       setName("");
       setTargetAccountId("");
       setConditions([emptyCondition()]);
       await loadAll();
     } catch (err) {
-      setCreateError(err instanceof Error ? err.message : "Could not create this rule");
+      toast({ variant: "error", title: "Could not create this rule", description: err instanceof Error ? err.message : undefined });
     } finally {
       setCreating(false);
     }
@@ -196,6 +195,9 @@ export function BankRulesPage() {
     try {
       await services.bankRuleService.updateRule(rule.id, { enabled: !rule.enabled });
       await loadAll();
+      toast({ variant: "success", title: rule.enabled ? "Rule disabled" : "Rule enabled", description: `"${rule.name}"` });
+    } catch (err) {
+      toast({ variant: "error", title: "Could not update this rule", description: err instanceof Error ? err.message : undefined });
     } finally {
       setBusyId(null);
     }
@@ -206,6 +208,9 @@ export function BankRulesPage() {
     try {
       await services.bankRuleService.deleteRule(rule.id);
       await loadAll();
+      toast({ variant: "success", title: "Rule deleted", description: `"${rule.name}" was removed.` });
+    } catch (err) {
+      toast({ variant: "error", title: "Could not delete this rule", description: err instanceof Error ? err.message : undefined });
     } finally {
       setBusyId(null);
     }
@@ -222,7 +227,6 @@ export function BankRulesPage() {
         valueTo: c.valueTo ?? ""
       }))
     );
-    setCreateError(null);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -235,12 +239,11 @@ export function BankRulesPage() {
     anchor.download = "bank-rules.json";
     anchor.click();
     URL.revokeObjectURL(url);
+    toast({ variant: "success", title: `Exported ${rules.length} rule${rules.length === 1 ? "" : "s"}` });
   }
 
   async function handleImportFile(file: File) {
     setImporting(true);
-    setImportResult(null);
-    setImportError(null);
     try {
       const text = await file.text();
       const parsed = JSON.parse(text) as unknown;
@@ -275,10 +278,17 @@ export function BankRulesPage() {
       }
 
       await loadAll();
-      setImportResult(`Imported ${created} of ${candidates.length} rule${candidates.length === 1 ? "" : "s"}.`);
-      if (failures.length > 0) setImportError(failures.join("\n"));
+      if (failures.length > 0) {
+        toast({
+          variant: "error",
+          title: `Imported ${created} of ${candidates.length} rule${candidates.length === 1 ? "" : "s"}`,
+          description: failures.join("\n")
+        });
+      } else {
+        toast({ variant: "success", title: `Imported ${created} rule${created === 1 ? "" : "s"}` });
+      }
     } catch (err) {
-      setImportError(err instanceof Error ? err.message : "Could not read this file.");
+      toast({ variant: "error", title: "Could not read this file", description: err instanceof Error ? err.message : undefined });
     } finally {
       setImporting(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -287,39 +297,40 @@ export function BankRulesPage() {
 
   return (
     <>
-      <SettingsCard
+      <Card
         title="New rule"
         description="Every condition must match (AND). Rules run alongside AI suggestions during CSV import — AI's suggestion is used by default when both apply, with the rule shown as an option to switch to instead."
+        className="mb-6"
       >
         <form onSubmit={handleCreate} className="flex flex-col gap-4">
           <div className="flex flex-wrap items-end gap-3">
-            <label className="flex flex-1 min-w-[200px] flex-col gap-1 text-xs text-[var(--color-icon-secondary)]">
-              Rule name
+            <div className="flex-1 min-w-[200px]">
               <InputField
+                label="Rule name"
                 type="text"
                 placeholder="e.g. Amazon over $500"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
               />
-            </label>
-            <label className="flex w-56 flex-col gap-1 text-xs text-[var(--color-icon-secondary)]">
-              Categorize as
+            </div>
+            <div className="w-56">
               <SelectField
+                label="Categorize as"
                 value={targetAccountId}
                 onChange={setTargetAccountId}
                 options={accountOptions}
                 placeholder="Select an account"
                 allowCustomValue={false}
               />
-            </label>
+            </div>
           </div>
 
           <div className="flex flex-col gap-2">
             {conditions.map((condition, index) => (
               <div key={index} className="flex flex-wrap items-end gap-2">
                 <div className="w-32">
-                  <p className="mb-1 text-[11px] text-[var(--color-icon-secondary)]">Field</p>
                   <SelectField
+                    label="Field"
                     value={condition.field}
                     onChange={(value) => {
                       const field = value as BankRuleField;
@@ -335,8 +346,8 @@ export function BankRulesPage() {
                   />
                 </div>
                 <div className="w-44">
-                  <p className="mb-1 text-[11px] text-[var(--color-icon-secondary)]">Condition</p>
                   <SelectField
+                    label="Condition"
                     value={condition.operator}
                     onChange={(value) => updateCondition(index, { operator: value as BankRuleOperator })}
                     options={operatorOptionsFor(condition.field)}
@@ -346,10 +357,8 @@ export function BankRulesPage() {
                   />
                 </div>
                 <div className="w-36">
-                  <p className="mb-1 text-[11px] text-[var(--color-icon-secondary)]">
-                    {condition.operator === "between" ? "From" : "Value"}
-                  </p>
                   <InputField
+                    label={condition.operator === "between" ? "From" : "Value"}
                     type={condition.field === "amount" ? "number" : "text"}
                     value={condition.value}
                     onChange={(e) => updateCondition(index, { value: e.target.value })}
@@ -357,8 +366,8 @@ export function BankRulesPage() {
                 </div>
                 {condition.operator === "between" ? (
                   <div className="w-36">
-                    <p className="mb-1 text-[11px] text-[var(--color-icon-secondary)]">To</p>
                     <InputField
+                      label="To"
                       type="number"
                       value={condition.valueTo}
                       onChange={(e) => updateCondition(index, { valueTo: e.target.value })}
@@ -382,16 +391,15 @@ export function BankRulesPage() {
             </div>
           </div>
 
-          {createError ? <p className="text-sm text-red-600">{createError}</p> : null}
           <div>
             <Button type="submit" disabled={creating || !name.trim() || !targetAccountId}>
               {creating ? "Creating…" : "Create rule"}
             </Button>
           </div>
         </form>
-      </SettingsCard>
+      </Card>
 
-      <SettingsCard title="Rules" description="Highest priority first. Disabled rules never match.">
+      <Card title="Rules" description="Highest priority first. Disabled rules never match.">
         <div className="mb-4 flex flex-wrap items-center gap-3 border-b border-[var(--color-divider-tertiary)] pb-4">
           <Button type="button" variant="secondary" onClick={handleExport} disabled={rules.length === 0}>
             Export rules
@@ -409,9 +417,7 @@ export function BankRulesPage() {
               if (file) handleImportFile(file);
             }}
           />
-          {importResult ? <p className="text-sm text-[var(--color-text-primary)]">{importResult}</p> : null}
         </div>
-        {importError ? <p className="mb-4 whitespace-pre-line text-sm text-red-600">{importError}</p> : null}
 
         {loading ? (
           <p className="text-sm text-[var(--color-text-primary)]">Loading…</p>
@@ -449,7 +455,7 @@ export function BankRulesPage() {
             ))}
           </ul>
         )}
-      </SettingsCard>
+      </Card>
     </>
   );
 }
