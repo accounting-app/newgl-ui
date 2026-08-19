@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Download, Plus, Trash2 } from "lucide-react";
+import Link from "next/link";
+import { ArrowLeft, Download, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { IconButton } from "@/components/ui/icon-button";
 import { InputField } from "@/components/ui/input-field";
@@ -78,6 +79,13 @@ export function UiKitShowcase() {
   return (
     <main className="min-h-screen bg-[var(--color-container-background-accent)] px-6 py-10 md:px-12">
       <div className="mx-auto w-full max-w-4xl">
+        <Link
+          href="/settings/ai"
+          className="mb-4 inline-flex items-center gap-1.5 text-sm text-[var(--color-link-text)] hover:underline"
+        >
+          <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+          Back to Settings
+        </Link>
         <h1 className="mb-1 text-2xl font-semibold text-[var(--color-text-global)]">Design system</h1>
         <p className="mb-10 text-sm text-[var(--color-text-primary)]">
           Every <code>ui/</code> component, in every variant, for visual QA. Dev-only -- 404s outside{" "}
