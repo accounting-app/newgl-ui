@@ -303,33 +303,33 @@ export function BankRulesPage() {
       >
         <form onSubmit={handleCreate} className="flex flex-col gap-4">
           <div className="flex flex-wrap items-end gap-3">
-            <label className="flex flex-1 min-w-[200px] flex-col gap-1 text-xs text-[var(--color-icon-secondary)]">
-              Rule name
+            <div className="flex-1 min-w-[200px]">
               <InputField
+                label="Rule name"
                 type="text"
                 placeholder="e.g. Amazon over $500"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
               />
-            </label>
-            <label className="flex w-56 flex-col gap-1 text-xs text-[var(--color-icon-secondary)]">
-              Categorize as
+            </div>
+            <div className="w-56">
               <SelectField
+                label="Categorize as"
                 value={targetAccountId}
                 onChange={setTargetAccountId}
                 options={accountOptions}
                 placeholder="Select an account"
                 allowCustomValue={false}
               />
-            </label>
+            </div>
           </div>
 
           <div className="flex flex-col gap-2">
             {conditions.map((condition, index) => (
               <div key={index} className="flex flex-wrap items-end gap-2">
                 <div className="w-32">
-                  <p className="mb-1 text-[11px] text-[var(--color-icon-secondary)]">Field</p>
                   <SelectField
+                    label="Field"
                     value={condition.field}
                     onChange={(value) => {
                       const field = value as BankRuleField;
@@ -345,8 +345,8 @@ export function BankRulesPage() {
                   />
                 </div>
                 <div className="w-44">
-                  <p className="mb-1 text-[11px] text-[var(--color-icon-secondary)]">Condition</p>
                   <SelectField
+                    label="Condition"
                     value={condition.operator}
                     onChange={(value) => updateCondition(index, { operator: value as BankRuleOperator })}
                     options={operatorOptionsFor(condition.field)}
@@ -356,10 +356,8 @@ export function BankRulesPage() {
                   />
                 </div>
                 <div className="w-36">
-                  <p className="mb-1 text-[11px] text-[var(--color-icon-secondary)]">
-                    {condition.operator === "between" ? "From" : "Value"}
-                  </p>
                   <InputField
+                    label={condition.operator === "between" ? "From" : "Value"}
                     type={condition.field === "amount" ? "number" : "text"}
                     value={condition.value}
                     onChange={(e) => updateCondition(index, { value: e.target.value })}
@@ -367,8 +365,8 @@ export function BankRulesPage() {
                 </div>
                 {condition.operator === "between" ? (
                   <div className="w-36">
-                    <p className="mb-1 text-[11px] text-[var(--color-icon-secondary)]">To</p>
                     <InputField
+                      label="To"
                       type="number"
                       value={condition.valueTo}
                       onChange={(e) => updateCondition(index, { valueTo: e.target.value })}
