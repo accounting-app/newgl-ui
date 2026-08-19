@@ -3,7 +3,10 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
+import { Palette } from "lucide-react";
 import { SETTINGS_GROUPS } from "@/constants/apps";
+
+const IS_DEV = process.env.NODE_ENV === "development";
 
 type SettingsLayoutProps = Readonly<{
   children: ReactNode;
@@ -49,6 +52,28 @@ export default function SettingsLayout({ children }: SettingsLayoutProps) {
               </div>
             </div>
           ))}
+
+          {IS_DEV ? (
+            <div>
+              <p className="mb-2 px-2 text-[11px] font-semibold uppercase tracking-wide text-[var(--color-icon-secondary)]">
+                Developer
+              </p>
+              <div className="flex flex-col gap-0.5">
+                <Link
+                  href="/dev/ui-kit"
+                  aria-current={pathname.startsWith("/dev/ui-kit") ? "page" : undefined}
+                  className={`flex items-center gap-2.5 rounded-lg px-2 py-2 text-sm font-medium transition-colors ${
+                    pathname.startsWith("/dev/ui-kit")
+                      ? "bg-[var(--color-action-passive-subtle-active)] text-[var(--color-text-global)]"
+                      : "text-[var(--color-text-primary)] hover:bg-[var(--color-action-passive-subtle-hover)] hover:text-[var(--color-text-global)]"
+                  }`}
+                >
+                  <Palette className="h-4 w-4 text-[var(--color-icon-secondary)]" aria-hidden="true" />
+                  Design system
+                </Link>
+              </div>
+            </div>
+          ) : null}
         </nav>
       </aside>
 
