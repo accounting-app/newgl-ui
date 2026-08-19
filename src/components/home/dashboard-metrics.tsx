@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ArrowDown, ArrowUp, Sparkles } from "lucide-react";
 import { SelectField } from "@/components/bank-register/select-field";
+import { Card } from "@/components/ui/card";
 import { BASE_API_URL } from "@/configuration";
 import { request } from "@/lib/services/http-service-container";
 import { getServiceContainer } from "@/lib/services/service-container-v2";
@@ -267,7 +268,7 @@ export function DashboardMetrics() {
         {/* Cash flow -- in place of QBO's payment-request funnel, since this
             app has no invoicing/get-paid feature: money in, money out, net,
             styled the same way (connected step cards). */}
-        <div className="rounded-xl border border-[var(--color-divider-tertiary)] bg-[var(--color-container-background-primary)] p-6 md:col-span-2">
+        <Card className="md:col-span-2">
           <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-[var(--color-icon-secondary)]">
             Cash flow
           </p>
@@ -300,10 +301,10 @@ export function DashboardMetrics() {
               </div>
             </div>
           </div>
-        </div>
+        </Card>
 
         {/* Bank accounts */}
-        <div className="rounded-xl border border-[var(--color-divider-tertiary)] bg-[var(--color-container-background-primary)] p-6">
+        <Card>
           <div className="mb-1 flex items-center justify-between">
             <p className="text-xs font-semibold uppercase tracking-wide text-[var(--color-icon-secondary)]">
               Bank accounts
@@ -337,12 +338,12 @@ export function DashboardMetrics() {
           <Link href="/register" className="mt-3 inline-block text-xs text-[var(--color-link-action)] hover:underline">
             Go to registers
           </Link>
-        </div>
+        </Card>
       </div>
 
       <div className="grid gap-4 md:grid-cols-3">
         {/* Profit & Loss */}
-        <div className="rounded-xl border border-[var(--color-divider-tertiary)] bg-[var(--color-container-background-primary)] p-6">
+        <Card>
           <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-[var(--color-icon-secondary)]">
             Profit &amp; loss
           </p>
@@ -371,10 +372,10 @@ export function DashboardMetrics() {
           >
             View full report
           </Link>
-        </div>
+        </Card>
 
         {/* Expenses donut */}
-        <div className="rounded-xl border border-[var(--color-divider-tertiary)] bg-[var(--color-container-background-primary)] p-6">
+        <Card>
           <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-[var(--color-icon-secondary)]">
             Expenses
           </p>
@@ -408,10 +409,10 @@ export function DashboardMetrics() {
           >
             View expense report
           </Link>
-        </div>
+        </Card>
 
         {/* AI usage -- real data, standing in for QBO's lending promo slot */}
-        <div className="rounded-xl border border-[var(--color-divider-tertiary)] bg-[var(--color-container-background-primary)] p-6">
+        <Card>
           <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-[var(--color-icon-secondary)]">AI</p>
           <div className="mb-3 inline-flex rounded-lg bg-[var(--color-highlight-badge-background)] p-2 text-[var(--color-highlight-badge-text)]">
             <Sparkles className="h-5 w-5" aria-hidden="true" />
@@ -445,7 +446,7 @@ export function DashboardMetrics() {
           >
             Manage AI settings
           </Link>
-        </div>
+        </Card>
       </div>
     </section>
   );
