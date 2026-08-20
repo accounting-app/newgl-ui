@@ -40,7 +40,7 @@ export const ACCOUNT_ROOT_GROUPS: { key: string; label: string; categories: Set<
   {
     key: "liabilities",
     label: "Liabilities",
-    categories: new Set(["CREDIT_CARD", "OTHER_CURRENT_LIABILITY", "LONG_TERM_LIABILITY"])
+    categories: new Set(["CREDIT_CARD", "ACCOUNTS_PAYABLE", "OTHER_CURRENT_LIABILITY", "LONG_TERM_LIABILITY"])
   },
   { key: "equity", label: "Equity", categories: new Set(["EQUITY"]) },
   { key: "income", label: "Income", categories: new Set(["INCOME", "OTHER_INCOME"]) },

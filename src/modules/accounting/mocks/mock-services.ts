@@ -53,6 +53,7 @@ function emit(event: LedgerDomainEvent): void {
 }
 
 const ACCOUNT_TYPE_BY_CATEGORY: Record<Account["category"], ChartOfAccount["accountType"]> = {
+  ACCOUNTS_PAYABLE: "LIABILITY",
   ACCOUNTS_RECEIVABLE: "ASSET",
   BANK: "ASSET",
   CREDIT_CARD: "LIABILITY",
@@ -593,6 +594,7 @@ export class MockTransactionService implements TransactionService {
       type: input.type,
       status: "DRAFT",
       transactionDate: input.transactionDate,
+      dueDate: input.dueDate,
       referenceNumber: input.referenceNumber,
       memo: input.memo,
       payee: input.payee,

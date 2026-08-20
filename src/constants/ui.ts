@@ -4,6 +4,7 @@ import type { Account, RegisterEntry } from "@/modules/accounting/domain/models"
 export const DEFAULT_TOP_HEADER_USER_NAME = "John Doe";
 
 export const ACCOUNT_CATEGORY_LABELS: Record<Account["category"], string> = {
+  ACCOUNTS_PAYABLE: "Accounts Payable",
   ACCOUNTS_RECEIVABLE: "Accounts Receivable",
   BANK: "Bank",
   CREDIT_CARD: "Credit Card",
