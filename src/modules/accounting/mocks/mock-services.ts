@@ -536,6 +536,17 @@ export class MockAccountService implements AccountService {
     account.updatedAt = nowIso();
   }
 
+  async deleteAccount(id: string): Promise<void> {
+    const account = requireAccount(this.store, id);
+    const hasActivity = this.store.transactions.some((transaction) =>
+      transaction.postings.some((posting) => posting.accountId === id)
+    );
+    if (hasActivity) {
+      throw new Error(`"${account.name}" has transaction activity and can't be deleted -- archive it instead.`);
+    }
+    this.store.accounts = this.store.accounts.filter((item) => item.id !== id);
+  }
+
   async getAccountById(id: string): Promise<Account> {
     return requireAccount(this.store, id);
   }

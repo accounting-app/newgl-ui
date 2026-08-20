@@ -165,6 +165,10 @@ export class HttpAccountService implements AccountService {
     });
   }
 
+  async deleteAccount(id: string): Promise<void> {
+    await request(this.baseUrl, `/accounts/${id}`, { method: "DELETE" });
+  }
+
   getAccountById(id: string): Promise<Account> {
     return request(this.baseUrl, `/accounts/${id}`);
   }

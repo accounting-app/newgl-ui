@@ -53,7 +53,7 @@ export function ChartOfAccountsPage() {
   const [newOpeningBalance, setNewOpeningBalance] = useState("");
   const [creating, setCreating] = useState(false);
 
-  const [archivingId, setArchivingId] = useState<string | null>(null);
+  const [busyAccountId, setBusyAccountId] = useState<string | null>(null);
   const [collapsedNames, setCollapsedNames] = useState<Set<string>>(new Set());
 
   function toggleCollapse(fullName: string) {
@@ -132,7 +132,7 @@ export function ChartOfAccountsPage() {
   }
 
   async function handleArchive(account: Account) {
-    setArchivingId(account.id);
+    setBusyAccountId(account.id);
     try {
       await services.accountService.updateAccount(account.id, { status: "ARCHIVED" });
       await loadAccounts();
@@ -140,7 +140,20 @@ export function ChartOfAccountsPage() {
     } catch (err) {
       toast({ variant: "error", title: "Could not archive this account", description: err instanceof Error ? err.message : undefined });
     } finally {
-      setArchivingId(null);
+      setBusyAccountId(null);
+    }
+  }
+
+  async function handleDelete(account: Account) {
+    setBusyAccountId(account.id);
+    try {
+      await services.accountService.deleteAccount(account.id);
+      await loadAccounts();
+      toast({ variant: "success", title: "Account deleted", description: `"${account.name}" was removed.` });
+    } catch (err) {
+      toast({ variant: "error", title: "Could not delete this account", description: err instanceof Error ? err.message : undefined });
+    } finally {
+      setBusyAccountId(null);
     }
   }
 
@@ -276,7 +289,8 @@ export function ChartOfAccountsPage() {
                     collapsedNames={collapsedNames}
                     onToggleCollapse={toggleCollapse}
                     onArchive={handleArchive}
-                    archivingId={archivingId}
+                    onDelete={handleDelete}
+                    busyAccountId={busyAccountId}
                   />
                 )
               )}
@@ -295,7 +309,8 @@ function SectionRows({
   collapsedNames,
   onToggleCollapse,
   onArchive,
-  archivingId
+  onDelete,
+  busyAccountId
 }: {
   label: string;
   rows: HierarchyRow[];
@@ -303,7 +318,8 @@ function SectionRows({
   collapsedNames: Set<string>;
   onToggleCollapse: (fullName: string) => void;
   onArchive: (account: Account) => void;
-  archivingId: string | null;
+  onDelete: (account: Account) => void;
+  busyAccountId: string | null;
 }) {
   return (
     <>
@@ -354,9 +370,14 @@ function SectionRows({
             </Table.Cell>
             <Table.Cell align="right">
               {account ? (
-                <Button variant="secondary" size="sm" onClick={() => onArchive(account)} disabled={archivingId === account.id}>
-                  {archivingId === account.id ? "Archiving…" : "Archive"}
-                </Button>
+                <div className="flex justify-end gap-1.5">
+                  <Button variant="secondary" size="sm" onClick={() => onArchive(account)} disabled={busyAccountId === account.id}>
+                    {busyAccountId === account.id ? "Archiving…" : "Archive"}
+                  </Button>
+                  <Button variant="destructive" size="sm" onClick={() => onDelete(account)} disabled={busyAccountId === account.id}>
+                    {busyAccountId === account.id ? "Deleting…" : "Delete"}
+                  </Button>
+                </div>
               ) : null}
             </Table.Cell>
           </Table.Row>
