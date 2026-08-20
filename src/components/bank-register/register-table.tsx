@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AddTransactionForm } from "@/components/bank-register/add-transaction-form";
 import { ActionToolbar } from "@/components/bank-register/action-toolbar";
 import { EditTransactionForm } from "@/components/bank-register/edit-transaction-form";
@@ -45,6 +45,8 @@ import { TriangleArrowDownIcon } from "../icons/triangle-arrow-down-icon";
 
 type RegisterTableProps = {
   entries: RegisterEntry[];
+  /** Deep-link from another screen (e.g. a duplicate-transaction warning during CSV import): opens this entry's inline editor and jumps to its page once entries have loaded. */
+  deepLinkTransactionId?: string | null;
   draftTransaction: DraftTransactionForm | null;
   draftErrors: DraftTransactionErrors;
   isSavingDraft: boolean;
@@ -97,6 +99,7 @@ function formatTransactionTypeLabel(transactionType: RegisterEntry["transactionT
 
 export function RegisterTable({
   entries,
+  deepLinkTransactionId,
   draftTransaction,
   draftErrors,
   isSavingDraft,
@@ -145,6 +148,7 @@ export function RegisterTable({
   const [isSettingsPopoverOpen, setIsSettingsPopoverOpen] = useState(false);
   const [rowsPerPage, setRowsPerPage] = useState<number>(40);
   const [currentPage, setCurrentPage] = useState<number>(1);
+  const appliedDeepLinkRef = useRef(false);
 
   const payeeOptions = useMemo(
     () =>
@@ -285,6 +289,20 @@ export function RegisterTable({
       setCurrentPage(totalPages);
     }
   }, [currentPage, totalPages]);
+
+  // Deep-link (e.g. a duplicate-transaction warning during CSV import):
+  // once entries have loaded, jump to the page containing the target entry
+  // and open its inline editor. Gated on a ref, not just the prop, so a
+  // later entries refresh (e.g. after saving) can't re-fire this.
+  useEffect(() => {
+    if (appliedDeepLinkRef.current || !deepLinkTransactionId || filteredEntries.length === 0) return;
+    const index = filteredEntries.findIndex((entry) => entry.transactionId === deepLinkTransactionId);
+    if (index >= 0) {
+      setCurrentPage(Math.floor(index / rowsPerPage) + 1);
+      openRowEditor(filteredEntries[index]);
+    }
+    appliedDeepLinkRef.current = true;
+  }, [deepLinkTransactionId, filteredEntries, rowsPerPage]);
 
   useEffect(() => {
     function handleOutsideClick(event: MouseEvent) {

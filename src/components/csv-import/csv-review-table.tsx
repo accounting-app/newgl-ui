@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { Sparkles, Trash2 } from "lucide-react";
 import { SelectField } from "@/components/bank-register/select-field";
 import type { SelectFieldOption } from "@/components/bank-register/select-field";
@@ -200,7 +201,16 @@ export function CsvReviewTable({
                     {exclusionMatches?.has(row.clientRowId) ? (
                       <p className="mt-0.5 text-[11px] text-[var(--color-icon-secondary)]">Previously excluded</p>
                     ) : duplicateMatches?.has(row.clientRowId) ? (
-                      <p className="mt-0.5 text-[11px] text-[var(--color-icon-secondary)]">Looks like a duplicate</p>
+                      <p className="mt-0.5 text-[11px] text-[var(--color-icon-secondary)]">
+                        Looks like a duplicate ·{" "}
+                        <Link
+                          href={`/register?account=${mainAccountId}&tx=${duplicateMatches.get(row.clientRowId)?.id}`}
+                          target="_blank"
+                          className="text-[var(--color-link-text)] hover:underline"
+                        >
+                          View transaction
+                        </Link>
+                      </p>
                     ) : null}
                   </td>
                   <td className="p-2 align-top">
