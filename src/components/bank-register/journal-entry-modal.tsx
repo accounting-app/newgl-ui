@@ -56,6 +56,10 @@ function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
+function csvField(value: string): string {
+  return /["\n,]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
+}
+
 export function JournalEntryModal({ open, accountOptions, isSaving, onClose, onSave }: JournalEntryModalProps) {
   const [date, setDate] = useState(todayIso);
   const [referenceNumber, setReferenceNumber] = useState("");
@@ -162,6 +166,29 @@ export function JournalEntryModal({ open, accountOptions, isSaving, onClose, onS
     setPasteOpen(false);
   }
 
+  function handleExportCsv() {
+    const header = ["Date", "Ref", "Payee", "Memo", "Account", "Debit", "Credit"];
+    const rows = lines
+      .filter((line) => line.accountId || line.debit || line.credit || line.memo)
+      .map((line) => [
+        date,
+        referenceNumber,
+        payee,
+        memo,
+        accountLabelById.get(line.accountId) ?? "",
+        line.debit,
+        line.credit
+      ]);
+    const csv = [header, ...rows].map((row) => row.map(csvField).join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `journal-entry-${date || todayIso()}.csv`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }
+
   async function handleSave() {
     if (!canSave) return;
     setSaveError(null);
@@ -213,9 +240,14 @@ export function JournalEntryModal({ open, accountOptions, isSaving, onClose, onS
 
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-semibold text-[var(--color-text-primary)]">Lines</h2>
-            <Button type="button" variant="secondary" onClick={() => setPasteOpen((open) => !open)}>
-              {pasteOpen ? "Cancel paste" : "Paste from Excel/CSV"}
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button type="button" variant="secondary" onClick={handleExportCsv} disabled={nonZeroLines.length === 0}>
+                Export CSV
+              </Button>
+              <Button type="button" variant="secondary" onClick={() => setPasteOpen((open) => !open)}>
+                {pasteOpen ? "Cancel paste" : "Paste from Excel/CSV"}
+              </Button>
+            </div>
           </div>
 
           {pasteOpen ? (
