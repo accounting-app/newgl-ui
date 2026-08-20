@@ -510,6 +510,7 @@ export function useBankRegister() {
   const createJournalEntry = useCallback(
     async (input: {
       date: string;
+      dueDate: string;
       referenceNumber: string;
       payee: string;
       memo: string;
@@ -518,6 +519,7 @@ export function useBankRegister() {
       const transaction = await services.transactionService.createTransaction({
         type: "JOURNAL_ENTRY",
         transactionDate: input.date,
+        dueDate: input.dueDate.trim() || undefined,
         referenceNumber: input.referenceNumber.trim() || generateNextRefNumber(existingRefNumbers),
         memo: input.memo.trim() || undefined,
         payee: input.payee.trim() || undefined,

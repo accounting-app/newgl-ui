@@ -1,7 +1,7 @@
-import { BarChart2, Scale, ListChecks, FileSearch, Users } from "lucide-react";
+import { BarChart2, Scale, ListChecks, FileSearch, Users, Clock } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
-export type ReportType = "profit_loss" | "balance_sheet" | "trial_balance" | "pl_detail" | "by_payee";
+export type ReportType = "profit_loss" | "balance_sheet" | "trial_balance" | "pl_detail" | "by_payee" | "aging";
 
 export type ReportNavItem = {
   type: ReportType;
@@ -51,5 +51,12 @@ export const REPORT_NAV_ITEMS: ReportNavItem[] = [
     label: "By Payee",
     description: "Income and expenses grouped by payee instead of account.",
     icon: Users
+  },
+  {
+    type: "aging",
+    href: "/reports/aging",
+    label: "A/R & A/P Aging",
+    description: "Outstanding receivables and payables, bucketed by how overdue they are.",
+    icon: Clock
   }
 ];

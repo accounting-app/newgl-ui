@@ -25,6 +25,7 @@ type JournalEntryModalProps = {
   onClose: () => void;
   onSave: (input: {
     date: string;
+    dueDate: string;
     referenceNumber: string;
     payee: string;
     memo: string;
@@ -62,6 +63,7 @@ function csvField(value: string): string {
 
 export function JournalEntryModal({ open, accountOptions, isSaving, onClose, onSave }: JournalEntryModalProps) {
   const [date, setDate] = useState(todayIso);
+  const [dueDate, setDueDate] = useState("");
   const [referenceNumber, setReferenceNumber] = useState("");
   const [payee, setPayee] = useState("");
   const [memo, setMemo] = useState("");
@@ -86,6 +88,7 @@ export function JournalEntryModal({ open, accountOptions, isSaving, onClose, onS
 
   function resetAndClose() {
     setDate(todayIso());
+    setDueDate("");
     setReferenceNumber("");
     setPayee("");
     setMemo("");
@@ -201,7 +204,7 @@ export function JournalEntryModal({ open, accountOptions, isSaving, onClose, onS
       };
     });
     try {
-      await onSave({ date, referenceNumber, payee, memo, lines: postingLines });
+      await onSave({ date, dueDate, referenceNumber, payee, memo, lines: postingLines });
       resetAndClose();
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : "Failed to save journal entry.");
@@ -219,10 +222,14 @@ export function JournalEntryModal({ open, accountOptions, isSaving, onClose, onS
 
       <div className="flex-1 overflow-auto px-6 py-8">
         <div className="mx-auto flex max-w-4xl flex-col gap-5">
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-5">
             <label className="flex flex-col gap-1 text-xs text-[var(--color-icon-secondary)]">
               Date
               <InputField type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+            </label>
+            <label className="flex flex-col gap-1 text-xs text-[var(--color-icon-secondary)]">
+              Due date
+              <InputField type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
             </label>
             <label className="flex flex-col gap-1 text-xs text-[var(--color-icon-secondary)]">
               Ref No
