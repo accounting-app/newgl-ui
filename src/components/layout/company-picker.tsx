@@ -144,7 +144,7 @@ export function CompanyPicker() {
                 </div>
               </div>
             ) : (
-              <div key={company.name} role="menuitem" className="group flex w-full items-center justify-between px-3 py-2 text-left text-sm">
+              <div key={company.name} role="menuitem" className="flex w-full items-center justify-between px-3 py-2 text-left text-sm">
                 <button
                   type="button"
                   onClick={() => handleSwitch(company.name)}
@@ -164,7 +164,7 @@ export function CompanyPicker() {
                       setDeletingName(company.name);
                       setDeleteError(null);
                     }}
-                    className="rounded p-1 text-[var(--color-icon-secondary)] opacity-0 transition-opacity hover:bg-[var(--color-action-passive-subtle-hover)] hover:text-red-600 group-hover:opacity-100"
+                    className="rounded p-1 text-[var(--color-icon-secondary)] transition-colors hover:bg-[var(--color-action-passive-subtle-hover)] hover:text-red-600"
                   >
                     <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
                   </button>

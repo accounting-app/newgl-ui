@@ -140,12 +140,12 @@
   --color-action-passive-subtle-active: rgba(11, 11, 18, 0.12);
   --color-action-passive-subtle-hover: rgba(11, 11, 18, 0.06);
   --color-container-background-primary: #ffffff;
-  --color-container-background-secondary: #f0f0f7;
-  --color-container-background-accent: #f6f7fb;
-  --color-divider-tertiary: #e7e7ee;
-  --color-container-border-secondary: #d6d6e2;
-  --color-container-border-primary: #c7c7d6;
-  --color-input-border-primary: #d6d6e2;
+  --color-container-background-secondary: #eeecfa;
+  --color-container-background-accent: #f5f3fd;
+  --color-divider-tertiary: #e3e0f3;
+  --color-container-border-secondary: #cdc7ea;
+  --color-container-border-primary: #b8b0e0;
+  --color-input-border-primary: #cdc7ea;
   --color-shadow: #0b0b12;
   --color-link-text: #635bff;
   --gbsg-nav-bar-icon-color: #0b0b12;
@@ -189,12 +189,12 @@
   --color-action-passive-subtle-active: rgba(60, 59, 110, 0.16);
   --color-action-passive-subtle-hover: rgba(60, 59, 110, 0.08);
   --color-container-background-primary: #ffffff;
-  --color-container-background-secondary: #eef2fb;
-  --color-container-background-accent: #f4f7fd;
-  --color-divider-tertiary: #cdd8ec;
-  --color-container-border-secondary: #b7c4e0;
+  --color-container-background-secondary: #eef0f2;
+  --color-container-background-accent: #f8f8f7;
+  --color-divider-tertiary: #d8d4c8;
+  --color-container-border-secondary: #b8c2d6;
   --color-container-border-primary: #9fb0d6;
-  --color-input-border-primary: #b7c4e0;
+  --color-input-border-primary: #b8c2d6;
   --color-shadow: #0a1f44;
   --color-link-text: #1e5bb8;
   --gbsg-nav-bar-icon-color: #0a1f44;
@@ -203,21 +203,21 @@
   --color-sidebar-background: #ffffff;
   --color-input-background: #ffffff;
   --color-input-text: #0a1f44;
-  --color-input-disabled-border: #e3e9f6;
-  --color-input-disabled-background: #f4f7fd;
+  --color-input-disabled-border: #e3e5e0;
+  --color-input-disabled-background: #f8f8f7;
   --color-input-disabled-text: #97a3bd;
   --color-button-gradient-from: #ffffff;
-  --color-button-gradient-to: #f4f7fd;
+  --color-button-gradient-to: #f4f5f2;
   --color-button-border: #9fb0d6;
-  --color-action-bar-background: #eef2fb;
-  --color-quickadd-background: #f4f7fd;
+  --color-action-bar-background: #eef0f2;
+  --color-quickadd-background: #f8f8f7;
   --color-quickadd-button-text: #5a6a8a;
   --color-form-row-background: #e7ecfa;
   --color-form-row-border: #cdd8ec;
-  --color-table-row-hover: #eef2fb;
-  --color-table-row-secondary: #f8f9fc;
-  --color-table-row-secondary-hover: #e7ecfa;
-  --color-icon-muted: #b7c4e0;
+  --color-table-row-hover: #f6eef0;
+  --color-table-row-secondary: #f8f9f7;
+  --color-table-row-secondary-hover: #eef0f2;
+  --color-icon-muted: #b8c2d6;
   --color-highlight-badge-background: #e7ecfa;
   --color-highlight-badge-text: #3c3b6e;
   --color-link-action: #1e5bb8;
@@ -227,6 +227,38 @@
   --color-avatar-background: #3c3b6e;
   --color-report-toggle-active: #3c3b6e;
 }
+
+/*
+  Structural differentiators for Modern vs. America 250 -- both skins
+  already carry different accent hues (violet vs. red/navy) via the
+  token blocks above, but that alone read as "the same layout, different
+  color" side by side. These add a shape/edge treatment unique to each,
+  the same way PlainGL's own skins differ in more than just accent:
+  Modern gets a soft-shadow, pill-shaped-active-icon "no hard lines"
+  feel; America 250 gets a bold flag-style red sidebar edge and
+  sharp-cornered active icon.
+*/
+.modern .side-nav {
+  border-right: none;
+  box-shadow: 1px 0 16px rgba(11, 11, 18, 0.07);
+}
+.modern .top-header {
+  box-shadow: 0 1px 12px rgba(11, 11, 18, 0.05);
+}
+.modern .side-nav-icon-shell-active {
+  border-radius: var(--radius-full);
+}
+
+.america250 .side-nav {
+  border-right: 3px solid #b22234;
+}
+.america250 .top-header {
+  box-shadow: inset 0 -2px 0 #3c3b6e;
+}
+.america250 .side-nav-icon-shell-active {
+  border-radius: var(--radius-x-small);
+}
+
 /*
   Use this wrapper class on any container where you want strong overrides:
   <div className="tw-override">...</div>
