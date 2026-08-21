@@ -8,6 +8,7 @@ import { InputField } from "@/components/ui/input-field";
 import { REPORT_NAV_ITEMS } from "@/constants/reports";
 import { REPORT_USER_NAME } from "@/constants/ui";
 import { getServiceContainer } from "@/lib/services/service-container-v2";
+import { AGING_BUCKETS, computeAging, type AgingBucket, type AgingRow } from "@/modules/accounting/domain/aging";
 import type { Account, Transaction } from "@/modules/accounting/domain/models";
 
 function isoDate(date: Date): string {
@@ -26,82 +27,10 @@ function formatMoney(value: number): string {
   });
 }
 
-type Bucket = "current" | "d1_30" | "d31_60" | "d61_90" | "d90plus";
-
-const BUCKETS: { key: Bucket; label: string }[] = [
-  { key: "current", label: "Current" },
-  { key: "d1_30", label: "1-30" },
-  { key: "d31_60", label: "31-60" },
-  { key: "d61_90", label: "61-90" },
-  { key: "d90plus", label: "90+" }
-];
-
-function bucketForAge(days: number): Bucket {
-  if (days <= 0) return "current";
-  if (days <= 30) return "d1_30";
-  if (days <= 60) return "d31_60";
-  if (days <= 90) return "d61_90";
-  return "d90plus";
-}
-
-function daysBetween(from: string, to: string): number {
-  const a = new Date(`${from}T00:00:00`);
-  const b = new Date(`${to}T00:00:00`);
-  return Math.round((b.getTime() - a.getTime()) / 86_400_000);
-}
-
-type AgingRow = { payee: string; buckets: Record<Bucket, number>; total: number };
-
-/**
- * Buckets each posting to an A/R or A/P account by the age of its due date
- * (falling back to the transaction date when unset), grouped by payee --
- * same anchor PlainGL's aging report uses. This ages individual postings,
- * not matched/netted invoice-vs-payment pairs (no invoice-matching exists
- * in this app): a payment posted today lands in "Current" as a negative
- * amount for that payee, offsetting an older invoice elsewhere in their
- * row. The per-payee Total column is always the correct net balance;
- * individual bucket columns are a reasonable approximation, not a precise
- * "which invoice is overdue" breakdown.
- */
-function computeAging(
-  accounts: Account[],
-  transactions: Transaction[],
-  category: "ACCOUNTS_RECEIVABLE" | "ACCOUNTS_PAYABLE",
-  asOfDate: string
-): AgingRow[] {
-  const targetAccounts = new Map(accounts.filter((a) => a.category === category).map((a) => [a.id, a]));
-  const isDebitNormal = category === "ACCOUNTS_RECEIVABLE";
-  const rows = new Map<string, Record<Bucket, number>>();
-
-  transactions.forEach((transaction) => {
-    const ageAnchor = transaction.dueDate || transaction.transactionDate;
-    if (ageAnchor > asOfDate) return;
-    transaction.postings.forEach((posting) => {
-      const account = targetAccounts.get(posting.accountId);
-      if (!account) return;
-      const impact = (posting.type === "DEBIT") === isDebitNormal ? posting.amount : -posting.amount;
-      const payee = transaction.payee?.trim() || account.name;
-      const bucket = bucketForAge(daysBetween(ageAnchor, asOfDate));
-      const existing = rows.get(payee) ?? { current: 0, d1_30: 0, d31_60: 0, d61_90: 0, d90plus: 0 };
-      existing[bucket] += impact;
-      rows.set(payee, existing);
-    });
-  });
-
-  return [...rows.entries()]
-    .map(([payee, buckets]) => ({
-      payee,
-      buckets,
-      total: BUCKETS.reduce((sum, b) => sum + buckets[b.key], 0)
-    }))
-    .filter((row) => Math.abs(row.total) > 0.0001)
-    .sort((a, b) => b.total - a.total);
-}
-
 function AgingTable({ title, rows }: { title: string; rows: AgingRow[] }) {
-  const totals = BUCKETS.reduce(
+  const totals = AGING_BUCKETS.reduce(
     (acc, b) => ({ ...acc, [b.key]: rows.reduce((sum, r) => sum + r.buckets[b.key], 0) }),
-    {} as Record<Bucket, number>
+    {} as Record<AgingBucket, number>
   );
   const grandTotal = rows.reduce((sum, r) => sum + r.total, 0);
 
@@ -117,7 +46,7 @@ function AgingTable({ title, rows }: { title: string; rows: AgingRow[] }) {
           <thead>
             <tr className="border-b border-[var(--color-divider-tertiary)] bg-[var(--color-container-background-accent)]">
               <th className="px-3 py-1 text-left font-medium text-[var(--color-text-primary)]">Payee</th>
-              {BUCKETS.map((b) => (
+              {AGING_BUCKETS.map((b) => (
                 <th key={b.key} className="px-3 py-1 text-right font-medium text-[var(--color-text-primary)]">
                   {b.label}
                 </th>
@@ -129,7 +58,7 @@ function AgingTable({ title, rows }: { title: string; rows: AgingRow[] }) {
             {rows.map((row) => (
               <tr key={row.payee} className="border-b border-[var(--color-container-background-secondary)]">
                 <td className="px-3 py-1 text-[var(--color-text-primary)]">{row.payee}</td>
-                {BUCKETS.map((b) => (
+                {AGING_BUCKETS.map((b) => (
                   <td key={b.key} className="px-3 py-1 text-right text-[var(--color-text-primary)]">
                     {row.buckets[b.key] !== 0 ? formatMoney(row.buckets[b.key]) : "—"}
                   </td>
@@ -143,7 +72,7 @@ function AgingTable({ title, rows }: { title: string; rows: AgingRow[] }) {
           <tfoot>
             <tr className="border-t-2 border-[var(--color-divider-tertiary)] bg-[var(--color-report-row-alt)] font-bold text-[var(--color-text-primary)]">
               <td className="px-3 py-1">Total</td>
-              {BUCKETS.map((b) => (
+              {AGING_BUCKETS.map((b) => (
                 <td key={b.key} className="px-3 py-1 text-right">
                   {formatMoney(totals[b.key])}
                 </td>

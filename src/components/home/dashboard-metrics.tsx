@@ -10,6 +10,7 @@ import { request } from "@/lib/services/http-service-container";
 import { getServiceContainer } from "@/lib/services/service-container-v2";
 import { useTenant } from "@/lib/tenant/tenant-provider";
 import { DEBIT_NORMAL_CATEGORIES } from "@/modules/accounting/domain/accounting-reports";
+import { computeAging, overdueTotal } from "@/modules/accounting/domain/aging";
 import type { Account, Transaction } from "@/modules/accounting/domain/models";
 
 type Preset = "this_month" | "this_quarter" | "ytd" | "this_year" | "last_year";
@@ -190,6 +191,18 @@ export function DashboardMetrics() {
   const expenseChangePercent = percentChange(expenses, priorExpenses);
   const maxFlow = Math.max(income, expenses, Math.abs(netIncome), 1);
 
+  // Independent of the period selector above -- "what's overdue as of today"
+  // doesn't have a "this quarter" reading the way cash flow does, same as
+  // PlainGL's own dashboard "needs attention" panel.
+  const overdueAR = useMemo(() => {
+    const today = isoDate(new Date());
+    return overdueTotal(computeAging(accounts, transactions, "ACCOUNTS_RECEIVABLE", today));
+  }, [accounts, transactions]);
+  const overdueAP = useMemo(() => {
+    const today = isoDate(new Date());
+    return overdueTotal(computeAging(accounts, transactions, "ACCOUNTS_PAYABLE", today));
+  }, [accounts, transactions]);
+
   const bankAccounts = useMemo(
     () => accounts.filter((a) => a.category === "BANK" && a.status === "ACTIVE"),
     [accounts]
@@ -263,6 +276,31 @@ export function DashboardMetrics() {
           />
         </div>
       </div>
+
+      {overdueAR > 0.005 || overdueAP > 0.005 ? (
+        <Card className="mb-4 border-amber-300 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/30">
+          <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-400">
+            Needs attention
+          </p>
+          <div className="flex flex-wrap items-center gap-x-8 gap-y-2">
+            {overdueAR > 0.005 ? (
+              <p className="text-sm text-[var(--color-text-primary)]">
+                <span className="font-semibold text-[var(--color-text-global)]">{formatMoney(overdueAR)}</span> in
+                overdue receivables
+              </p>
+            ) : null}
+            {overdueAP > 0.005 ? (
+              <p className="text-sm text-[var(--color-text-primary)]">
+                <span className="font-semibold text-[var(--color-text-global)]">{formatMoney(overdueAP)}</span> in
+                overdue payables
+              </p>
+            ) : null}
+            <Link href="/reports/aging" className="ml-auto text-xs text-[var(--color-link-action)] hover:underline">
+              View aging report
+            </Link>
+          </div>
+        </Card>
+      ) : null}
 
       <div className="mb-4 grid gap-4 md:grid-cols-3">
         {/* Cash flow -- in place of QBO's payment-request funnel, since this
