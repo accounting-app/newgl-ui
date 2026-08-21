@@ -279,6 +279,8 @@ export const bankRuleConditionSchema = z.object({
   valueTo: z.string().min(1).optional()
 });
 
+export const bankRuleDirectionSchema = z.enum(["ANY", "INFLOW", "OUTFLOW"]);
+
 export const bankRuleSchema = z.object({
   id: z.string().uuid(),
   name: z.string().min(1),
@@ -286,6 +288,9 @@ export const bankRuleSchema = z.object({
   conditions: z.array(bankRuleConditionSchema).min(1),
   enabled: z.boolean(),
   priority: z.number().int(),
+  autoPost: z.boolean(),
+  direction: bankRuleDirectionSchema,
+  scopedAccountId: z.string().optional(),
   createdAt: z.string(),
   updatedAt: z.string()
 });
@@ -293,13 +298,17 @@ export const bankRuleSchema = z.object({
 export type BankRuleField = z.infer<typeof bankRuleFieldSchema>;
 export type BankRuleOperator = z.infer<typeof bankRuleOperatorSchema>;
 export type BankRuleCondition = z.infer<typeof bankRuleConditionSchema>;
+export type BankRuleDirection = z.infer<typeof bankRuleDirectionSchema>;
 export type BankRule = z.infer<typeof bankRuleSchema>;
 
 export type CreateBankRuleInput = Pick<BankRule, "name" | "targetAccountId" | "conditions"> &
-  Partial<Pick<BankRule, "enabled" | "priority">>;
+  Partial<Pick<BankRule, "enabled" | "priority" | "autoPost" | "direction" | "scopedAccountId">>;
 
 export type UpdateBankRuleInput = Partial<
-  Pick<BankRule, "name" | "targetAccountId" | "conditions" | "enabled" | "priority">
+  Pick<
+    BankRule,
+    "name" | "targetAccountId" | "conditions" | "enabled" | "priority" | "autoPost" | "direction" | "scopedAccountId"
+  >
 >;
 
 // Bank feed exclude memory (PLAINGL_FEATURES_TO_IMPLEMENT.md #11) -- mirrors

@@ -51,9 +51,21 @@ function conditionMatches(row: MatchableRow, condition: BankRuleCondition): bool
   }
 }
 
-/** A rule matches a row when every one of its conditions matches (AND). */
-export function ruleMatchesRow(rule: BankRule, row: MatchableRow): boolean {
-  return rule.enabled && rule.conditions.every((condition) => conditionMatches(row, condition));
+function directionMatches(rule: BankRule, row: MatchableRow): boolean {
+  if (rule.direction === "ANY" || row.amount === null) return true;
+  return rule.direction === "OUTFLOW" ? row.amount < 0 : row.amount > 0;
+}
+
+/**
+ * A rule matches a row when it's enabled, every condition matches (AND), its
+ * direction (money in/out/either) fits the row's amount sign, and -- when the
+ * rule is scoped to a specific account -- the import's main account matches.
+ */
+export function ruleMatchesRow(rule: BankRule, row: MatchableRow, mainAccountId?: string): boolean {
+  if (!rule.enabled) return false;
+  if (rule.scopedAccountId && rule.scopedAccountId !== mainAccountId) return false;
+  if (!directionMatches(rule, row)) return false;
+  return rule.conditions.every((condition) => conditionMatches(row, condition));
 }
 
 /**
@@ -62,6 +74,6 @@ export function ruleMatchesRow(rule: BankRule, row: MatchableRow): boolean {
  * decide what to do with that (leave the row's category alone, in the CSV
  * import wizard).
  */
-export function findMatchingRule(rules: BankRule[], row: MatchableRow): BankRule | null {
-  return rules.find((rule) => ruleMatchesRow(rule, row)) ?? null;
+export function findMatchingRule(rules: BankRule[], row: MatchableRow, mainAccountId?: string): BankRule | null {
+  return rules.find((rule) => ruleMatchesRow(rule, row, mainAccountId)) ?? null;
 }

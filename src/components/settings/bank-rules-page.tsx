@@ -3,11 +3,19 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { InputField } from "@/components/ui/input-field";
 import { SelectField } from "@/components/bank-register/select-field";
 import { useToast } from "@/components/ui/toast/toast-context";
 import { getServiceContainer } from "@/lib/services/service-container-v2";
-import type { Account, BankRule, BankRuleCondition, BankRuleField, BankRuleOperator } from "@/modules/accounting/domain/models";
+import type {
+  Account,
+  BankRule,
+  BankRuleCondition,
+  BankRuleDirection,
+  BankRuleField,
+  BankRuleOperator
+} from "@/modules/accounting/domain/models";
 
 // Portable subset of a rule: what export/import/duplicate move around.
 // Deliberately excludes id/createdAt/updatedAt -- importing into another
@@ -19,6 +27,9 @@ type PortableRule = {
   conditions: BankRuleCondition[];
   enabled: boolean;
   priority: number;
+  autoPost: boolean;
+  direction: BankRuleDirection;
+  scopedAccountId?: string;
 };
 
 function toPortableRule(rule: BankRule): PortableRule {
@@ -27,7 +38,10 @@ function toPortableRule(rule: BankRule): PortableRule {
     targetAccountId: rule.targetAccountId,
     conditions: rule.conditions,
     enabled: rule.enabled,
-    priority: rule.priority
+    priority: rule.priority,
+    autoPost: rule.autoPost,
+    direction: rule.direction,
+    scopedAccountId: rule.scopedAccountId
   };
 }
 
@@ -41,6 +55,12 @@ function isPortableRule(value: unknown): value is PortableRule {
     candidate.conditions.length > 0
   );
 }
+
+const DIRECTION_OPTIONS: { value: BankRuleDirection; label: string }[] = [
+  { value: "ANY", label: "Either direction" },
+  { value: "INFLOW", label: "Money in" },
+  { value: "OUTFLOW", label: "Money out" }
+];
 
 const FIELD_OPTIONS = [
   { value: "payee", label: "Payee" },
@@ -101,6 +121,9 @@ export function BankRulesPage() {
   const [name, setName] = useState("");
   const [targetAccountId, setTargetAccountId] = useState("");
   const [conditions, setConditions] = useState<DraftCondition[]>([emptyCondition()]);
+  const [direction, setDirection] = useState<BankRuleDirection>("ANY");
+  const [scopedAccountId, setScopedAccountId] = useState("");
+  const [autoPost, setAutoPost] = useState(false);
   const [creating, setCreating] = useState(false);
 
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -115,6 +138,11 @@ export function BankRulesPage() {
         .sort((a, b) => a.name.localeCompare(b.name))
         .map((a) => ({ value: a.id, label: a.name })),
     [accounts]
+  );
+
+  const scopedAccountOptions = useMemo(
+    () => [{ value: "", label: "Any account" }, ...accountOptions],
+    [accountOptions]
   );
 
   const accountNameById = useMemo(() => {
@@ -176,12 +204,18 @@ export function BankRulesPage() {
           operator: c.operator,
           value: c.value.trim(),
           valueTo: c.operator === "between" ? c.valueTo.trim() || undefined : undefined
-        }))
+        })),
+        direction,
+        scopedAccountId: scopedAccountId || undefined,
+        autoPost
       });
       toast({ variant: "success", title: "Rule created", description: `"${name.trim()}" was added.` });
       setName("");
       setTargetAccountId("");
       setConditions([emptyCondition()]);
+      setDirection("ANY");
+      setScopedAccountId("");
+      setAutoPost(false);
       await loadAll();
     } catch (err) {
       toast({ variant: "error", title: "Could not create this rule", description: err instanceof Error ? err.message : undefined });
@@ -227,6 +261,9 @@ export function BankRulesPage() {
         valueTo: c.valueTo ?? ""
       }))
     );
+    setDirection(rule.direction);
+    setScopedAccountId(rule.scopedAccountId ?? "");
+    setAutoPost(rule.autoPost);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -269,7 +306,10 @@ export function BankRulesPage() {
             targetAccountId: candidate.targetAccountId,
             conditions: candidate.conditions,
             enabled: candidate.enabled,
-            priority: candidate.priority
+            priority: candidate.priority,
+            autoPost: candidate.autoPost,
+            direction: candidate.direction,
+            scopedAccountId: candidate.scopedAccountId
           });
           created += 1;
         } catch (err) {
@@ -323,7 +363,34 @@ export function BankRulesPage() {
                 allowCustomValue={false}
               />
             </div>
+            <div className="w-44">
+              <SelectField
+                label="Direction"
+                value={direction}
+                onChange={(value) => setDirection(value as BankRuleDirection)}
+                options={DIRECTION_OPTIONS}
+                placeholder="Direction"
+                allowCustomValue={false}
+              />
+            </div>
+            <div className="w-56">
+              <SelectField
+                label="Applies to account"
+                value={scopedAccountId}
+                onChange={setScopedAccountId}
+                options={scopedAccountOptions}
+                placeholder="Any account"
+                allowCustomValue={false}
+              />
+            </div>
           </div>
+
+          <Checkbox
+            id="bank-rule-auto-post"
+            label="Auto-post matched transactions during CSV import"
+            checked={autoPost}
+            onChange={(e) => setAutoPost(e.target.checked)}
+          />
 
           <div className="flex flex-col gap-2">
             {conditions.map((condition, index) => (
@@ -435,9 +502,14 @@ export function BankRulesPage() {
                     {!rule.enabled ? (
                       <span className="ml-2 text-xs font-normal text-[var(--color-text-disabled)]">(disabled)</span>
                     ) : null}
+                    {rule.autoPost ? (
+                      <span className="ml-2 text-xs font-normal text-[var(--color-action-standard)]">Auto-post</span>
+                    ) : null}
                   </p>
                   <p className="text-xs text-[var(--color-icon-secondary)]">
                     {rule.conditions.map(summarizeCondition).join(" and ")} → {accountNameById.get(rule.targetAccountId) ?? rule.targetAccountId}
+                    {rule.direction !== "ANY" ? ` · ${rule.direction === "INFLOW" ? "money in" : "money out"}` : ""}
+                    {rule.scopedAccountId ? ` · only ${accountNameById.get(rule.scopedAccountId) ?? rule.scopedAccountId}` : ""}
                   </p>
                 </div>
                 <div className="flex shrink-0 items-center gap-2">

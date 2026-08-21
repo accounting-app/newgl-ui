@@ -55,6 +55,10 @@ type CsvReviewTableProps = {
   exclusionMatches?: Map<string, ExcludedFeedRow>;
   /** Marks a row's payee+amount as permanently excluded from future imports on this account. */
   onExcludeRow?: (row: ReviewRow) => void;
+  /** Number of selected, submittable rows whose matched bank rule has autoPost enabled. */
+  autoPostCount?: number;
+  /** Posts just the auto-postable rows immediately, bypassing the confirm dialog. */
+  onAutoPost?: () => void;
 };
 
 function hasValidCategory(row: ReviewRow, mainAccountId: string): boolean {
@@ -115,7 +119,9 @@ export function CsvReviewTable({
   bankRuleMatches,
   duplicateMatches,
   exclusionMatches,
-  onExcludeRow
+  onExcludeRow,
+  autoPostCount = 0,
+  onAutoPost
 }: CsvReviewTableProps) {
   const accountLabelById = new Map(accountOptions.map((option) => [option.value, option.label]));
   const selectedRows = rows.filter((row) => selectedRowIds.has(row.clientRowId));
@@ -447,9 +453,16 @@ export function CsvReviewTable({
         <Button variant="secondary" onClick={onBack} disabled={isSubmitting || backDisabled}>
           Back
         </Button>
-        <Button variant="primary" onClick={onContinue} disabled={isSubmitting || !allSelectedAreReady}>
-          Continue
-        </Button>
+        <div className="flex items-center gap-2">
+          {autoPostCount > 0 && onAutoPost ? (
+            <Button variant="secondary" onClick={onAutoPost} disabled={isSubmitting}>
+              Auto-post {autoPostCount}
+            </Button>
+          ) : null}
+          <Button variant="primary" onClick={onContinue} disabled={isSubmitting || !allSelectedAreReady}>
+            Continue
+          </Button>
+        </div>
       </div>
     </div>
   );

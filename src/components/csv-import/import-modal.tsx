@@ -108,7 +108,7 @@ export function ImportModal({
   const bankRuleMatches = useMemo(() => {
     const matches = new Map<string, BankRule>();
     reviewRows.forEach((row) => {
-      const match = findMatchingRule(bankRules, { payee: row.payee, memo: row.memo, amount: row.amount });
+      const match = findMatchingRule(bankRules, { payee: row.payee, memo: row.memo, amount: row.amount }, mainAccountId);
       if (match) matches.set(row.clientRowId, match);
     });
     return matches;
@@ -238,7 +238,7 @@ export function ImportModal({
     // keeping the guard makes the intent explicit).
     const withRuleMatches = built.map((row) => {
       if (row.categoryAccountId !== null) return row;
-      const match = findMatchingRule(bankRules, { payee: row.payee, memo: row.memo, amount: row.amount });
+      const match = findMatchingRule(bankRules, { payee: row.payee, memo: row.memo, amount: row.amount }, mainAccountId);
       if (!match) return row;
       return { ...row, categoryAccountId: match.targetAccountId, categoryConfidence: null, categorySource: "bank-rule" as const };
     });
@@ -351,10 +351,10 @@ export function ImportModal({
     setStep("UPLOAD");
   }
 
-  async function handleConfirmedSubmit() {
-    const submittable = reviewRows.filter(
-      (row) => selectedRowIds.has(row.clientRowId) && isRowSubmittable(row, mainAccountId)
-    );
+  async function handleConfirmedSubmit(rowsOverride?: ReviewRow[]) {
+    const submittable =
+      rowsOverride ??
+      reviewRows.filter((row) => selectedRowIds.has(row.clientRowId) && isRowSubmittable(row, mainAccountId));
     if (submittable.length === 0 || !mainAccountId) return;
 
     setIsSubmitting(true);
@@ -411,6 +411,13 @@ export function ImportModal({
   const selectedSubmittableCount = reviewRows.filter(
     (row) => selectedRowIds.has(row.clientRowId) && isRowSubmittable(row, mainAccountId)
   ).length;
+
+  const autoPostRows = reviewRows.filter(
+    (row) =>
+      selectedRowIds.has(row.clientRowId) &&
+      isRowSubmittable(row, mainAccountId) &&
+      bankRuleMatches.get(row.clientRowId)?.autoPost === true
+  );
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-[var(--color-container-background-primary)]">
@@ -485,6 +492,8 @@ export function ImportModal({
                 duplicateMatches={duplicateMatches}
                 exclusionMatches={exclusionMatches}
                 onExcludeRow={handleExcludeRow}
+                autoPostCount={autoPostRows.length}
+                onAutoPost={() => handleConfirmedSubmit(autoPostRows)}
               />
               {resumedFromSession ? (
                 <button
