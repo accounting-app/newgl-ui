@@ -30,7 +30,7 @@ const SIZE_CLASSES: Record<ButtonSize, string> = {
 
 const VARIANT_CLASSES: Record<ButtonVariant, string> = {
   primary:
-    "border border-[var(--color-ui-primary)] bg-[var(--color-action-standard)] text-[var(--color-text-inverse)] " +
+    "btn-primary border border-[var(--color-ui-primary)] bg-[var(--color-action-standard)] text-[var(--color-text-inverse)] " +
     "hover:border-[var(--color-ui-positive)] hover:bg-[var(--color-ui-positive)]",
   secondary:
     "border border-[var(--color-button-border)] bg-transparent text-[var(--color-text-primary)] " +

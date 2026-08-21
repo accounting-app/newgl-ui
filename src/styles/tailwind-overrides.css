@@ -228,6 +228,63 @@
   --color-report-toggle-active: #3c3b6e;
 }
 
+.pretty {
+  --color-text-global: #0f172a;
+  --color-text-primary: #0f172a;
+  --color-icon-primary: #0f172a;
+  --color-icon-secondary: #64748b;
+  --color-text-disabled: #94a3b8;
+  --color-text-highlight: #0ea5a4;
+  --color-action-passive-subtle-active: rgba(15, 23, 42, 0.12);
+  --color-action-passive-subtle-hover: rgba(15, 23, 42, 0.06);
+  --color-container-background-primary: #ffffff;
+  --color-container-background-secondary: #e7eaf3;
+  /* A CSS var can hold any valid `background` value, gradients included --
+     this renders correctly wherever the app does `background: var(--color-container-background-accent)`. */
+  --color-container-background-accent: radial-gradient(1200px 600px at 100% -10%, #dbeafe 0%, transparent 55%),
+    radial-gradient(1000px 500px at -10% 110%, #d1fae5 0%, transparent 55%), #eef2fb;
+  --color-divider-tertiary: #e7eaf3;
+  --color-container-border-secondary: #d7dcea;
+  --color-container-border-primary: #c3cbdf;
+  --color-input-border-primary: #d7dcea;
+  --color-shadow: #0f172a;
+  --color-link-text: #0ea5a4;
+  --gbsg-nav-bar-icon-color: #0f172a;
+  --gbsg-nav-bar-text-color: #0f172a;
+  --gbsg-nav-bar-action-color-hover: #0ea5a4;
+  --color-sidebar-background: #ffffff;
+  --color-input-background: #ffffff;
+  --color-input-text: #0f172a;
+  --color-input-disabled-border: #e7eaf3;
+  --color-input-disabled-background: #f4f6fb;
+  --color-input-disabled-text: #94a3b8;
+  --color-button-gradient-from: #ffffff;
+  --color-button-gradient-to: #eef2fb;
+  --color-button-border: #d7dcea;
+  --color-action-bar-background: #e7eaf3;
+  --color-quickadd-background: #eef2fb;
+  --color-quickadd-button-text: #64748b;
+  --color-form-row-background: #e0f2fe;
+  --color-form-row-border: #bae6fd;
+  --color-table-row-hover: rgba(14, 165, 164, 0.05);
+  --color-table-row-secondary: #f8fafc;
+  --color-table-row-secondary-hover: #eef2fb;
+  --color-icon-muted: #c3cbdf;
+  --color-highlight-badge-background: rgba(5, 150, 105, 0.12);
+  --color-highlight-badge-text: #059669;
+  --color-link-action: #0ea5a4;
+  --color-report-row-alt: #f8fafc;
+  /* Solid fallback -- Button/avatar render these via `bg-[var(...)]`, which
+     Tailwind compiles to `background-color`, and that property can't hold a
+     gradient. The gradient primary-button look instead comes from the
+     `.pretty .btn-primary` rule below, which uses the `background`
+     shorthand directly. */
+  --color-action-standard: #0ea5a4;
+  --color-action-standard-subtle-hover: rgba(14, 165, 164, 0.1);
+  --color-avatar-background: #0ea5a4;
+  --color-report-toggle-active: #0ea5a4;
+}
+
 /*
   Structural differentiators for Modern vs. America 250 -- both skins
   already carry different accent hues (violet vs. red/navy) via the
@@ -257,6 +314,47 @@
 }
 .america250 .side-nav-icon-shell-active {
   border-radius: var(--radius-x-small);
+}
+
+/*
+  Pretty -- PlainGL's teal/indigo gradient skin. Frosted-glass sidebar and
+  header (matches body.pretty aside's backdrop-filter blur), a gradient
+  radial-wash page background (set on the --color-container-background-accent
+  token above, which body already renders via `background:`, not
+  `background-color:`), gradient primary buttons/avatar (can't use the same
+  token trick there since Button/avatar render via bg-[var(...)], which
+  Tailwind compiles to `background-color` -- so these use `background`
+  directly against the .btn-primary/.avatar-circle marker classes instead),
+  and elevated cards with a hover lift.
+*/
+.pretty .side-nav {
+  border-right: none;
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  box-shadow: 1px 0 0 rgba(15, 23, 42, 0.04);
+}
+.pretty .top-header {
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+.pretty .btn-primary {
+  background: linear-gradient(135deg, #0ea5a4 0%, #6366f1 100%);
+  border-color: transparent;
+  box-shadow: 0 4px 14px rgba(14, 165, 164, 0.35);
+}
+.pretty .avatar-circle {
+  background: linear-gradient(135deg, #0ea5a4 0%, #6366f1 100%);
+}
+.pretty .ui-card {
+  border-color: rgba(255, 255, 255, 0.7);
+  box-shadow: 0 10px 30px -12px rgba(15, 23, 42, 0.18);
+  transition: transform 0.16s ease, box-shadow 0.16s ease;
+}
+.pretty .ui-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 18px 40px -14px rgba(15, 23, 42, 0.24);
 }
 
 /*

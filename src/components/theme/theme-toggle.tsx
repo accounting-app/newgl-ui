@@ -4,13 +4,14 @@ import { useEffect, useRef, useState } from "react";
 import { Check, Palette } from "lucide-react";
 import { useTheme } from "next-themes";
 
-type ThemeOption = { value: "light" | "dark" | "modern" | "america250"; label: string };
+type ThemeOption = { value: "light" | "dark" | "modern" | "america250" | "pretty"; label: string };
 
 const THEME_OPTIONS: ThemeOption[] = [
   { value: "light", label: "Light" },
   { value: "dark", label: "Dark" },
   { value: "modern", label: "Modern" },
-  { value: "america250", label: "America 250" }
+  { value: "america250", label: "America 250" },
+  { value: "pretty", label: "Pretty" }
 ];
 
 // Was a two-state light/dark toggle button; now a dropdown since the app
