@@ -31,6 +31,7 @@ import type {
 } from "@/modules/accounting/application/contracts";
 
 export const ACCOUNT_TYPE_BY_CATEGORY: Record<Account["category"], ChartOfAccount["accountType"]> = {
+  ACCOUNTS_PAYABLE: "LIABILITY",
   ACCOUNTS_RECEIVABLE: "ASSET",
   BANK: "ASSET",
   CREDIT_CARD: "LIABILITY",
@@ -163,6 +164,10 @@ export class HttpAccountService implements AccountService {
       method: "PATCH",
       body: JSON.stringify({ status: "CLOSED" })
     });
+  }
+
+  async deleteAccount(id: string): Promise<void> {
+    await request(this.baseUrl, `/accounts/${id}`, { method: "DELETE" });
   }
 
   getAccountById(id: string): Promise<Account> {

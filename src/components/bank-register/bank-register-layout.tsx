@@ -136,6 +136,7 @@ function BankRegisterLayoutInner() {
       <section className="page-content ">
         <RegisterTable
           entries={entries}
+          deepLinkTransactionId={searchParams.get("tx")}
           draftTransaction={draftTransaction}
           draftErrors={draftErrors}
           isSavingDraft={isSavingDraft}

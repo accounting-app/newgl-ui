@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 export const accountCategorySchema = z.enum([
+  "ACCOUNTS_PAYABLE",
   "ACCOUNTS_RECEIVABLE",
   "BANK",
   "CREDIT_CARD",
@@ -110,6 +111,8 @@ export const transactionSchema = z.object({
   type: transactionTypeSchema,
   status: transactionStatusSchema,
   transactionDate: z.string(),
+  /** Optional due date for A/R (invoice) or A/P (bill) postings -- feeds the aging report. Falls back to transactionDate when unset, matching PlainGL. */
+  dueDate: z.string().optional(),
   referenceNumber: z.string().optional(),
   memo: z.string().optional(),
   payee: z.string().optional(),
@@ -212,6 +215,7 @@ export type CreateTransactionInput = Pick<
   Transaction,
   | "type"
   | "transactionDate"
+  | "dueDate"
   | "referenceNumber"
   | "memo"
   | "payee"
@@ -221,13 +225,20 @@ export type CreateTransactionInput = Pick<
   | "postings"
 >;
 
+export type ImportTransactionCategorySplit = {
+  accountId: string;
+  amount: number;
+};
+
 export type ImportTransactionRowInput = {
   clientRowId: string;
   transactionDate: string;
   payee?: string;
   memo?: string;
   amount: number;
-  categoryAccountId: string;
+  /** Single-category rows set this; multi-category rows set categorySplits instead -- exactly one of the two must be present. */
+  categoryAccountId?: string;
+  categorySplits?: ImportTransactionCategorySplit[];
   referenceNumber?: string;
 };
 
@@ -256,7 +267,7 @@ export type ListTransactionsFilter = {
 
 // Deterministic bank rules (PLAINGL_FEATURES_TO_IMPLEMENT.md #7) -- mirrors
 // newgl-api's src/domain/models.ts bank-rule schemas.
-export const bankRuleFieldSchema = z.enum(["payee", "memo", "amount"]);
+export const bankRuleFieldSchema = z.enum(["payee", "memo", "rawMemo", "amount"]);
 export const bankRuleTextOperatorSchema = z.enum(["contains", "not_contains", "equals", "starts_with", "regex"]);
 export const bankRuleAmountOperatorSchema = z.enum(["greater_than", "less_than", "between"]);
 export const bankRuleOperatorSchema = z.union([bankRuleTextOperatorSchema, bankRuleAmountOperatorSchema]);
@@ -268,6 +279,8 @@ export const bankRuleConditionSchema = z.object({
   valueTo: z.string().min(1).optional()
 });
 
+export const bankRuleDirectionSchema = z.enum(["ANY", "INFLOW", "OUTFLOW"]);
+
 export const bankRuleSchema = z.object({
   id: z.string().uuid(),
   name: z.string().min(1),
@@ -275,6 +288,9 @@ export const bankRuleSchema = z.object({
   conditions: z.array(bankRuleConditionSchema).min(1),
   enabled: z.boolean(),
   priority: z.number().int(),
+  autoPost: z.boolean(),
+  direction: bankRuleDirectionSchema,
+  scopedAccountId: z.string().optional(),
   createdAt: z.string(),
   updatedAt: z.string()
 });
@@ -282,13 +298,17 @@ export const bankRuleSchema = z.object({
 export type BankRuleField = z.infer<typeof bankRuleFieldSchema>;
 export type BankRuleOperator = z.infer<typeof bankRuleOperatorSchema>;
 export type BankRuleCondition = z.infer<typeof bankRuleConditionSchema>;
+export type BankRuleDirection = z.infer<typeof bankRuleDirectionSchema>;
 export type BankRule = z.infer<typeof bankRuleSchema>;
 
 export type CreateBankRuleInput = Pick<BankRule, "name" | "targetAccountId" | "conditions"> &
-  Partial<Pick<BankRule, "enabled" | "priority">>;
+  Partial<Pick<BankRule, "enabled" | "priority" | "autoPost" | "direction" | "scopedAccountId">>;
 
 export type UpdateBankRuleInput = Partial<
-  Pick<BankRule, "name" | "targetAccountId" | "conditions" | "enabled" | "priority">
+  Pick<
+    BankRule,
+    "name" | "targetAccountId" | "conditions" | "enabled" | "priority" | "autoPost" | "direction" | "scopedAccountId"
+  >
 >;
 
 // Bank feed exclude memory (PLAINGL_FEATURES_TO_IMPLEMENT.md #11) -- mirrors

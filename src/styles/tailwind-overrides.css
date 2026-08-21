@@ -121,6 +121,242 @@
   --color-link-action: #8ab4f8;
   --color-report-row-alt: #2a2d31;
 }
+
+/*
+  Additional cosmetic skins (PlainGL parity #10 -- PlainGL ships 5 skins,
+  this app previously had light/dark only). Each overrides the same
+  surface-color tokens as .dark above, plus the brand-accent tokens
+  (action-standard, link-action, avatar-background, etc.) that light/dark
+  deliberately leave alone -- these two are meant to read as distinct
+  accent identities, not just a lighter/darker surface.
+*/
+.modern {
+  --color-text-global: #0b0b12;
+  --color-text-primary: #0b0b12;
+  --color-icon-primary: #0b0b12;
+  --color-icon-secondary: #6b7280;
+  --color-text-disabled: #9ca3af;
+  --color-text-highlight: #635bff;
+  --color-action-passive-subtle-active: rgba(11, 11, 18, 0.12);
+  --color-action-passive-subtle-hover: rgba(11, 11, 18, 0.06);
+  --color-container-background-primary: #ffffff;
+  --color-container-background-secondary: #eeecfa;
+  --color-container-background-accent: #f5f3fd;
+  --color-divider-tertiary: #e3e0f3;
+  --color-container-border-secondary: #cdc7ea;
+  --color-container-border-primary: #b8b0e0;
+  --color-input-border-primary: #cdc7ea;
+  --color-shadow: #0b0b12;
+  --color-link-text: #635bff;
+  --gbsg-nav-bar-icon-color: #0b0b12;
+  --gbsg-nav-bar-text-color: #0b0b12;
+  --gbsg-nav-bar-action-color-hover: #635bff;
+  --color-sidebar-background: #ffffff;
+  --color-input-background: #ffffff;
+  --color-input-text: #0b0b12;
+  --color-input-disabled-border: #e7e7ee;
+  --color-input-disabled-background: #f6f7fb;
+  --color-input-disabled-text: #9ca3af;
+  --color-button-gradient-from: #ffffff;
+  --color-button-gradient-to: #f6f7fb;
+  --color-button-border: #d6d6e2;
+  --color-action-bar-background: #f0f0f7;
+  --color-quickadd-background: #f6f7fb;
+  --color-quickadd-button-text: #6b7280;
+  --color-form-row-background: #eeecff;
+  --color-form-row-border: #d9d5ff;
+  --color-table-row-hover: #f5f4ff;
+  --color-table-row-secondary: #fafafd;
+  --color-table-row-secondary-hover: #f0efff;
+  --color-icon-muted: #c7c7d6;
+  --color-highlight-badge-background: #ecebff;
+  --color-highlight-badge-text: #4c46c9;
+  --color-link-action: #635bff;
+  --color-report-row-alt: #f9f9fc;
+  --color-action-standard: #635bff;
+  --color-action-standard-subtle-hover: rgba(99, 91, 255, 0.1);
+  --color-avatar-background: #635bff;
+  --color-report-toggle-active: #635bff;
+}
+
+.america250 {
+  --color-text-global: #0a1f44;
+  --color-text-primary: #0a1f44;
+  --color-icon-primary: #0a1f44;
+  --color-icon-secondary: #5a6a8a;
+  --color-text-disabled: #97a3bd;
+  --color-text-highlight: #3c3b6e;
+  --color-action-passive-subtle-active: rgba(60, 59, 110, 0.16);
+  --color-action-passive-subtle-hover: rgba(60, 59, 110, 0.08);
+  --color-container-background-primary: #ffffff;
+  --color-container-background-secondary: #eef0f2;
+  --color-container-background-accent: #f8f8f7;
+  --color-divider-tertiary: #d8d4c8;
+  --color-container-border-secondary: #b8c2d6;
+  --color-container-border-primary: #9fb0d6;
+  --color-input-border-primary: #b8c2d6;
+  --color-shadow: #0a1f44;
+  --color-link-text: #1e5bb8;
+  --gbsg-nav-bar-icon-color: #0a1f44;
+  --gbsg-nav-bar-text-color: #0a1f44;
+  --gbsg-nav-bar-action-color-hover: #b22234;
+  --color-sidebar-background: #ffffff;
+  --color-input-background: #ffffff;
+  --color-input-text: #0a1f44;
+  --color-input-disabled-border: #e3e5e0;
+  --color-input-disabled-background: #f8f8f7;
+  --color-input-disabled-text: #97a3bd;
+  --color-button-gradient-from: #ffffff;
+  --color-button-gradient-to: #f4f5f2;
+  --color-button-border: #9fb0d6;
+  --color-action-bar-background: #eef0f2;
+  --color-quickadd-background: #f8f8f7;
+  --color-quickadd-button-text: #5a6a8a;
+  --color-form-row-background: #e7ecfa;
+  --color-form-row-border: #cdd8ec;
+  --color-table-row-hover: #f6eef0;
+  --color-table-row-secondary: #f8f9f7;
+  --color-table-row-secondary-hover: #eef0f2;
+  --color-icon-muted: #b8c2d6;
+  --color-highlight-badge-background: #e7ecfa;
+  --color-highlight-badge-text: #3c3b6e;
+  --color-link-action: #1e5bb8;
+  --color-report-row-alt: #f8f9fc;
+  --color-action-standard: #b22234;
+  --color-action-standard-subtle-hover: rgba(178, 34, 52, 0.1);
+  --color-avatar-background: #3c3b6e;
+  --color-report-toggle-active: #3c3b6e;
+}
+
+.pretty {
+  --color-text-global: #0f172a;
+  --color-text-primary: #0f172a;
+  --color-icon-primary: #0f172a;
+  --color-icon-secondary: #64748b;
+  --color-text-disabled: #94a3b8;
+  --color-text-highlight: #0ea5a4;
+  --color-action-passive-subtle-active: rgba(15, 23, 42, 0.12);
+  --color-action-passive-subtle-hover: rgba(15, 23, 42, 0.06);
+  --color-container-background-primary: #ffffff;
+  --color-container-background-secondary: #e7eaf3;
+  /* A CSS var can hold any valid `background` value, gradients included --
+     this renders correctly wherever the app does `background: var(--color-container-background-accent)`. */
+  --color-container-background-accent: radial-gradient(1200px 600px at 100% -10%, #dbeafe 0%, transparent 55%),
+    radial-gradient(1000px 500px at -10% 110%, #d1fae5 0%, transparent 55%), #eef2fb;
+  --color-divider-tertiary: #e7eaf3;
+  --color-container-border-secondary: #d7dcea;
+  --color-container-border-primary: #c3cbdf;
+  --color-input-border-primary: #d7dcea;
+  --color-shadow: #0f172a;
+  --color-link-text: #0ea5a4;
+  --gbsg-nav-bar-icon-color: #0f172a;
+  --gbsg-nav-bar-text-color: #0f172a;
+  --gbsg-nav-bar-action-color-hover: #0ea5a4;
+  --color-sidebar-background: #ffffff;
+  --color-input-background: #ffffff;
+  --color-input-text: #0f172a;
+  --color-input-disabled-border: #e7eaf3;
+  --color-input-disabled-background: #f4f6fb;
+  --color-input-disabled-text: #94a3b8;
+  --color-button-gradient-from: #ffffff;
+  --color-button-gradient-to: #eef2fb;
+  --color-button-border: #d7dcea;
+  --color-action-bar-background: #e7eaf3;
+  --color-quickadd-background: #eef2fb;
+  --color-quickadd-button-text: #64748b;
+  --color-form-row-background: #e0f2fe;
+  --color-form-row-border: #bae6fd;
+  --color-table-row-hover: rgba(14, 165, 164, 0.05);
+  --color-table-row-secondary: #f8fafc;
+  --color-table-row-secondary-hover: #eef2fb;
+  --color-icon-muted: #c3cbdf;
+  --color-highlight-badge-background: rgba(5, 150, 105, 0.12);
+  --color-highlight-badge-text: #059669;
+  --color-link-action: #0ea5a4;
+  --color-report-row-alt: #f8fafc;
+  /* Solid fallback -- Button/avatar render these via `bg-[var(...)]`, which
+     Tailwind compiles to `background-color`, and that property can't hold a
+     gradient. The gradient primary-button look instead comes from the
+     `.pretty .btn-primary` rule below, which uses the `background`
+     shorthand directly. */
+  --color-action-standard: #0ea5a4;
+  --color-action-standard-subtle-hover: rgba(14, 165, 164, 0.1);
+  --color-avatar-background: #0ea5a4;
+  --color-report-toggle-active: #0ea5a4;
+}
+
+/*
+  Structural differentiators for Modern vs. America 250 -- both skins
+  already carry different accent hues (violet vs. red/navy) via the
+  token blocks above, but that alone read as "the same layout, different
+  color" side by side. These add a shape/edge treatment unique to each,
+  the same way PlainGL's own skins differ in more than just accent:
+  Modern gets a soft-shadow, pill-shaped-active-icon "no hard lines"
+  feel; America 250 gets a bold flag-style red sidebar edge and
+  sharp-cornered active icon.
+*/
+.modern .side-nav {
+  border-right: none;
+  box-shadow: 1px 0 16px rgba(11, 11, 18, 0.07);
+}
+.modern .top-header {
+  box-shadow: 0 1px 12px rgba(11, 11, 18, 0.05);
+}
+.modern .side-nav-icon-shell-active {
+  border-radius: var(--radius-full);
+}
+
+.america250 .side-nav {
+  border-right: 3px solid #b22234;
+}
+.america250 .top-header {
+  box-shadow: inset 0 -2px 0 #3c3b6e;
+}
+.america250 .side-nav-icon-shell-active {
+  border-radius: var(--radius-x-small);
+}
+
+/*
+  Pretty -- PlainGL's teal/indigo gradient skin. Frosted-glass sidebar and
+  header (matches body.pretty aside's backdrop-filter blur), a gradient
+  radial-wash page background (set on the --color-container-background-accent
+  token above, which body already renders via `background:`, not
+  `background-color:`), gradient primary buttons/avatar (can't use the same
+  token trick there since Button/avatar render via bg-[var(...)], which
+  Tailwind compiles to `background-color` -- so these use `background`
+  directly against the .btn-primary/.avatar-circle marker classes instead),
+  and elevated cards with a hover lift.
+*/
+.pretty .side-nav {
+  border-right: none;
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  box-shadow: 1px 0 0 rgba(15, 23, 42, 0.04);
+}
+.pretty .top-header {
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+.pretty .btn-primary {
+  background: linear-gradient(135deg, #0ea5a4 0%, #6366f1 100%);
+  border-color: transparent;
+  box-shadow: 0 4px 14px rgba(14, 165, 164, 0.35);
+}
+.pretty .avatar-circle {
+  background: linear-gradient(135deg, #0ea5a4 0%, #6366f1 100%);
+}
+.pretty .ui-card {
+  border-color: rgba(255, 255, 255, 0.7);
+  box-shadow: 0 10px 30px -12px rgba(15, 23, 42, 0.18);
+  transition: transform 0.16s ease, box-shadow 0.16s ease;
+}
+.pretty .ui-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 18px 40px -14px rgba(15, 23, 42, 0.24);
+}
+
 /*
   Use this wrapper class on any container where you want strong overrides:
   <div className="tw-override">...</div>

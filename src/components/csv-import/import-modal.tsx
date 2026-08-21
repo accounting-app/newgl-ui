@@ -108,7 +108,7 @@ export function ImportModal({
   const bankRuleMatches = useMemo(() => {
     const matches = new Map<string, BankRule>();
     reviewRows.forEach((row) => {
-      const match = findMatchingRule(bankRules, { payee: row.payee, memo: row.memo, amount: row.amount });
+      const match = findMatchingRule(bankRules, { payee: row.payee, memo: row.memo, rawMemo: row.rawDescription, amount: row.amount }, mainAccountId);
       if (match) matches.set(row.clientRowId, match);
     });
     return matches;
@@ -238,7 +238,7 @@ export function ImportModal({
     // keeping the guard makes the intent explicit).
     const withRuleMatches = built.map((row) => {
       if (row.categoryAccountId !== null) return row;
-      const match = findMatchingRule(bankRules, { payee: row.payee, memo: row.memo, amount: row.amount });
+      const match = findMatchingRule(bankRules, { payee: row.payee, memo: row.memo, rawMemo: row.rawDescription, amount: row.amount }, mainAccountId);
       if (!match) return row;
       return { ...row, categoryAccountId: match.targetAccountId, categoryConfidence: null, categorySource: "bank-rule" as const };
     });
@@ -351,10 +351,10 @@ export function ImportModal({
     setStep("UPLOAD");
   }
 
-  async function handleConfirmedSubmit() {
-    const submittable = reviewRows.filter(
-      (row) => selectedRowIds.has(row.clientRowId) && isRowSubmittable(row, mainAccountId)
-    );
+  async function handleConfirmedSubmit(rowsOverride?: ReviewRow[]) {
+    const submittable =
+      rowsOverride ??
+      reviewRows.filter((row) => selectedRowIds.has(row.clientRowId) && isRowSubmittable(row, mainAccountId));
     if (submittable.length === 0 || !mainAccountId) return;
 
     setIsSubmitting(true);
@@ -367,7 +367,9 @@ export function ImportModal({
           payee: row.payee || undefined,
           memo: row.memo || undefined,
           amount: row.amount!,
-          categoryAccountId: row.categoryAccountId!
+          ...(row.categorySplits
+            ? { categorySplits: row.categorySplits.map((line) => ({ accountId: line.accountId, amount: Math.abs(Number(line.amount) || 0) })) }
+            : { categoryAccountId: row.categoryAccountId! })
         }))
       });
       setImportResult(result);
@@ -376,8 +378,10 @@ export function ImportModal({
 
       // Best-effort -- teaching the payee->account mapping is a nice-to-have
       // that makes future imports cheaper, never something the import result
-      // should wait on or fail over.
-      const learnableRows = submittable.filter((row) => row.payee.trim() !== "");
+      // should wait on or fail over. Split rows have no single account to
+      // learn, so they're excluded rather than teaching a misleading 1:1
+      // payee->account mapping.
+      const learnableRows = submittable.filter((row) => row.payee.trim() !== "" && !row.categorySplits);
       if (aiEnabled && learnableRows.length > 0) {
         learnPayeeRules(
           learnableRows.map((row) => ({ payee: row.payee, accountId: row.categoryAccountId! }))
@@ -407,6 +411,13 @@ export function ImportModal({
   const selectedSubmittableCount = reviewRows.filter(
     (row) => selectedRowIds.has(row.clientRowId) && isRowSubmittable(row, mainAccountId)
   ).length;
+
+  const autoPostRows = reviewRows.filter(
+    (row) =>
+      selectedRowIds.has(row.clientRowId) &&
+      isRowSubmittable(row, mainAccountId) &&
+      bankRuleMatches.get(row.clientRowId)?.autoPost === true
+  );
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-[var(--color-container-background-primary)]">
@@ -481,6 +492,8 @@ export function ImportModal({
                 duplicateMatches={duplicateMatches}
                 exclusionMatches={exclusionMatches}
                 onExcludeRow={handleExcludeRow}
+                autoPostCount={autoPostRows.length}
+                onAutoPost={() => handleConfirmedSubmit(autoPostRows)}
               />
               {resumedFromSession ? (
                 <button

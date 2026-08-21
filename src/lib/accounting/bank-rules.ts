@@ -1,9 +1,20 @@
 import type { BankRule, BankRuleCondition } from "@/modules/accounting/domain/models";
 
-export type MatchableRow = { payee: string; memo: string; amount: number | null };
+// rawMemo is the bank's original, unprocessed description text (e.g. from a
+// CSV import's "Description" column before any cleanup). Optional because
+// only CSV-imported rows have a raw value distinct from memo -- callers
+// without one (manual entries) fall back to memo, same as PlainGL's own
+// behavior when no separate raw text exists.
+export type MatchableRow = { payee: string; memo: string; rawMemo?: string; amount: number | null };
 
-function textValue(row: MatchableRow, field: "payee" | "memo"): string {
-  return (field === "payee" ? row.payee : row.memo).toLowerCase();
+function rawValueFor(row: MatchableRow, field: "payee" | "memo" | "rawMemo"): string {
+  if (field === "payee") return row.payee;
+  if (field === "rawMemo") return row.rawMemo ?? row.memo;
+  return row.memo;
+}
+
+function textValue(row: MatchableRow, field: "payee" | "memo" | "rawMemo"): string {
+  return rawValueFor(row, field).toLowerCase();
 }
 
 function conditionMatches(row: MatchableRow, condition: BankRuleCondition): boolean {
@@ -39,7 +50,7 @@ function conditionMatches(row: MatchableRow, condition: BankRuleCondition): bool
     case "starts_with":
       return haystack.startsWith(needle);
     case "regex": {
-      const rawValue = condition.field === "payee" ? row.payee : row.memo;
+      const rawValue = rawValueFor(row, condition.field);
       try {
         return new RegExp(condition.value, "i").test(rawValue);
       } catch {
@@ -51,9 +62,21 @@ function conditionMatches(row: MatchableRow, condition: BankRuleCondition): bool
   }
 }
 
-/** A rule matches a row when every one of its conditions matches (AND). */
-export function ruleMatchesRow(rule: BankRule, row: MatchableRow): boolean {
-  return rule.enabled && rule.conditions.every((condition) => conditionMatches(row, condition));
+function directionMatches(rule: BankRule, row: MatchableRow): boolean {
+  if (rule.direction === "ANY" || row.amount === null) return true;
+  return rule.direction === "OUTFLOW" ? row.amount < 0 : row.amount > 0;
+}
+
+/**
+ * A rule matches a row when it's enabled, every condition matches (AND), its
+ * direction (money in/out/either) fits the row's amount sign, and -- when the
+ * rule is scoped to a specific account -- the import's main account matches.
+ */
+export function ruleMatchesRow(rule: BankRule, row: MatchableRow, mainAccountId?: string): boolean {
+  if (!rule.enabled) return false;
+  if (rule.scopedAccountId && rule.scopedAccountId !== mainAccountId) return false;
+  if (!directionMatches(rule, row)) return false;
+  return rule.conditions.every((condition) => conditionMatches(row, condition));
 }
 
 /**
@@ -62,6 +85,6 @@ export function ruleMatchesRow(rule: BankRule, row: MatchableRow): boolean {
  * decide what to do with that (leave the row's category alone, in the CSV
  * import wizard).
  */
-export function findMatchingRule(rules: BankRule[], row: MatchableRow): BankRule | null {
-  return rules.find((rule) => ruleMatchesRow(rule, row)) ?? null;
+export function findMatchingRule(rules: BankRule[], row: MatchableRow, mainAccountId?: string): BankRule | null {
+  return rules.find((rule) => ruleMatchesRow(rule, row, mainAccountId)) ?? null;
 }

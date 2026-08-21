@@ -22,7 +22,7 @@ export function Card({ title, description, padding = "md", className = "", child
   return (
     <section
       {...props}
-      className={`rounded-xl border border-[var(--color-divider-tertiary)] bg-[var(--color-container-background-primary)] ${PADDING_CLASSES[padding]} ${className}`.trim()}
+      className={`ui-card rounded-xl border border-[var(--color-divider-tertiary)] bg-[var(--color-container-background-primary)] ${PADDING_CLASSES[padding]} ${className}`.trim()}
     >
       {title ? <Card.Header title={title} description={description} /> : null}
       {children}

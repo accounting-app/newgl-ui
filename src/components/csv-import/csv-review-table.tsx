@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { Sparkles, Trash2 } from "lucide-react";
 import { SelectField } from "@/components/bank-register/select-field";
 import type { SelectFieldOption } from "@/components/bank-register/select-field";
@@ -8,8 +9,24 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { IconButton } from "@/components/ui/icon-button";
 import { InputField } from "@/components/ui/input-field";
 import { RadioGroup } from "@/components/ui/radio-group";
-import type { ReviewRow, SignConvention } from "@/modules/accounting/domain/csv-import";
+import type { CategorySplitLine, ReviewRow, SignConvention } from "@/modules/accounting/domain/csv-import";
 import type { BankRule, ExcludedFeedRow, Transaction } from "@/modules/accounting/domain/models";
+
+let splitLineIdCounter = 0;
+function newSplitLine(accountId = "", amount = ""): CategorySplitLine {
+  splitLineIdCounter += 1;
+  return { clientSplitId: `split-${splitLineIdCounter}`, accountId, amount };
+}
+
+/** Sum of a row's split-line amounts, tolerant of blank/invalid entries (treated as 0). */
+function splitTotal(splits: CategorySplitLine[]): number {
+  return splits.reduce((sum, line) => sum + (Number(line.amount) || 0), 0);
+}
+
+function isSplitBalanced(row: ReviewRow): boolean {
+  if (!row.categorySplits || row.amount === null) return false;
+  return Math.abs(splitTotal(row.categorySplits) - Math.abs(row.amount)) < 0.005;
+}
 
 type CsvReviewTableProps = {
   rows: ReviewRow[];
@@ -38,19 +55,39 @@ type CsvReviewTableProps = {
   exclusionMatches?: Map<string, ExcludedFeedRow>;
   /** Marks a row's payee+amount as permanently excluded from future imports on this account. */
   onExcludeRow?: (row: ReviewRow) => void;
+  /** Number of selected, submittable rows whose matched bank rule has autoPost enabled. */
+  autoPostCount?: number;
+  /** Posts just the auto-postable rows immediately, bypassing the confirm dialog. */
+  onAutoPost?: () => void;
 };
 
+function hasValidCategory(row: ReviewRow, mainAccountId: string): boolean {
+  if (row.categorySplits) {
+    return (
+      row.categorySplits.length >= 2 &&
+      row.categorySplits.every((line) => line.accountId && line.accountId !== mainAccountId) &&
+      isSplitBalanced(row)
+    );
+  }
+  return row.categoryAccountId !== null && row.categoryAccountId !== mainAccountId;
+}
+
 export function isRowSubmittable(row: ReviewRow, mainAccountId: string): boolean {
-  return (
-    row.transactionDate !== null &&
-    row.amount !== null &&
-    row.categoryAccountId !== null &&
-    row.categoryAccountId !== mainAccountId
-  );
+  return row.transactionDate !== null && row.amount !== null && hasValidCategory(row, mainAccountId);
 }
 
 function rowErrorMessage(row: ReviewRow, mainAccountId: string): string | null {
   if (row.parseErrors.length > 0) return row.parseErrors.join(" ");
+  if (row.categorySplits) {
+    if (row.categorySplits.some((line) => !line.accountId)) return "Select an account for every split line.";
+    if (row.categorySplits.some((line) => line.accountId === mainAccountId))
+      return "Target account must differ from the main account.";
+    if (!isSplitBalanced(row)) {
+      const remaining = row.amount === null ? 0 : Math.abs(row.amount) - splitTotal(row.categorySplits);
+      return `Splits must add up to the row amount (${remaining > 0 ? "short" : "over"} by ${formatMoney(Math.abs(remaining))}).`;
+    }
+    return null;
+  }
   if (!row.categoryAccountId) return "Select a target account.";
   if (row.categoryAccountId === mainAccountId) return "Target account must differ from the main account.";
   return null;
@@ -82,7 +119,9 @@ export function CsvReviewTable({
   bankRuleMatches,
   duplicateMatches,
   exclusionMatches,
-  onExcludeRow
+  onExcludeRow,
+  autoPostCount = 0,
+  onAutoPost
 }: CsvReviewTableProps) {
   const accountLabelById = new Map(accountOptions.map((option) => [option.value, option.label]));
   const selectedRows = rows.filter((row) => selectedRowIds.has(row.clientRowId));
@@ -200,7 +239,16 @@ export function CsvReviewTable({
                     {exclusionMatches?.has(row.clientRowId) ? (
                       <p className="mt-0.5 text-[11px] text-[var(--color-icon-secondary)]">Previously excluded</p>
                     ) : duplicateMatches?.has(row.clientRowId) ? (
-                      <p className="mt-0.5 text-[11px] text-[var(--color-icon-secondary)]">Looks like a duplicate</p>
+                      <p className="mt-0.5 text-[11px] text-[var(--color-icon-secondary)]">
+                        Looks like a duplicate ·{" "}
+                        <Link
+                          href={`/register?account=${mainAccountId}&tx=${duplicateMatches.get(row.clientRowId)?.id}`}
+                          target="_blank"
+                          className="text-[var(--color-link-text)] hover:underline"
+                        >
+                          View transaction
+                        </Link>
+                      </p>
                     ) : null}
                   </td>
                   <td className="p-2 align-top">
@@ -226,20 +274,119 @@ export function CsvReviewTable({
                     ) : null}
                   </td>
                   <td className="p-2 align-top">
-                    <SelectField
-                      value={row.categoryAccountId ?? ""}
-                      onChange={(value) =>
-                        onRowChange(row.clientRowId, {
-                          categoryAccountId: value || null,
-                          categoryConfidence: null,
-                          categorySource: value ? "manual" : null
-                        })
-                      }
-                      options={accountOptions}
-                      placeholder="Select"
-                      allowCustomValue={false}
-                      optionSize="sm"
-                    />
+                    {row.categorySplits ? (
+                      <div className="flex flex-col gap-1.5">
+                        {row.categorySplits.map((line) => (
+                          <div key={line.clientSplitId} className="flex items-center gap-1">
+                            <div className="min-w-0 flex-1">
+                              <SelectField
+                                value={line.accountId}
+                                onChange={(value) =>
+                                  onRowChange(row.clientRowId, {
+                                    categorySplits: row.categorySplits!.map((l) =>
+                                      l.clientSplitId === line.clientSplitId ? { ...l, accountId: value } : l
+                                    )
+                                  })
+                                }
+                                options={accountOptions}
+                                placeholder="Account"
+                                allowCustomValue={false}
+                                optionSize="sm"
+                              />
+                            </div>
+                            <div className="w-20">
+                              <InputField
+                                type="number"
+                                step="0.01"
+                                value={line.amount}
+                                onChange={(event) =>
+                                  onRowChange(row.clientRowId, {
+                                    categorySplits: row.categorySplits!.map((l) =>
+                                      l.clientSplitId === line.clientSplitId ? { ...l, amount: event.target.value } : l
+                                    )
+                                  })
+                                }
+                                className="text-right"
+                              />
+                            </div>
+                            <button
+                              type="button"
+                              aria-label="Remove split line"
+                              className="text-[var(--color-icon-secondary)] hover:text-red-600 disabled:opacity-30"
+                              onClick={() =>
+                                onRowChange(row.clientRowId, {
+                                  categorySplits:
+                                    row.categorySplits!.length <= 2
+                                      ? null
+                                      : row.categorySplits!.filter((l) => l.clientSplitId !== line.clientSplitId)
+                                })
+                              }
+                            >
+                              ×
+                            </button>
+                          </div>
+                        ))}
+                        <div className="flex items-center justify-between gap-2">
+                          <button
+                            type="button"
+                            className="text-[11px] text-[var(--color-link-text)] hover:underline"
+                            onClick={() =>
+                              onRowChange(row.clientRowId, { categorySplits: [...row.categorySplits!, newSplitLine()] })
+                            }
+                          >
+                            + Add split
+                          </button>
+                          <span
+                            className={`text-[11px] ${isSplitBalanced(row) ? "text-emerald-600" : "text-[var(--color-icon-secondary)]"}`}
+                          >
+                            {isSplitBalanced(row)
+                              ? "Balanced"
+                              : `Remaining ${formatMoney(Math.abs((row.amount === null ? 0 : Math.abs(row.amount)) - splitTotal(row.categorySplits)))}`}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          className="text-[11px] text-[var(--color-icon-secondary)] hover:underline"
+                          onClick={() => onRowChange(row.clientRowId, { categorySplits: null })}
+                        >
+                          Use a single account instead
+                        </button>
+                      </div>
+                    ) : (
+                      <>
+                        <SelectField
+                          value={row.categoryAccountId ?? ""}
+                          onChange={(value) =>
+                            onRowChange(row.clientRowId, {
+                              categoryAccountId: value || null,
+                              categoryConfidence: null,
+                              categorySource: value ? "manual" : null
+                            })
+                          }
+                          options={accountOptions}
+                          placeholder="Select"
+                          allowCustomValue={false}
+                          optionSize="sm"
+                        />
+                        <button
+                          type="button"
+                          className="mt-1 text-[11px] text-[var(--color-link-text)] hover:underline"
+                          onClick={() =>
+                            onRowChange(row.clientRowId, {
+                              categorySplits: [
+                                newSplitLine(row.categoryAccountId ?? "", ""),
+                                newSplitLine()
+                              ],
+                              categoryAccountId: null,
+                              categoryConfidence: null,
+                              categorySource: null
+                            })
+                          }
+                        >
+                          + Split into multiple accounts
+                        </button>
+                      </>
+                    )}
                     {row.categorySource === "ai" || row.categorySource === "rule" || row.categorySource === "bank-rule" ? (
                       <p className="mt-0.5 text-[11px] text-[var(--color-icon-secondary)]">
                         {row.categorySource === "rule"
@@ -252,6 +399,7 @@ export function CsvReviewTable({
                       </p>
                     ) : null}
                     {(() => {
+                      if (row.categorySplits) return null;
                       const match = bankRuleMatches?.get(row.clientRowId);
                       if (!match || match.targetAccountId === row.categoryAccountId) return null;
                       const accountLabel = accountLabelById.get(match.targetAccountId) ?? match.targetAccountId;
@@ -305,9 +453,16 @@ export function CsvReviewTable({
         <Button variant="secondary" onClick={onBack} disabled={isSubmitting || backDisabled}>
           Back
         </Button>
-        <Button variant="primary" onClick={onContinue} disabled={isSubmitting || !allSelectedAreReady}>
-          Continue
-        </Button>
+        <div className="flex items-center gap-2">
+          {autoPostCount > 0 && onAutoPost ? (
+            <Button variant="secondary" onClick={onAutoPost} disabled={isSubmitting}>
+              Auto-post {autoPostCount}
+            </Button>
+          ) : null}
+          <Button variant="primary" onClick={onContinue} disabled={isSubmitting || !allSelectedAreReady}>
+            Continue
+          </Button>
+        </div>
       </div>
     </div>
   );

@@ -53,6 +53,7 @@ function emit(event: LedgerDomainEvent): void {
 }
 
 const ACCOUNT_TYPE_BY_CATEGORY: Record<Account["category"], ChartOfAccount["accountType"]> = {
+  ACCOUNTS_PAYABLE: "LIABILITY",
   ACCOUNTS_RECEIVABLE: "ASSET",
   BANK: "ASSET",
   CREDIT_CARD: "LIABILITY",
@@ -536,6 +537,17 @@ export class MockAccountService implements AccountService {
     account.updatedAt = nowIso();
   }
 
+  async deleteAccount(id: string): Promise<void> {
+    const account = requireAccount(this.store, id);
+    const hasActivity = this.store.transactions.some((transaction) =>
+      transaction.postings.some((posting) => posting.accountId === id)
+    );
+    if (hasActivity) {
+      throw new Error(`"${account.name}" has transaction activity and can't be deleted -- archive it instead.`);
+    }
+    this.store.accounts = this.store.accounts.filter((item) => item.id !== id);
+  }
+
   async getAccountById(id: string): Promise<Account> {
     return requireAccount(this.store, id);
   }
@@ -582,6 +594,7 @@ export class MockTransactionService implements TransactionService {
       type: input.type,
       status: "DRAFT",
       transactionDate: input.transactionDate,
+      dueDate: input.dueDate,
       referenceNumber: input.referenceNumber,
       memo: input.memo,
       payee: input.payee,
@@ -792,19 +805,22 @@ export class MockTransactionService implements TransactionService {
         if (amount === 0) {
           throw new Error("Amount must not be zero.");
         }
-        if (input.mainAccountId === row.categoryAccountId) {
+
+        const categoryLegs = row.categorySplits ?? [{ accountId: row.categoryAccountId!, amount }];
+        if (categoryLegs.some((leg) => leg.accountId === input.mainAccountId)) {
           throw new Error("Main account and category account must differ.");
         }
+        const splitTotal = categoryLegs.reduce((sum, leg) => sum + leg.amount, 0);
+        if (Math.abs(splitTotal - amount) > 0.005) {
+          throw new Error(`Split amounts (${splitTotal.toFixed(2)}) must add up to the row amount (${amount.toFixed(2)}).`);
+        }
 
-        const postings = isOutflow
-          ? [
-              { accountId: input.mainAccountId, type: "CREDIT" as const, amount },
-              { accountId: row.categoryAccountId, type: "DEBIT" as const, amount }
-            ]
-          : [
-              { accountId: input.mainAccountId, type: "DEBIT" as const, amount },
-              { accountId: row.categoryAccountId, type: "CREDIT" as const, amount }
-            ];
+        const mainSide: "DEBIT" | "CREDIT" = isOutflow ? "CREDIT" : "DEBIT";
+        const categorySide: "DEBIT" | "CREDIT" = isOutflow ? "DEBIT" : "CREDIT";
+        const postings = [
+          { accountId: input.mainAccountId, type: mainSide, amount },
+          ...categoryLegs.map((leg) => ({ accountId: leg.accountId, type: categorySide, amount: leg.amount }))
+        ];
 
         validateDoubleEntry(postings);
         validateTransactionPeriod(row.transactionDate);

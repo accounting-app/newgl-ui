@@ -61,7 +61,7 @@ export function TopHeader() {
         >
           <div
             aria-hidden="true"
-            className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--color-avatar-background)] text-xs font-semibold text-white"
+            className="avatar-circle flex h-8 w-8 items-center justify-center rounded-full bg-[var(--color-avatar-background)] text-xs font-semibold text-white"
           >
             {avatarLetter}
           </div>
