@@ -35,6 +35,7 @@ type CompanyContextValue = {
   isSwitching: boolean;
   switchCompany: (name: string) => Promise<void>;
   createCompany: (input: CreateCompanyInput) => Promise<void>;
+  deleteCompany: (name: string) => Promise<void>;
 };
 
 const CompanyContext = createContext<CompanyContextValue>({
@@ -45,7 +46,8 @@ const CompanyContext = createContext<CompanyContextValue>({
   error: null,
   isSwitching: false,
   switchCompany: async () => {},
-  createCompany: async () => {}
+  createCompany: async () => {},
+  deleteCompany: async () => {}
 });
 
 type CompanyProviderProps = Readonly<{
@@ -103,11 +105,33 @@ export function CompanyProvider({ children }: CompanyProviderProps) {
     await load();
   }
 
+  async function deleteCompany(name: string) {
+    const wasActive = companies.find((company) => company.name === name)?.isActive ?? false;
+    await request(BASE_API_URL, `/companies/${encodeURIComponent(name)}`, { method: "DELETE" });
+    if (wasActive) {
+      // Same full-reload rationale as switchCompany -- every other piece of
+      // page state was fetched under the now-deleted company.
+      window.location.reload();
+      return;
+    }
+    await load();
+  }
+
   const activeCompany = companies.find((company) => company.isActive) ?? null;
 
   return (
     <CompanyContext.Provider
-      value={{ companies, templates, activeCompany, loading, error, isSwitching, switchCompany, createCompany }}
+      value={{
+        companies,
+        templates,
+        activeCompany,
+        loading,
+        error,
+        isSwitching,
+        switchCompany,
+        createCompany,
+        deleteCompany
+      }}
     >
       {children}
     </CompanyContext.Provider>

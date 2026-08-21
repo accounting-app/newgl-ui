@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { Building2, ChevronDown, Plus } from "lucide-react";
+import { Building2, ChevronDown, Plus, Trash2 } from "lucide-react";
 import { InputField } from "@/components/ui/input-field";
 import { useCompany } from "@/lib/company/company-provider";
 
@@ -10,7 +10,8 @@ import { useCompany } from "@/lib/company/company-provider";
 type StartingPoint = "blank" | "template" | "duplicate";
 
 export function CompanyPicker() {
-  const { companies, templates, activeCompany, loading, isSwitching, switchCompany, createCompany } = useCompany();
+  const { companies, templates, activeCompany, loading, isSwitching, switchCompany, createCompany, deleteCompany } =
+    useCompany();
   const [isOpen, setIsOpen] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [newName, setNewName] = useState("");
@@ -19,6 +20,9 @@ export function CompanyPicker() {
   const [duplicateFromName, setDuplicateFromName] = useState("");
   const [createError, setCreateError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [deletingName, setDeletingName] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -27,6 +31,8 @@ export function CompanyPicker() {
       if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
         setIsOpen(false);
         setIsCreating(false);
+        setDeletingName(null);
+        setDeleteError(null);
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
@@ -39,6 +45,21 @@ export function CompanyPicker() {
       return;
     }
     await switchCompany(name); // triggers a full page reload on success
+  }
+
+  async function handleDelete(name: string) {
+    setIsDeleting(true);
+    setDeleteError(null);
+    try {
+      await deleteCompany(name);
+      setDeletingName(null);
+      // A delete of the active company triggers a full page reload inside
+      // deleteCompany -- nothing left to clean up here in that case.
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : "Could not delete this company");
+    } finally {
+      setIsDeleting(false);
+    }
   }
 
   function resetCreateForm() {
@@ -92,22 +113,65 @@ export function CompanyPicker() {
           role="menu"
           className="absolute left-0 top-full z-10 mt-2 w-64 overflow-hidden rounded-lg border border-[var(--color-divider-tertiary)] bg-[var(--color-container-background-primary)] py-1 shadow-lg"
         >
-          {companies.map((company) => (
-            <button
-              key={company.name}
-              type="button"
-              role="menuitem"
-              onClick={() => handleSwitch(company.name)}
-              className={`flex w-full items-center justify-between px-3 py-2 text-left text-sm transition-colors hover:bg-[var(--color-action-passive-subtle-hover)] ${
-                company.isActive ? "text-[var(--color-link-action)]" : "text-[var(--color-text-global)]"
-              }`}
-            >
-              <span>{company.name}</span>
-              {company.isPrimary ? (
-                <span className="text-[11px] text-[var(--color-icon-secondary)]">Primary</span>
-              ) : null}
-            </button>
-          ))}
+          {companies.map((company) =>
+            deletingName === company.name ? (
+              <div key={company.name} className="flex flex-col gap-2 px-3 py-2">
+                <p className="text-xs text-[var(--color-text-primary)]">
+                  Delete <span className="font-medium">{company.name}</span>? This permanently removes its chart of
+                  accounts and transactions and can&apos;t be undone.
+                </p>
+                {deleteError ? <p className="text-xs text-red-600">{deleteError}</p> : null}
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleDelete(company.name)}
+                    disabled={isDeleting}
+                    className="rounded bg-red-600 px-2 py-1 text-xs font-medium text-white disabled:opacity-50"
+                  >
+                    {isDeleting ? "Deleting…" : "Delete"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDeletingName(null);
+                      setDeleteError(null);
+                    }}
+                    disabled={isDeleting}
+                    className="rounded px-2 py-1 text-xs text-[var(--color-text-primary)] hover:bg-[var(--color-action-passive-subtle-hover)]"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div key={company.name} role="menuitem" className="group flex w-full items-center justify-between px-3 py-2 text-left text-sm">
+                <button
+                  type="button"
+                  onClick={() => handleSwitch(company.name)}
+                  className={`flex-1 text-left transition-colors ${
+                    company.isActive ? "text-[var(--color-link-action)]" : "text-[var(--color-text-global)]"
+                  }`}
+                >
+                  {company.name}
+                </button>
+                {company.isPrimary ? (
+                  <span className="text-[11px] text-[var(--color-icon-secondary)]">Primary</span>
+                ) : (
+                  <button
+                    type="button"
+                    aria-label={`Delete ${company.name}`}
+                    onClick={() => {
+                      setDeletingName(company.name);
+                      setDeleteError(null);
+                    }}
+                    className="rounded p-1 text-[var(--color-icon-secondary)] opacity-0 transition-opacity hover:bg-[var(--color-action-passive-subtle-hover)] hover:text-red-600 group-hover:opacity-100"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+                  </button>
+                )}
+              </div>
+            )
+          )}
 
           <div className="mt-1 border-t border-[var(--color-divider-tertiary)] pt-1">
             {isCreating ? (
