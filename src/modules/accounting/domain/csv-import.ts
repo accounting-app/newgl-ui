@@ -4,6 +4,12 @@
 // explicitly chose over whatever else was suggested for that row.
 export type CategorySource = "rule" | "bank-rule" | "ai" | "manual" | null;
 
+export type CategorySplitLine = {
+  clientSplitId: string;
+  accountId: string;
+  amount: string;
+};
+
 export type ParsedCsvRow = {
   clientRowId: string;
   rawDate: string;
@@ -17,6 +23,8 @@ export type ParsedCsvRow = {
   categoryAccountId: string | null;
   categoryConfidence: number | null;
   categorySource: CategorySource;
+  /** When set (length >= 2), this row posts to multiple category accounts instead of the single categoryAccountId. */
+  categorySplits: CategorySplitLine[] | null;
   parseErrors: string[];
 };
 

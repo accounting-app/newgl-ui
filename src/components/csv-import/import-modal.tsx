@@ -367,7 +367,9 @@ export function ImportModal({
           payee: row.payee || undefined,
           memo: row.memo || undefined,
           amount: row.amount!,
-          categoryAccountId: row.categoryAccountId!
+          ...(row.categorySplits
+            ? { categorySplits: row.categorySplits.map((line) => ({ accountId: line.accountId, amount: Math.abs(Number(line.amount) || 0) })) }
+            : { categoryAccountId: row.categoryAccountId! })
         }))
       });
       setImportResult(result);
@@ -376,8 +378,10 @@ export function ImportModal({
 
       // Best-effort -- teaching the payee->account mapping is a nice-to-have
       // that makes future imports cheaper, never something the import result
-      // should wait on or fail over.
-      const learnableRows = submittable.filter((row) => row.payee.trim() !== "");
+      // should wait on or fail over. Split rows have no single account to
+      // learn, so they're excluded rather than teaching a misleading 1:1
+      // payee->account mapping.
+      const learnableRows = submittable.filter((row) => row.payee.trim() !== "" && !row.categorySplits);
       if (aiEnabled && learnableRows.length > 0) {
         learnPayeeRules(
           learnableRows.map((row) => ({ payee: row.payee, accountId: row.categoryAccountId! }))

@@ -225,13 +225,20 @@ export type CreateTransactionInput = Pick<
   | "postings"
 >;
 
+export type ImportTransactionCategorySplit = {
+  accountId: string;
+  amount: number;
+};
+
 export type ImportTransactionRowInput = {
   clientRowId: string;
   transactionDate: string;
   payee?: string;
   memo?: string;
   amount: number;
-  categoryAccountId: string;
+  /** Single-category rows set this; multi-category rows set categorySplits instead -- exactly one of the two must be present. */
+  categoryAccountId?: string;
+  categorySplits?: ImportTransactionCategorySplit[];
   referenceNumber?: string;
 };
 

@@ -188,6 +188,7 @@ export function buildReviewRows(
       categoryAccountId: null,
       categoryConfidence: null,
       categorySource: null,
+      categorySplits: null,
       parseErrors
     };
   });
