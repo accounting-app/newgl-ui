@@ -267,7 +267,7 @@ export type ListTransactionsFilter = {
 
 // Deterministic bank rules (PLAINGL_FEATURES_TO_IMPLEMENT.md #7) -- mirrors
 // newgl-api's src/domain/models.ts bank-rule schemas.
-export const bankRuleFieldSchema = z.enum(["payee", "memo", "amount"]);
+export const bankRuleFieldSchema = z.enum(["payee", "memo", "rawMemo", "amount"]);
 export const bankRuleTextOperatorSchema = z.enum(["contains", "not_contains", "equals", "starts_with", "regex"]);
 export const bankRuleAmountOperatorSchema = z.enum(["greater_than", "less_than", "between"]);
 export const bankRuleOperatorSchema = z.union([bankRuleTextOperatorSchema, bankRuleAmountOperatorSchema]);

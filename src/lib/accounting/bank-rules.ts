@@ -1,9 +1,20 @@
 import type { BankRule, BankRuleCondition } from "@/modules/accounting/domain/models";
 
-export type MatchableRow = { payee: string; memo: string; amount: number | null };
+// rawMemo is the bank's original, unprocessed description text (e.g. from a
+// CSV import's "Description" column before any cleanup). Optional because
+// only CSV-imported rows have a raw value distinct from memo -- callers
+// without one (manual entries) fall back to memo, same as PlainGL's own
+// behavior when no separate raw text exists.
+export type MatchableRow = { payee: string; memo: string; rawMemo?: string; amount: number | null };
 
-function textValue(row: MatchableRow, field: "payee" | "memo"): string {
-  return (field === "payee" ? row.payee : row.memo).toLowerCase();
+function rawValueFor(row: MatchableRow, field: "payee" | "memo" | "rawMemo"): string {
+  if (field === "payee") return row.payee;
+  if (field === "rawMemo") return row.rawMemo ?? row.memo;
+  return row.memo;
+}
+
+function textValue(row: MatchableRow, field: "payee" | "memo" | "rawMemo"): string {
+  return rawValueFor(row, field).toLowerCase();
 }
 
 function conditionMatches(row: MatchableRow, condition: BankRuleCondition): boolean {
@@ -39,7 +50,7 @@ function conditionMatches(row: MatchableRow, condition: BankRuleCondition): bool
     case "starts_with":
       return haystack.startsWith(needle);
     case "regex": {
-      const rawValue = condition.field === "payee" ? row.payee : row.memo;
+      const rawValue = rawValueFor(row, condition.field);
       try {
         return new RegExp(condition.value, "i").test(rawValue);
       } catch {

@@ -65,6 +65,7 @@ const DIRECTION_OPTIONS: { value: BankRuleDirection; label: string }[] = [
 const FIELD_OPTIONS = [
   { value: "payee", label: "Payee" },
   { value: "memo", label: "Memo" },
+  { value: "rawMemo", label: "Raw bank memo" },
   { value: "amount", label: "Amount" }
 ];
 
@@ -82,7 +83,12 @@ const AMOUNT_OPERATOR_OPTIONS = [
   { value: "between", label: "Between" }
 ];
 
-const FIELD_LABELS: Record<BankRuleField, string> = { payee: "Payee", memo: "Memo", amount: "Amount" };
+const FIELD_LABELS: Record<BankRuleField, string> = {
+  payee: "Payee",
+  memo: "Memo",
+  rawMemo: "Raw bank memo",
+  amount: "Amount"
+};
 const OPERATOR_LABELS: Record<BankRuleOperator, string> = {
   contains: "contains",
   not_contains: "does not contain",

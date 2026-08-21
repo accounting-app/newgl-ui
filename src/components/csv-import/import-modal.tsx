@@ -108,7 +108,7 @@ export function ImportModal({
   const bankRuleMatches = useMemo(() => {
     const matches = new Map<string, BankRule>();
     reviewRows.forEach((row) => {
-      const match = findMatchingRule(bankRules, { payee: row.payee, memo: row.memo, amount: row.amount }, mainAccountId);
+      const match = findMatchingRule(bankRules, { payee: row.payee, memo: row.memo, rawMemo: row.rawDescription, amount: row.amount }, mainAccountId);
       if (match) matches.set(row.clientRowId, match);
     });
     return matches;
@@ -238,7 +238,7 @@ export function ImportModal({
     // keeping the guard makes the intent explicit).
     const withRuleMatches = built.map((row) => {
       if (row.categoryAccountId !== null) return row;
-      const match = findMatchingRule(bankRules, { payee: row.payee, memo: row.memo, amount: row.amount }, mainAccountId);
+      const match = findMatchingRule(bankRules, { payee: row.payee, memo: row.memo, rawMemo: row.rawDescription, amount: row.amount }, mainAccountId);
       if (!match) return row;
       return { ...row, categoryAccountId: match.targetAccountId, categoryConfidence: null, categorySource: "bank-rule" as const };
     });
