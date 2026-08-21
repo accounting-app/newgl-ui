@@ -121,6 +121,112 @@
   --color-link-action: #8ab4f8;
   --color-report-row-alt: #2a2d31;
 }
+
+/*
+  Additional cosmetic skins (PlainGL parity #10 -- PlainGL ships 5 skins,
+  this app previously had light/dark only). Each overrides the same
+  surface-color tokens as .dark above, plus the brand-accent tokens
+  (action-standard, link-action, avatar-background, etc.) that light/dark
+  deliberately leave alone -- these two are meant to read as distinct
+  accent identities, not just a lighter/darker surface.
+*/
+.modern {
+  --color-text-global: #0b0b12;
+  --color-text-primary: #0b0b12;
+  --color-icon-primary: #0b0b12;
+  --color-icon-secondary: #6b7280;
+  --color-text-disabled: #9ca3af;
+  --color-text-highlight: #635bff;
+  --color-action-passive-subtle-active: rgba(11, 11, 18, 0.12);
+  --color-action-passive-subtle-hover: rgba(11, 11, 18, 0.06);
+  --color-container-background-primary: #ffffff;
+  --color-container-background-secondary: #f0f0f7;
+  --color-container-background-accent: #f6f7fb;
+  --color-divider-tertiary: #e7e7ee;
+  --color-container-border-secondary: #d6d6e2;
+  --color-container-border-primary: #c7c7d6;
+  --color-input-border-primary: #d6d6e2;
+  --color-shadow: #0b0b12;
+  --color-link-text: #635bff;
+  --gbsg-nav-bar-icon-color: #0b0b12;
+  --gbsg-nav-bar-text-color: #0b0b12;
+  --gbsg-nav-bar-action-color-hover: #635bff;
+  --color-sidebar-background: #ffffff;
+  --color-input-background: #ffffff;
+  --color-input-text: #0b0b12;
+  --color-input-disabled-border: #e7e7ee;
+  --color-input-disabled-background: #f6f7fb;
+  --color-input-disabled-text: #9ca3af;
+  --color-button-gradient-from: #ffffff;
+  --color-button-gradient-to: #f6f7fb;
+  --color-button-border: #d6d6e2;
+  --color-action-bar-background: #f0f0f7;
+  --color-quickadd-background: #f6f7fb;
+  --color-quickadd-button-text: #6b7280;
+  --color-form-row-background: #eeecff;
+  --color-form-row-border: #d9d5ff;
+  --color-table-row-hover: #f5f4ff;
+  --color-table-row-secondary: #fafafd;
+  --color-table-row-secondary-hover: #f0efff;
+  --color-icon-muted: #c7c7d6;
+  --color-highlight-badge-background: #ecebff;
+  --color-highlight-badge-text: #4c46c9;
+  --color-link-action: #635bff;
+  --color-report-row-alt: #f9f9fc;
+  --color-action-standard: #635bff;
+  --color-action-standard-subtle-hover: rgba(99, 91, 255, 0.1);
+  --color-avatar-background: #635bff;
+  --color-report-toggle-active: #635bff;
+}
+
+.america250 {
+  --color-text-global: #0a1f44;
+  --color-text-primary: #0a1f44;
+  --color-icon-primary: #0a1f44;
+  --color-icon-secondary: #5a6a8a;
+  --color-text-disabled: #97a3bd;
+  --color-text-highlight: #3c3b6e;
+  --color-action-passive-subtle-active: rgba(60, 59, 110, 0.16);
+  --color-action-passive-subtle-hover: rgba(60, 59, 110, 0.08);
+  --color-container-background-primary: #ffffff;
+  --color-container-background-secondary: #eef2fb;
+  --color-container-background-accent: #f4f7fd;
+  --color-divider-tertiary: #cdd8ec;
+  --color-container-border-secondary: #b7c4e0;
+  --color-container-border-primary: #9fb0d6;
+  --color-input-border-primary: #b7c4e0;
+  --color-shadow: #0a1f44;
+  --color-link-text: #1e5bb8;
+  --gbsg-nav-bar-icon-color: #0a1f44;
+  --gbsg-nav-bar-text-color: #0a1f44;
+  --gbsg-nav-bar-action-color-hover: #b22234;
+  --color-sidebar-background: #ffffff;
+  --color-input-background: #ffffff;
+  --color-input-text: #0a1f44;
+  --color-input-disabled-border: #e3e9f6;
+  --color-input-disabled-background: #f4f7fd;
+  --color-input-disabled-text: #97a3bd;
+  --color-button-gradient-from: #ffffff;
+  --color-button-gradient-to: #f4f7fd;
+  --color-button-border: #9fb0d6;
+  --color-action-bar-background: #eef2fb;
+  --color-quickadd-background: #f4f7fd;
+  --color-quickadd-button-text: #5a6a8a;
+  --color-form-row-background: #e7ecfa;
+  --color-form-row-border: #cdd8ec;
+  --color-table-row-hover: #eef2fb;
+  --color-table-row-secondary: #f8f9fc;
+  --color-table-row-secondary-hover: #e7ecfa;
+  --color-icon-muted: #b7c4e0;
+  --color-highlight-badge-background: #e7ecfa;
+  --color-highlight-badge-text: #3c3b6e;
+  --color-link-action: #1e5bb8;
+  --color-report-row-alt: #f8f9fc;
+  --color-action-standard: #b22234;
+  --color-action-standard-subtle-hover: rgba(178, 34, 52, 0.1);
+  --color-avatar-background: #3c3b6e;
+  --color-report-toggle-active: #3c3b6e;
+}
 /*
   Use this wrapper class on any container where you want strong overrides:
   <div className="tw-override">...</div>
