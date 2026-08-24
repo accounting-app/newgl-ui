@@ -75,6 +75,14 @@
   --color-avatar-background: #2ca8df;
   --color-report-row-alt: #f8f9fb;
   --color-report-toggle-active: #005244;
+  /* .bean editor syntax highlighting (BEAN_FILE_EDITOR_PLAN.md) -- accent-1
+     (directive keywords) tracks each theme's own brand accent below;
+     accent-2 (strings)/accent-3 (numbers & dates) stay a consistent
+     green/amber pair across every light-background theme, since those
+     aren't brand-identity colors, just readable syntax colors. */
+  --bean-accent-1: #7c3aed;
+  --bean-accent-2: #15803d;
+  --bean-accent-3: #b45309;
 }
 
 .dark {
@@ -120,6 +128,9 @@
   --color-highlight-badge-text: #5cdb5c;
   --color-link-action: #8ab4f8;
   --color-report-row-alt: #2a2d31;
+  --bean-accent-1: #c678dd;
+  --bean-accent-2: #98c379;
+  --bean-accent-3: #e5c07b;
 }
 
 /*
@@ -177,6 +188,9 @@
   --color-action-standard-subtle-hover: rgba(99, 91, 255, 0.1);
   --color-avatar-background: #635bff;
   --color-report-toggle-active: #635bff;
+  --bean-accent-1: #635bff;
+  --bean-accent-2: #15803d;
+  --bean-accent-3: #b45309;
 }
 
 .america250 {
@@ -226,6 +240,9 @@
   --color-action-standard-subtle-hover: rgba(178, 34, 52, 0.1);
   --color-avatar-background: #3c3b6e;
   --color-report-toggle-active: #3c3b6e;
+  --bean-accent-1: #3c3b6e;
+  --bean-accent-2: #15803d;
+  --bean-accent-3: #b45309;
 }
 
 .pretty {
@@ -283,6 +300,9 @@
   --color-action-standard-subtle-hover: rgba(14, 165, 164, 0.1);
   --color-avatar-background: #0ea5a4;
   --color-report-toggle-active: #0ea5a4;
+  --bean-accent-1: #0ea5a4;
+  --bean-accent-2: #15803d;
+  --bean-accent-3: #b45309;
 }
 
 /*

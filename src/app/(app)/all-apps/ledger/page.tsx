@@ -5,8 +5,11 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { InputField } from "@/components/ui/input-field";
 import { BulkPasteImport } from "@/components/settings/bulk-paste-import";
+import { LedgerEditTab } from "@/components/settings/ledger-edit-tab";
 import { BASE_API_URL, PRIMARY_LEDGER_NAME } from "@/configuration";
 import { getAccessToken, request } from "@/lib/services/http-service-container";
+
+type LedgerPageTab = "manage" | "edit";
 
 type LedgerVersion = {
   version: number;
@@ -32,6 +35,9 @@ const SOURCE_LABELS: Record<LedgerVersion["source"], string> = {
 };
 
 export default function LedgerSettingsPage() {
+  const [activeTab, setActiveTab] = useState<LedgerPageTab>("manage");
+  const [editHasUnsavedChanges, setEditHasUnsavedChanges] = useState(false);
+
   const [versions, setVersions] = useState<LedgerVersion[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -168,8 +174,48 @@ export default function LedgerSettingsPage() {
     }
   }
 
+  function handleTabChange(tab: LedgerPageTab) {
+    if (tab === activeTab) return;
+    if (editHasUnsavedChanges && !window.confirm("You have unsaved edits. Switch tabs anyway and lose them?")) {
+      return;
+    }
+    setActiveTab(tab);
+  }
+
   return (
     <>
+      <div
+        role="tablist"
+        aria-label="Ledger view"
+        className="mb-6 flex items-center gap-1 border-b border-[var(--color-divider-tertiary)]"
+      >
+        {(
+          [
+            { key: "manage", label: "Manage file" },
+            { key: "edit", label: "Edit" }
+          ] as const
+        ).map((tab) => (
+          <button
+            key={tab.key}
+            type="button"
+            role="tab"
+            aria-selected={activeTab === tab.key}
+            onClick={() => handleTabChange(tab.key)}
+            className={`-mb-px border-b-2 px-3 py-1.5 text-sm font-medium transition-colors ${
+              activeTab === tab.key
+                ? "border-[var(--color-ui-primary)] text-[var(--color-text-primary)]"
+                : "border-transparent text-[var(--color-icon-secondary)] hover:text-[var(--color-text-primary)]"
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {activeTab === "edit" ? (
+        <LedgerEditTab onSaved={loadVersions} onDirtyChange={setEditHasUnsavedChanges} />
+      ) : (
+        <>
       <Card
         title="Your .bean file"
         description="Download your ledger to edit it directly, or upload a replacement. Uploads are validated before anything is saved — a malformed file is rejected and your current ledger is left untouched."
@@ -259,6 +305,8 @@ export default function LedgerSettingsPage() {
           </>
         )}
       </Card>
+        </>
+      )}
     </>
   );
 }
