@@ -47,19 +47,32 @@ export const beancountEditorTheme = EditorView.theme({
   // "&light .cm-tooltip { backgroundColor: #f5f5f5 }" whenever the editor
   // isn't explicitly marked dark (EditorView.theme's second argument),
   // which this theme never does since it's the same stylesheet for all 5
-  // app themes. That rule was winning over the plain background-color
-  // override below, leaving CodeMirror's light-gray tooltip background
-  // paired with THIS theme's (possibly near-white, in dark mode) text
-  // color -- unreadable. !important is the reliable fix since it isn't a
-  // specificity fight we can win by nesting selectors (CodeMirror's rule
-  // is itself compound).
-  ".cm-tooltip.cm-tooltip-lint": {
+  // app themes.
+  //
+  // The first attempt at overriding this targeted ".cm-tooltip.cm-tooltip-lint"
+  // (both classes on one element) based on reading @codemirror/lint's
+  // source, but that never actually matches: verified live (via a real
+  // dispatched mousemove, not just DOM inspection) that a *hover* tooltip's
+  // real markup is a two-level structure --
+  //   <div class="cm-tooltip-hover cm-tooltip">   <- background lives here
+  //     <ul class="cm-tooltip-lint cm-tooltip-section">   <- no "cm-tooltip" class
+  // -- so the compound selector matched neither element, and CodeMirror's
+  // own #f5f5f5 default kept winning. Targeting bare ".cm-tooltip" instead
+  // (it's the actual outer wrapper for every tooltip CodeMirror renders,
+  // hover or not) is both correct and simpler. !important because this
+  // still needs to beat CodeMirror's own compound "&light .cm-tooltip" /
+  // "&dark .cm-tooltip" rules, not because of anything about our own
+  // selector's specificity.
+  ".cm-tooltip": {
     backgroundColor: "var(--color-container-background-primary) !important",
     border: "1px solid var(--color-divider-tertiary) !important",
     color: "var(--color-text-primary) !important"
   },
-  ".cm-tooltip.cm-tooltip-lint .cm-diagnostic": {
+  ".cm-tooltip .cm-diagnostic": {
     color: "var(--color-text-primary) !important"
+  },
+  ".cm-tooltip .cm-diagnosticSource": {
+    color: "var(--color-icon-secondary) !important"
   }
 });
 
