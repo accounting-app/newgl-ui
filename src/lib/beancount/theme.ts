@@ -43,10 +43,23 @@ export const beancountEditorTheme = EditorView.theme({
   ".cm-gutter-lint .cm-gutterElement": {
     color: "#dc2626"
   },
+  // CodeMirror's own base theme (@codemirror/view) applies
+  // "&light .cm-tooltip { backgroundColor: #f5f5f5 }" whenever the editor
+  // isn't explicitly marked dark (EditorView.theme's second argument),
+  // which this theme never does since it's the same stylesheet for all 5
+  // app themes. That rule was winning over the plain background-color
+  // override below, leaving CodeMirror's light-gray tooltip background
+  // paired with THIS theme's (possibly near-white, in dark mode) text
+  // color -- unreadable. !important is the reliable fix since it isn't a
+  // specificity fight we can win by nesting selectors (CodeMirror's rule
+  // is itself compound).
   ".cm-tooltip.cm-tooltip-lint": {
-    backgroundColor: "var(--color-container-background-primary)",
-    border: "1px solid var(--color-divider-tertiary)",
-    color: "var(--color-text-primary)"
+    backgroundColor: "var(--color-container-background-primary) !important",
+    border: "1px solid var(--color-divider-tertiary) !important",
+    color: "var(--color-text-primary) !important"
+  },
+  ".cm-tooltip.cm-tooltip-lint .cm-diagnostic": {
+    color: "var(--color-text-primary) !important"
   }
 });
 
