@@ -38,12 +38,6 @@ export const ALL_APPS_CATEGORIES: AppCategory[] = [
 // configuration than day-to-day bookkeeping.
 export const SETTINGS_GROUPS: AppCategory[] = [
   {
-    id: "books",
-    label: "Books",
-    icon: Database,
-    items: [{ label: "Ledger", href: "/settings/ledger", icon: Database }]
-  },
-  {
     id: "account",
     label: "Account",
     icon: Users,
@@ -52,5 +46,11 @@ export const SETTINGS_GROUPS: AppCategory[] = [
       { label: "Billing", href: "/settings/billing", icon: CreditCard },
       { label: "Organization", href: "/settings/organization", icon: Users }
     ]
+  },
+  {
+    id: "books",
+    label: "Books",
+    icon: Database,
+    items: [{ label: "Ledger", href: "/settings/ledger", icon: Database }]
   }
 ];
