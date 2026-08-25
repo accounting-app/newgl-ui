@@ -2,7 +2,7 @@
 
 import { Suspense, useCallback, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ClipboardList, Download, History, Pencil, Trash2, Upload } from "lucide-react";
+import { ClipboardList, Download, FilePlus2, History, Pencil, Trash2, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { InputField } from "@/components/ui/input-field";
@@ -16,6 +16,7 @@ import { BASE_API_URL } from "@/configuration";
 import { useCompany } from "@/lib/company/company-provider";
 import { getAccessToken, request } from "@/lib/services/http-service-container";
 import {
+  createLedgerFile,
   deleteLedgerFile,
   downloadLedgerFile,
   listLedgerFiles,
@@ -37,10 +38,20 @@ type ModalState =
   | { type: "download"; row: FileRow }
   | { type: "history"; row: FileRow }
   | { type: "upload" }
+  | { type: "create" }
   | { type: "rename"; row: FileRow }
   | { type: "delete"; row: Extract<FileRow, { kind: "extra" }> };
 
 type LedgerSummary = { name: string; version: number; contentHash: string; transactionCount: number; accountCount: number };
+
+// A minimal, valid Beancount file -- passes the same isPlausibleBeancountDocument
+// check the backend runs on every write (has the required option "title"),
+// so a brand-new file never opens straight into a wall of syntax errors.
+function boilerplateBean(title: string): string {
+  return [';; -*- mode: beancount; -*-', `option "title" "${title}"`, 'option "operating_currency" "USD"', ""].join(
+    "\n"
+  );
+}
 
 export default function LedgerSettingsPage() {
   return (
@@ -64,6 +75,10 @@ function LedgerSettingsPageInner() {
   const [renameError, setRenameError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [createName, setCreateName] = useState("");
+  const [createLabel, setCreateLabel] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
 
   const loadFiles = useCallback(async () => {
     setLoading(true);
@@ -170,6 +185,36 @@ function LedgerSettingsPageInner() {
     }
   }
 
+  function openCreate() {
+    setCreateName("");
+    setCreateLabel("");
+    setCreateError(null);
+    setModal({ type: "create" });
+  }
+
+  async function handleCreateSave() {
+    if (!createName.trim()) return;
+    setCreating(true);
+    setCreateError(null);
+    try {
+      const created = await createLedgerFile({
+        name: createName.trim(),
+        label: createLabel.trim() || undefined,
+        content: boilerplateBean(createLabel.trim() || createName.trim())
+      });
+      await loadFiles();
+      setModal(null);
+      // Drop straight into the editor -- "so the user can edit it and add
+      // more information later" is the whole point of starting from a
+      // boilerplate instead of forcing a full file upload for every new one.
+      setOpenFile({ ...created, kind: "extra" });
+    } catch (err) {
+      setCreateError(err instanceof Error ? err.message : "Could not create this file");
+    } finally {
+      setCreating(false);
+    }
+  }
+
   async function handleDeleteConfirm() {
     if (modal?.type !== "delete") return;
     setDeleting(true);
@@ -191,7 +236,11 @@ function LedgerSettingsPageInner() {
         title={`Files for ${activeCompany.label || activeCompany.name}`}
         description="Only files for the company selected above (top left) are shown here -- switch companies to see a different set. Click a file to open it in the editor, or use the icons to download or manage versions."
       >
-        <div className="mb-4 flex justify-end">
+        <div className="mb-4 flex justify-end gap-2">
+          <Button variant="secondary" onClick={openCreate}>
+            <FilePlus2 className="mr-1.5 h-4 w-4" aria-hidden="true" />
+            Add file
+          </Button>
           <Button variant="secondary" onClick={() => setModal({ type: "upload" })}>
             <Upload className="mr-1.5 h-4 w-4" aria-hidden="true" />
             Upload file
@@ -351,6 +400,42 @@ function LedgerSettingsPageInner() {
             loadFiles();
           }}
         />
+      </Modal>
+
+      <Modal open={modal?.type === "create"} onClose={() => setModal(null)} title="Add a new file" size="sm">
+        <div className="flex flex-col gap-3">
+          <p className="text-sm text-[var(--color-text-primary)]">
+            Starts from a blank, valid .bean file -- open it right after to add more.
+          </p>
+          <label className="flex flex-col gap-1 text-xs text-[var(--color-icon-secondary)]">
+            Name
+            <InputField
+              type="text"
+              value={createName}
+              onChange={(e) => setCreateName(e.target.value)}
+              placeholder="e.g. payroll"
+              autoFocus
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-xs text-[var(--color-icon-secondary)]">
+            Label (optional)
+            <InputField
+              type="text"
+              value={createLabel}
+              onChange={(e) => setCreateLabel(e.target.value)}
+              placeholder="e.g. Payroll ledger"
+            />
+          </label>
+          {createError ? <p className="text-sm text-red-600">{createError}</p> : null}
+          <div className="flex items-center gap-2">
+            <Button variant="primary" onClick={handleCreateSave} disabled={creating || !createName.trim()}>
+              {creating ? "Creating…" : "Create"}
+            </Button>
+            <Button variant="secondary" onClick={() => setModal(null)} disabled={creating}>
+              Cancel
+            </Button>
+          </div>
+        </div>
       </Modal>
 
       <Modal open={modal?.type === "rename"} onClose={() => setModal(null)} title="Rename file" size="sm">
