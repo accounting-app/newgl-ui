@@ -31,7 +31,7 @@ const CREATE_ACTIONS: CreateActionItem[] = [
   { label: "Add Check", href: "/register", icon: PlusCircle },
   { label: "New Journal Entry", href: "/register", icon: FilePlus2 },
   { label: "Add an account", href: "/all-apps/chart-of-accounts", icon: Building2 },
-  { label: "Bulk paste import", href: "/all-apps/ledger", icon: Upload }
+  { label: "Bulk paste import", href: "/settings/ledger?bulkPaste=1", icon: Upload }
 ];
 
 function greetingForHour(hour: number): string {

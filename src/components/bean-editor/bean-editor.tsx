@@ -14,13 +14,15 @@ type BeanEditorProps = {
   value: string;
   onChange: (value: string) => void;
   readOnly?: boolean;
+  /** Pixel floor for the editor's height. Defaults to 480 (the full-page Ledger editor); pass a smaller value for compact contexts like a modal. */
+  minHeight?: number;
 };
 
 // Ref-based mount/teardown wrapping a CodeMirror 6 EditorView, since
 // CodeMirror owns its own DOM subtree and React's virtual-DOM diffing
 // should never touch it directly -- the standard pattern for embedding
 // CodeMirror (or any non-React editor) inside a React tree.
-export function BeanEditor({ value, onChange, readOnly = false }: BeanEditorProps) {
+export function BeanEditor({ value, onChange, readOnly = false, minHeight = 480 }: BeanEditorProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
   const onChangeRef = useRef(onChange);
@@ -75,5 +77,11 @@ export function BeanEditor({ value, onChange, readOnly = false }: BeanEditorProp
     view.dispatch({ changes: { from: 0, to: current.length, insert: value } });
   }, [value]);
 
-  return <div ref={hostRef} className="h-full min-h-[480px] overflow-auto rounded-lg border border-[var(--color-divider-tertiary)]" />;
+  return (
+    <div
+      ref={hostRef}
+      className="h-full overflow-auto rounded-lg border border-[var(--color-divider-tertiary)]"
+      style={{ minHeight }}
+    />
+  );
 }

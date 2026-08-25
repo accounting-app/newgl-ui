@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { ChevronLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { BeanEditor } from "@/components/bean-editor/bean-editor";
 import { countBeancountErrors } from "@/lib/beancount/lint";
-import { BASE_API_URL, PRIMARY_LEDGER_NAME } from "@/configuration";
+import { BASE_API_URL } from "@/configuration";
 import { getAccessToken } from "@/lib/services/http-service-container";
 
 type LedgerSummary = {
@@ -16,14 +16,18 @@ type LedgerSummary = {
   accountCount: number;
 };
 
-type LedgerEditTabProps = {
-  /** Called after a successful save so the sibling "Manage file" tab's version list stays in sync. */
+type LedgerFileEditorProps = {
+  /** Internal/unique ledger identifier -- used in every API call. */
+  ledgerName: string;
+  /** What to show in the header -- the file's label, falling back to ledgerName. */
+  displayName: string;
+  /** Returns to the file list. Guards against unsaved changes itself (asks the caller only after confirming). */
+  onCancel: () => void;
+  /** Called after a successful save so the file list's "updated" timestamp stays in sync. */
   onSaved: () => void;
-  /** Lets the parent tab switcher warn before navigating away from unsaved edits. */
-  onDirtyChange: (dirty: boolean) => void;
 };
 
-export function LedgerEditTab({ onSaved, onDirtyChange }: LedgerEditTabProps) {
+export function LedgerFileEditor({ ledgerName, displayName, onCancel, onSaved }: LedgerFileEditorProps) {
   const [content, setContent] = useState<string | null>(null);
   const [savedContent, setSavedContent] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -41,25 +45,22 @@ export function LedgerEditTab({ onSaved, onDirtyChange }: LedgerEditTabProps) {
       setLoadError(null);
       try {
         const accessToken = await getAccessToken();
-        const response = await fetch(`${BASE_API_URL}/ledgers/${PRIMARY_LEDGER_NAME}/download`, {
+        const response = await fetch(`${BASE_API_URL}/ledgers/${encodeURIComponent(ledgerName)}/download`, {
           headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {}
         });
-        if (!response.ok) throw new Error(`Could not load the ledger (${response.status})`);
+        if (!response.ok) throw new Error(`Could not load this file (${response.status})`);
         const text = await response.text();
         setContent(text);
         setSavedContent(text);
       } catch (err) {
-        setLoadError(err instanceof Error ? err.message : "Could not load the ledger");
+        setLoadError(err instanceof Error ? err.message : "Could not load this file");
       } finally {
         setLoading(false);
       }
     })();
-  }, []);
+  }, [ledgerName]);
 
   const isDirty = content !== null && content !== savedContent;
-  useEffect(() => {
-    onDirtyChange(isDirty);
-  }, [isDirty, onDirtyChange]);
 
   useEffect(() => {
     if (!isDirty) return;
@@ -72,6 +73,19 @@ export function LedgerEditTab({ onSaved, onDirtyChange }: LedgerEditTabProps) {
 
   const errorCount = useMemo(() => (content === null ? 0 : countBeancountErrors(content)), [content]);
 
+  function handleDiscard() {
+    if (savedContent === null) return;
+    if (!window.confirm("Discard your unsaved changes?")) return;
+    setContent(savedContent);
+    setSaveError(null);
+    setSaveNotice(null);
+  }
+
+  function handleCancel() {
+    if (isDirty && !window.confirm("You have unsaved changes. Leave without saving?")) return;
+    onCancel();
+  }
+
   async function handleSave() {
     if (content === null || errorCount > 0) return;
     setSaving(true);
@@ -79,7 +93,7 @@ export function LedgerEditTab({ onSaved, onDirtyChange }: LedgerEditTabProps) {
     setSaveNotice(null);
     try {
       const accessToken = await getAccessToken();
-      const response = await fetch(`${BASE_API_URL}/ledgers/${PRIMARY_LEDGER_NAME}/upload`, {
+      const response = await fetch(`${BASE_API_URL}/ledgers/${encodeURIComponent(ledgerName)}/upload`, {
         method: "POST",
         headers: {
           "Content-Type": "text/plain",
@@ -105,21 +119,44 @@ export function LedgerEditTab({ onSaved, onDirtyChange }: LedgerEditTabProps) {
   }
 
   return (
-    <Card
-      title="Edit .bean file"
-      description="Syntax errors are underlined as you type and block saving. This does not check things like unbalanced transactions or accounts that were never opened -- only syntax."
-    >
+    <div className="flex h-full flex-col">
+      <div className="mb-4 flex flex-wrap items-center gap-3">
+        <button
+          type="button"
+          onClick={handleCancel}
+          className="flex items-center gap-1 rounded-lg px-2 py-1.5 text-sm font-medium text-[var(--color-icon-secondary)] transition-colors hover:bg-[var(--color-action-passive-subtle-hover)] hover:text-[var(--color-text-primary)]"
+        >
+          <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+          Back
+        </button>
+        <h1 className="flex-1 truncate text-lg font-semibold text-[var(--color-text-global)]">{displayName}</h1>
+        <div className="flex items-center gap-2">
+          {isDirty ? (
+            <Button variant="secondary" onClick={handleDiscard} disabled={saving}>
+              Discard changes
+            </Button>
+          ) : null}
+          <Button variant="primary" onClick={handleSave} disabled={saving || errorCount > 0 || !isDirty}>
+            {saving ? "Saving…" : "Save"}
+          </Button>
+        </div>
+      </div>
+
+      <p className="mb-3 text-sm text-[var(--color-text-primary)]">
+        Syntax errors are underlined as you type and block saving. This does not check things like unbalanced
+        transactions or accounts that were never opened -- only syntax.
+      </p>
+
       {loading ? (
         <p className="text-sm text-[var(--color-text-primary)]">Loading…</p>
       ) : loadError ? (
         <p className="text-sm text-red-600">{loadError}</p>
       ) : content === null ? null : (
         <>
-          <BeanEditor value={content} onChange={setContent} />
+          <div className="min-h-0 flex-1">
+            <BeanEditor value={content} onChange={setContent} />
+          </div>
           <div className="mt-3 flex items-center gap-3">
-            <Button variant="primary" onClick={handleSave} disabled={saving || errorCount > 0 || !isDirty}>
-              {saving ? "Saving…" : "Save"}
-            </Button>
             {errorCount > 0 ? (
               <span className="text-xs text-red-600">
                 {errorCount} syntax {errorCount === 1 ? "error" : "errors"} — fix before saving
@@ -132,6 +169,6 @@ export function LedgerEditTab({ onSaved, onDirtyChange }: LedgerEditTabProps) {
           {saveNotice ? <p className="mt-2 text-sm text-[var(--color-text-primary)]">{saveNotice}</p> : null}
         </>
       )}
-    </Card>
+    </div>
   );
 }
