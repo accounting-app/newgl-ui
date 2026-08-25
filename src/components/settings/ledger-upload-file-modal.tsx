@@ -5,19 +5,19 @@ import { Button } from "@/components/ui/button";
 import { InputField } from "@/components/ui/input-field";
 import { BeanEditor } from "@/components/bean-editor/bean-editor";
 import { countBeancountErrors } from "@/lib/beancount/lint";
-import { useCompany } from "@/lib/company/company-provider";
+import { createLedgerFile } from "@/lib/services/ledger-files-service";
 
 type LedgerUploadFileModalProps = {
   onCreated: () => void;
 };
 
 // "Upload, then view and verify, finally save to our list of files" -- a
-// staged flow, unlike the file-list's own Upload-that-replaces-a-file
-// button (there isn't one; per the confirmed decision, upload always
-// creates a brand-new file). The uploaded content is fully editable here
-// before it's ever persisted, same live linter as the real editor.
+// staged flow, unlike a plain replace-in-place upload. The uploaded
+// content is fully editable here before it's ever persisted, same live
+// linter as the real editor. Always creates a new extra file scoped to
+// the caller's currently active company (never a whole new company, and
+// never replaces an existing file).
 export function LedgerUploadFileModal({ onCreated }: LedgerUploadFileModalProps) {
-  const { createCompany } = useCompany();
   const [content, setContent] = useState<string | null>(null);
   const [fileName, setFileName] = useState("");
   const [name, setName] = useState("");
@@ -46,7 +46,7 @@ export function LedgerUploadFileModal({ onCreated }: LedgerUploadFileModalProps)
     setIsCreating(true);
     setCreateError(null);
     try {
-      await createCompany({ name: name.trim(), label: label.trim() || undefined, content });
+      await createLedgerFile({ name: name.trim(), label: label.trim() || undefined, content });
       onCreated();
     } catch (err) {
       setCreateError(err instanceof Error ? err.message : "Could not save this file");

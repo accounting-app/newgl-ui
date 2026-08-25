@@ -5,29 +5,29 @@ import { ChevronLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { BeanEditor } from "@/components/bean-editor/bean-editor";
 import { countBeancountErrors } from "@/lib/beancount/lint";
-import { BASE_API_URL } from "@/configuration";
-import { getAccessToken } from "@/lib/services/http-service-container";
 
-type LedgerSummary = {
-  name: string;
-  version: number;
-  contentHash: string;
-  transactionCount: number;
-  accountCount: number;
-};
+type SaveSummary = { version: number; transactionCount: number; accountCount: number };
 
 type LedgerFileEditorProps = {
-  /** Internal/unique ledger identifier -- used in every API call. */
-  ledgerName: string;
-  /** What to show in the header -- the file's label, falling back to ledgerName. */
+  /** What to show in the header. */
   displayName: string;
-  /** Returns to the file list. Guards against unsaved changes itself (asks the caller only after confirming). */
+  /** Loads the current content. Called once on mount. */
+  load: () => Promise<string>;
+  /** Persists new content, returning the resulting version summary. */
+  save: (content: string) => Promise<SaveSummary>;
+  /** Returns to the file list. Guards against unsaved changes itself. */
   onCancel: () => void;
   /** Called after a successful save so the file list's "updated" timestamp stays in sync. */
   onSaved: () => void;
 };
 
-export function LedgerFileEditor({ ledgerName, displayName, onCancel, onSaved }: LedgerFileEditorProps) {
+// Decoupled from any specific backend endpoint shape via the load/save
+// callback props -- this same component backs both a company's own
+// primary .bean content (via /api/ledgers/{name}/...) and an extra file
+// scoped to that company (via /api/ledger-files/{fileId}/...), which have
+// different URL shapes but an identical "load raw text, save raw text,
+// get back a version summary" contract.
+export function LedgerFileEditor({ displayName, load, save, onCancel, onSaved }: LedgerFileEditorProps) {
   const [content, setContent] = useState<string | null>(null);
   const [savedContent, setSavedContent] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -44,12 +44,7 @@ export function LedgerFileEditor({ ledgerName, displayName, onCancel, onSaved }:
       setLoading(true);
       setLoadError(null);
       try {
-        const accessToken = await getAccessToken();
-        const response = await fetch(`${BASE_API_URL}/ledgers/${encodeURIComponent(ledgerName)}/download`, {
-          headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {}
-        });
-        if (!response.ok) throw new Error(`Could not load this file (${response.status})`);
-        const text = await response.text();
+        const text = await load();
         setContent(text);
         setSavedContent(text);
       } catch (err) {
@@ -58,7 +53,11 @@ export function LedgerFileEditor({ ledgerName, displayName, onCancel, onSaved }:
         setLoading(false);
       }
     })();
-  }, [ledgerName]);
+    // Intentionally run once on mount only -- load/save are expected to be
+    // stable-enough closures from the caller (recreated per selected file,
+    // not per render).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const isDirty = content !== null && content !== savedContent;
 
@@ -92,20 +91,7 @@ export function LedgerFileEditor({ ledgerName, displayName, onCancel, onSaved }:
     setSaveError(null);
     setSaveNotice(null);
     try {
-      const accessToken = await getAccessToken();
-      const response = await fetch(`${BASE_API_URL}/ledgers/${encodeURIComponent(ledgerName)}/upload`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "text/plain",
-          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {})
-        },
-        body: content
-      });
-      if (!response.ok) {
-        const payload = (await response.json().catch(() => null)) as { error?: string } | null;
-        throw new Error(payload?.error ?? `Save failed (${response.status})`);
-      }
-      const summary = (await response.json()) as LedgerSummary;
+      const summary = await save(content);
       setSavedContent(content);
       setSaveNotice(
         `Saved — now version ${summary.version} (${summary.transactionCount} transactions, ${summary.accountCount} accounts).`

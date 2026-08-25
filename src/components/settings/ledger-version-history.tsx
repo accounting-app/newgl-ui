@@ -2,10 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { BASE_API_URL } from "@/configuration";
-import { request } from "@/lib/services/http-service-container";
 
-type LedgerVersion = {
+type VersionEntry = {
   version: number;
   contentHash: string;
   source: "app" | "upload" | "bootstrap" | "restore";
@@ -13,7 +11,7 @@ type LedgerVersion = {
   createdAt: string;
 };
 
-const SOURCE_LABELS: Record<LedgerVersion["source"], string> = {
+const SOURCE_LABELS: Record<VersionEntry["source"], string> = {
   app: "Edited in app",
   upload: "Uploaded",
   bootstrap: "Starter ledger",
@@ -21,43 +19,42 @@ const SOURCE_LABELS: Record<LedgerVersion["source"], string> = {
 };
 
 type LedgerVersionHistoryProps = {
-  ledgerName: string;
+  listVersions: () => Promise<VersionEntry[]>;
+  restoreVersion: (version: number) => Promise<void>;
   /** Called after a successful restore so the file list's "updated" timestamp stays in sync. */
   onRestored?: () => void;
 };
 
-export function LedgerVersionHistory({ ledgerName, onRestored }: LedgerVersionHistoryProps) {
-  const [versions, setVersions] = useState<LedgerVersion[]>([]);
+export function LedgerVersionHistory({ listVersions, restoreVersion, onRestored }: LedgerVersionHistoryProps) {
+  const [versions, setVersions] = useState<VersionEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [restoringVersion, setRestoringVersion] = useState<number | null>(null);
   const [restoreError, setRestoreError] = useState<string | null>(null);
 
-  const loadVersions = useCallback(async () => {
+  const load = useCallback(async () => {
     setLoading(true);
     setLoadError(null);
     try {
-      const result = await request<LedgerVersion[]>(BASE_API_URL, `/ledgers/${encodeURIComponent(ledgerName)}/versions`);
-      setVersions(result);
+      setVersions(await listVersions());
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : "Could not load version history");
     } finally {
       setLoading(false);
     }
-  }, [ledgerName]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
-    loadVersions();
-  }, [loadVersions]);
+    load();
+  }, [load]);
 
   async function handleRestore(version: number) {
     setRestoringVersion(version);
     setRestoreError(null);
     try {
-      await request(BASE_API_URL, `/ledgers/${encodeURIComponent(ledgerName)}/versions/${version}/restore`, {
-        method: "POST"
-      });
-      await loadVersions();
+      await restoreVersion(version);
+      await load();
       onRestored?.();
     } catch (err) {
       setRestoreError(err instanceof Error ? err.message : "Could not restore this version");
