@@ -7,6 +7,8 @@ import { useTenant } from "@/lib/tenant/tenant-provider";
 
 export type Company = {
   name: string;
+  /** Friendly display name shown in the Ledger settings page's file list. Falls back to `name` when unset. */
+  label?: string;
   isPrimary: boolean;
   isActive: boolean;
   updatedAt: string;
@@ -18,12 +20,15 @@ export type CompanyTemplate = {
   description: string;
 };
 
-// At most one of templateId / duplicateFromName; omitting both creates a
-// blank company (PLAINGL_FEATURES_TO_IMPLEMENT.md #13).
+// At most one of templateId / duplicateFromName / content; omitting all
+// three creates a blank company (PLAINGL_FEATURES_TO_IMPLEMENT.md #13).
+// `content` is the "upload a .bean file as a new file" path.
 export type CreateCompanyInput = {
   name: string;
+  label?: string;
   templateId?: string;
   duplicateFromName?: string;
+  content?: string;
 };
 
 type CompanyContextValue = {
@@ -34,8 +39,9 @@ type CompanyContextValue = {
   error: string | null;
   isSwitching: boolean;
   switchCompany: (name: string) => Promise<void>;
-  createCompany: (input: CreateCompanyInput) => Promise<void>;
+  createCompany: (input: CreateCompanyInput) => Promise<Company>;
   deleteCompany: (name: string) => Promise<void>;
+  updateCompanyLabel: (name: string, label: string | null) => Promise<Company>;
 };
 
 const CompanyContext = createContext<CompanyContextValue>({
@@ -46,8 +52,13 @@ const CompanyContext = createContext<CompanyContextValue>({
   error: null,
   isSwitching: false,
   switchCompany: async () => {},
-  createCompany: async () => {},
-  deleteCompany: async () => {}
+  createCompany: async () => {
+    throw new Error("CompanyProvider not mounted");
+  },
+  deleteCompany: async () => {},
+  updateCompanyLabel: async () => {
+    throw new Error("CompanyProvider not mounted");
+  }
 });
 
 type CompanyProviderProps = Readonly<{
@@ -100,9 +111,19 @@ export function CompanyProvider({ children }: CompanyProviderProps) {
     window.location.reload();
   }
 
-  async function createCompany(input: CreateCompanyInput) {
-    await request<Company>(BASE_API_URL, "/companies", { method: "POST", body: JSON.stringify(input) });
+  async function createCompany(input: CreateCompanyInput): Promise<Company> {
+    const created = await request<Company>(BASE_API_URL, "/companies", { method: "POST", body: JSON.stringify(input) });
     await load();
+    return created;
+  }
+
+  async function updateCompanyLabel(name: string, label: string | null): Promise<Company> {
+    const updated = await request<Company>(BASE_API_URL, `/companies/${encodeURIComponent(name)}`, {
+      method: "PATCH",
+      body: JSON.stringify({ label })
+    });
+    await load();
+    return updated;
   }
 
   async function deleteCompany(name: string) {
@@ -130,7 +151,8 @@ export function CompanyProvider({ children }: CompanyProviderProps) {
         isSwitching,
         switchCompany,
         createCompany,
-        deleteCompany
+        deleteCompany,
+        updateCompanyLabel
       }}
     >
       {children}

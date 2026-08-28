@@ -26,15 +26,16 @@ export const ALL_APPS_CATEGORIES: AppCategory[] = [
     icon: Landmark,
     items: [
       { label: "Chart of Accounts", href: "/all-apps/chart-of-accounts", icon: Building2 },
-      { label: "Bank Rules", href: "/all-apps/bank-rules", icon: Landmark },
-      { label: "Ledger", href: "/all-apps/ledger", icon: Database }
+      { label: "Bank Rules", href: "/all-apps/bank-rules", icon: Landmark }
     ]
   }
 ];
 
 // Settings (the bottom-pinned rail icon) -- AI, Billing, Organization, and
 // anything else about the account/preferences/users rather than the books
-// themselves.
+// themselves. Ledger lives here (not /all-apps) since it's a file-manager
+// over the raw .bean files backing every company, closer to account-level
+// configuration than day-to-day bookkeeping.
 export const SETTINGS_GROUPS: AppCategory[] = [
   {
     id: "account",
@@ -45,5 +46,11 @@ export const SETTINGS_GROUPS: AppCategory[] = [
       { label: "Billing", href: "/settings/billing", icon: CreditCard },
       { label: "Organization", href: "/settings/organization", icon: Users }
     ]
+  },
+  {
+    id: "books",
+    label: "Books",
+    icon: Database,
+    items: [{ label: "Ledger", href: "/settings/ledger", icon: Database }]
   }
 ];

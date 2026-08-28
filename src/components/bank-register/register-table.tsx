@@ -543,7 +543,7 @@ export function RegisterTable({
           </Tooltip>
           <Tooltip label="Manage .bean file">
             <Link
-              href="/all-apps/ledger"
+              href="/settings/ledger"
               className="flex h-full items-center hover:text-[var(--color-icon-secondary)]"
               aria-label="Manage .bean file"
             >
