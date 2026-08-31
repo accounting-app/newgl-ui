@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { InputField } from "@/components/ui/input-field";
+import { safeRedirectPath } from "@/lib/auth/safe-redirect";
 import { createClient } from "@/lib/supabase/client";
 
 // useSearchParams() (for the post-login `next` redirect) opts this page out
@@ -40,7 +41,7 @@ function LoginForm() {
         return;
       }
 
-      const next = searchParams.get("next") || "/";
+      const next = safeRedirectPath(searchParams.get("next"));
       router.replace(next);
       router.refresh();
     } catch (err) {

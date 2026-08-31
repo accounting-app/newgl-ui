@@ -22,14 +22,21 @@ export function ImportConfirmDialog({
   const dialogRef = useRef<HTMLDivElement>(null);
   useFocusTrap(dialogRef, open);
 
+  // Latest-ref pattern (same as BeanEditor's onChangeRef / ui/modal.tsx) so
+  // the effect only subscribes once per `open`, not on every render.
+  const onCancelRef = useRef(onCancel);
+  onCancelRef.current = onCancel;
+  const isSubmittingRef = useRef(isSubmitting);
+  isSubmittingRef.current = isSubmitting;
+
   useEffect(() => {
     if (!open) return;
     function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape" && !isSubmitting) onCancel();
+      if (event.key === "Escape" && !isSubmittingRef.current) onCancelRef.current();
     }
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [open, isSubmitting, onCancel]);
+  }, [open]);
 
   if (!open) return null;
 

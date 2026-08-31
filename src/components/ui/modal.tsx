@@ -33,14 +33,20 @@ export function Modal({ open, onClose, title, description, size = "md", children
   useBodyScrollLock(open);
   useFocusTrap(dialogRef, open);
 
+  // Latest-ref pattern (same as BeanEditor's onChangeRef) so the effect
+  // only subscribes once per `open`, not on every render where the caller
+  // passes a new onClose closure.
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
   useEffect(() => {
     if (!open) return;
     function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") onClose();
+      if (event.key === "Escape") onCloseRef.current();
     }
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [open, onClose]);
+  }, [open]);
 
   if (!open) return null;
 
