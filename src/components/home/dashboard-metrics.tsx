@@ -127,7 +127,7 @@ function ChangeBadge({ percent }: ChangeBadgeProps) {
   const Icon = isUp ? ArrowUp : ArrowDown;
   return (
     <span
-      className={`inline-flex items-center gap-1 text-xs font-medium ${isUp ? "text-emerald-600" : "text-orange-600"}`}
+      className={`inline-flex items-center gap-1 text-xs font-medium ${isUp ? "text-[var(--color-positive)]" : "text-orange-600"}`}
     >
       <Icon className="h-3 w-3" aria-hidden="true" />
       {isUp ? "Up" : "Down"} {Math.abs(percent)}%
@@ -278,8 +278,8 @@ export function DashboardMetrics() {
       </div>
 
       {overdueAR > 0.005 || overdueAP > 0.005 ? (
-        <Card className="mb-4 border-amber-300 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/30">
-          <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-400">
+        <Card className="mb-4 border-[var(--color-warning-border)] bg-[var(--color-warning-bg)]">
+          <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-[var(--color-warning-text)]">
             Needs attention
           </p>
           <div className="flex flex-wrap items-center gap-x-8 gap-y-2">
@@ -315,7 +315,7 @@ export function DashboardMetrics() {
           </h3>
           <div className="grid grid-cols-3 gap-3">
             <div className="overflow-hidden rounded-lg border border-[var(--color-divider-tertiary)]">
-              <div className="h-1.5 bg-emerald-500" style={{ width: `${Math.round((income / maxFlow) * 100)}%` }} />
+              <div className="h-1.5 bg-[var(--color-positive)]" style={{ width: `${Math.round((income / maxFlow) * 100)}%` }} />
               <div className="p-3">
                 <p className="text-xs text-[var(--color-icon-secondary)]">Money in</p>
                 <p className="mt-1 text-xl font-semibold text-[var(--color-text-global)]">{formatMoney(income)}</p>
@@ -330,7 +330,7 @@ export function DashboardMetrics() {
             </div>
             <div className="overflow-hidden rounded-lg border border-[var(--color-divider-tertiary)]">
               <div
-                className={`h-1.5 ${netIncome >= 0 ? "bg-sky-500" : "bg-red-500"}`}
+                className={`h-1.5 ${netIncome >= 0 ? "bg-sky-500" : "bg-[var(--color-negative)]"}`}
                 style={{ width: `${Math.round((Math.abs(netIncome) / maxFlow) * 100)}%` }}
               />
               <div className="p-3">
@@ -390,7 +390,7 @@ export function DashboardMetrics() {
           <ChangeBadge percent={netChangePercent} />
           <div className="mt-4 flex flex-col gap-2 border-t border-[var(--color-divider-tertiary)] pt-4">
             <div className="flex items-center gap-2">
-              <span className="h-6 w-1 rounded-full bg-emerald-500" />
+              <span className="h-6 w-1 rounded-full bg-[var(--color-positive)]" />
               <div className="text-sm">
                 <p className="text-[var(--color-text-global)]">{formatMoney(income)}</p>
                 <p className="text-xs text-[var(--color-icon-secondary)]">Income</p>
