@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import { X } from "lucide-react";
 import type { ReactNode } from "react";
 import { useBodyScrollLock } from "@/hooks/use-body-scroll-lock";
@@ -28,6 +29,16 @@ type ModalProps = {
 // this doesn't replace those.
 export function Modal({ open, onClose, title, description, size = "md", children }: ModalProps) {
   useBodyScrollLock(open);
+
+  useEffect(() => {
+    if (!open) return;
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") onClose();
+    }
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [open, onClose]);
+
   if (!open) return null;
 
   return (
@@ -38,6 +49,9 @@ export function Modal({ open, onClose, title, description, size = "md", children
       }}
     >
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
         className={`w-full ${SIZE_CLASSES[size]} max-h-[85vh] overflow-y-auto rounded-lg border border-[var(--color-divider-tertiary)] bg-[var(--color-container-background-primary)] p-6 shadow-lg`}
       >
         <div className="mb-4 flex items-start justify-between gap-4">
