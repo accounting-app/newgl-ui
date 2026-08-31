@@ -43,7 +43,13 @@ export function ReportSection({
       <tr
         className={`cursor-pointer select-none border-b border-[var(--color-container-background-secondary)] ${headerClassName} hover:opacity-90`}
         onClick={onToggle}
+        onKeyDown={(event) => {
+          if (event.key !== "Enter" && event.key !== " ") return;
+          event.preventDefault();
+          onToggle();
+        }}
         role="button"
+        tabIndex={0}
         aria-expanded={isOpen}
       >
         <td className="px-3 py-1 font-medium text-[var(--color-text-primary)]">
