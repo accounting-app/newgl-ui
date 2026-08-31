@@ -222,13 +222,11 @@ export function useBankRegister() {
   );
 
   const toggleSplitMode = useCallback(() => {
-    setIsSplitMode((current) => {
-      const next = !current;
-      setDraftSplits(next ? [newSplitLine(), newSplitLine()] : []);
-      return next;
-    });
+    const next = !isSplitMode;
+    setIsSplitMode(next);
+    setDraftSplits(next ? [newSplitLine(), newSplitLine()] : []);
     setDraftErrors((current) => ({ ...current, accountTypeId: undefined, amount: undefined, form: undefined }));
-  }, []);
+  }, [isSplitMode]);
 
   const addDraftSplitLine = useCallback(() => {
     setDraftSplits((current) => [...current, newSplitLine()]);
