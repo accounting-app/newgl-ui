@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ArrowDown, ArrowUp, Sparkles } from "lucide-react";
 import { SelectField } from "@/components/bank-register/select-field";
 import { Card } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { BASE_API_URL } from "@/configuration";
 import { request } from "@/lib/services/http-service-container";
 import { getServiceContainer } from "@/lib/services/service-container-v2";
@@ -139,24 +140,71 @@ export function DashboardMetrics() {
   const services = useMemo(() => getServiceContainer(), []);
   const { tenant } = useTenant();
   const [accounts, setAccounts] = useState<Account[]>([]);
+  const [accountsLoading, setAccountsLoading] = useState(true);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [transactionsLoading, setTransactionsLoading] = useState(true);
   const [usage, setUsage] = useState<UsageSummary | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [usageLoading, setUsageLoading] = useState(true);
   const [preset, setPreset] = useState<Preset>("ytd");
 
+  // Three genuinely independent network calls, three independent loading
+  // flags -- not one combined "loading" flag gating the whole dashboard.
+  // Each card below shows its own skeleton and pops in the moment its own
+  // data is ready, instead of every card waiting on whichever call happens
+  // to be slowest. Accounts and transactions are separate calls on
+  // purpose (not just split for show): the Bank accounts card only reads
+  // `accounts`, so it can render real content the instant that one
+  // resolves, without waiting on the (typically larger, slower)
+  // transactions list the other cards need.
   useEffect(() => {
-    Promise.all([
-      services.accountService.listAccounts(),
-      services.transactionService.listTransactions({ status: "POSTED" }),
-      request<UsageSummary>(BASE_API_URL, "/ai/usage").catch(() => null)
-    ])
-      .then(([accountList, transactionList, usageResult]) => {
-        setAccounts(accountList);
-        setTransactions(transactionList);
-        setUsage(usageResult);
+    let cancelled = false;
+    services.accountService
+      .listAccounts()
+      .then((accountList) => {
+        if (!cancelled) setAccounts(accountList);
       })
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (!cancelled) setAccountsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [services]);
+
+  useEffect(() => {
+    let cancelled = false;
+    services.transactionService
+      .listTransactions({ status: "POSTED" })
+      .then((transactionList) => {
+        if (!cancelled) setTransactions(transactionList);
+      })
+      .finally(() => {
+        if (!cancelled) setTransactionsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [services]);
+
+  useEffect(() => {
+    let cancelled = false;
+    request<UsageSummary>(BASE_API_URL, "/ai/usage")
+      .catch(() => null)
+      .then((usageResult) => {
+        if (!cancelled) setUsage(usageResult);
+      })
+      .finally(() => {
+        if (!cancelled) setUsageLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Everything except Bank accounts needs both accounts (for
+  // categorization) and transactions (for amounts) together, so it waits
+  // on whichever of the two finishes last.
+  const booksLoading = accountsLoading || transactionsLoading;
 
   const accountById = useMemo(() => {
     const map = new Map<string, Account>();
@@ -253,14 +301,6 @@ export function DashboardMetrics() {
   const actionsLimit = usage?.limits?.monthlyAiActions ?? null;
   const usagePercent = actionsLimit ? Math.min(100, Math.round((actionsUsed / actionsLimit) * 100)) : 0;
 
-  if (loading) {
-    return (
-      <section className="mt-2 w-full">
-        <p className="text-sm text-[var(--color-text-primary)]">Loading dashboard…</p>
-      </section>
-    );
-  }
-
   return (
     <section className="w-full">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -277,7 +317,11 @@ export function DashboardMetrics() {
         </div>
       </div>
 
-      {overdueAR > 0.005 || overdueAP > 0.005 ? (
+      {/* Existence-conditional, so it only ever shows once we actually know
+          there's something to flag -- no skeleton here, since a skeleton
+          would presumptively suggest an overdue-balance warning that might
+          not exist once the data is in. */}
+      {!booksLoading && (overdueAR > 0.005 || overdueAP > 0.005) ? (
         <Card className="mb-4 border-[var(--color-warning-border)] bg-[var(--color-warning-bg)]">
           <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-[var(--color-warning-text)]">
             Needs attention
@@ -306,186 +350,285 @@ export function DashboardMetrics() {
         {/* Cash flow -- in place of QBO's payment-request funnel, since this
             app has no invoicing/get-paid feature: money in, money out, net,
             styled the same way (connected step cards). */}
-        <Card className="md:col-span-2">
-          <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-[var(--color-icon-secondary)]">
-            Cash flow
-          </p>
-          <h3 className="mb-4 text-lg font-semibold text-[var(--color-text-global)]">
-            Money in, money out, and your net for {range.label.toLowerCase()}
-          </h3>
-          <div className="grid grid-cols-3 gap-3">
-            <div className="overflow-hidden rounded-lg border border-[var(--color-divider-tertiary)]">
-              <div className="h-1.5 bg-[var(--color-positive)]" style={{ width: `${Math.round((income / maxFlow) * 100)}%` }} />
-              <div className="p-3">
-                <p className="text-xs text-[var(--color-icon-secondary)]">Money in</p>
-                <p className="mt-1 text-xl font-semibold text-[var(--color-text-global)]">{formatMoney(income)}</p>
-              </div>
+        {booksLoading ? (
+          <Card className="md:col-span-2">
+            <Skeleton className="mb-1 h-3 w-20 rounded" />
+            <Skeleton className="mb-4 h-5 w-72 max-w-full rounded" />
+            <div className="grid grid-cols-3 gap-3">
+              {[0, 1, 2].map((i) => (
+                <div key={i} className="overflow-hidden rounded-lg border border-[var(--color-divider-tertiary)] p-3">
+                  <Skeleton className="mb-2 h-3 w-14 rounded" />
+                  <Skeleton className="h-6 w-20 rounded" />
+                </div>
+              ))}
             </div>
-            <div className="overflow-hidden rounded-lg border border-[var(--color-divider-tertiary)]">
-              <div className="h-1.5 bg-orange-500" style={{ width: `${Math.round((expenses / maxFlow) * 100)}%` }} />
-              <div className="p-3">
-                <p className="text-xs text-[var(--color-icon-secondary)]">Money out</p>
-                <p className="mt-1 text-xl font-semibold text-[var(--color-text-global)]">{formatMoney(expenses)}</p>
-              </div>
-            </div>
-            <div className="overflow-hidden rounded-lg border border-[var(--color-divider-tertiary)]">
-              <div
-                className={`h-1.5 ${netIncome >= 0 ? "bg-sky-500" : "bg-[var(--color-negative)]"}`}
-                style={{ width: `${Math.round((Math.abs(netIncome) / maxFlow) * 100)}%` }}
-              />
-              <div className="p-3">
-                <p className="text-xs text-[var(--color-icon-secondary)]">Net</p>
-                <p className="mt-1 text-xl font-semibold text-[var(--color-text-global)]">{formatMoney(netIncome)}</p>
-              </div>
-            </div>
-          </div>
-        </Card>
-
-        {/* Bank accounts */}
-        <Card>
-          <div className="mb-1 flex items-center justify-between">
-            <p className="text-xs font-semibold uppercase tracking-wide text-[var(--color-icon-secondary)]">
-              Bank accounts
+          </Card>
+        ) : (
+          <Card className="md:col-span-2">
+            <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-[var(--color-icon-secondary)]">
+              Cash flow
             </p>
-            <span className="text-[11px] text-[var(--color-icon-secondary)]">As of today</span>
-          </div>
-          <p className="mb-3 text-2xl font-semibold text-[var(--color-text-global)]">
-            {formatMoney(totalBankBalance)}
-          </p>
-          <ul className="flex flex-col divide-y divide-[var(--color-container-background-secondary)]">
-            {bankAccounts.slice(0, 4).map((account) => (
-              <li key={account.id} className="flex items-center justify-between py-1.5 text-sm">
-                <Link href={`/register?account=${account.id}`} className="truncate text-[var(--color-text-primary)] hover:underline">
-                  {account.name}
-                </Link>
-                <span className="text-[var(--color-text-global)]">{formatMoney(account.currentBalance)}</span>
-              </li>
-            ))}
-            {creditCardAccounts.slice(0, 2).map((account) => (
-              <li key={account.id} className="flex items-center justify-between py-1.5 text-sm">
-                <Link href={`/register?account=${account.id}`} className="truncate text-[var(--color-text-primary)] hover:underline">
-                  {account.name}
-                </Link>
-                <span className="text-[var(--color-text-global)]">{formatMoney(account.currentBalance)}</span>
-              </li>
-            ))}
-            {bankAccounts.length === 0 && creditCardAccounts.length === 0 ? (
-              <li className="py-1.5 text-sm text-[var(--color-text-disabled)]">No bank accounts yet.</li>
-            ) : null}
-          </ul>
-          <Link href="/register" className="mt-3 inline-block text-xs text-[var(--color-link-action)] hover:underline">
-            Go to registers
-          </Link>
-        </Card>
+            <h3 className="mb-4 text-lg font-semibold text-[var(--color-text-global)]">
+              Money in, money out, and your net for {range.label.toLowerCase()}
+            </h3>
+            <div className="grid grid-cols-3 gap-3">
+              <div className="overflow-hidden rounded-lg border border-[var(--color-divider-tertiary)]">
+                <div className="h-1.5 bg-[var(--color-positive)]" style={{ width: `${Math.round((income / maxFlow) * 100)}%` }} />
+                <div className="p-3">
+                  <p className="text-xs text-[var(--color-icon-secondary)]">Money in</p>
+                  <p className="mt-1 text-xl font-semibold text-[var(--color-text-global)]">{formatMoney(income)}</p>
+                </div>
+              </div>
+              <div className="overflow-hidden rounded-lg border border-[var(--color-divider-tertiary)]">
+                <div className="h-1.5 bg-orange-500" style={{ width: `${Math.round((expenses / maxFlow) * 100)}%` }} />
+                <div className="p-3">
+                  <p className="text-xs text-[var(--color-icon-secondary)]">Money out</p>
+                  <p className="mt-1 text-xl font-semibold text-[var(--color-text-global)]">{formatMoney(expenses)}</p>
+                </div>
+              </div>
+              <div className="overflow-hidden rounded-lg border border-[var(--color-divider-tertiary)]">
+                <div
+                  className={`h-1.5 ${netIncome >= 0 ? "bg-sky-500" : "bg-[var(--color-negative)]"}`}
+                  style={{ width: `${Math.round((Math.abs(netIncome) / maxFlow) * 100)}%` }}
+                />
+                <div className="p-3">
+                  <p className="text-xs text-[var(--color-icon-secondary)]">Net</p>
+                  <p className="mt-1 text-xl font-semibold text-[var(--color-text-global)]">{formatMoney(netIncome)}</p>
+                </div>
+              </div>
+            </div>
+          </Card>
+        )}
+
+        {/* Bank accounts -- reads only `accounts`, not `transactions`, so it
+            genuinely can (and does) resolve independently of the other
+            cards on this row instead of waiting on booksLoading. */}
+        {accountsLoading ? (
+          <Card>
+            <div className="mb-1 flex items-center justify-between">
+              <Skeleton className="h-3 w-24 rounded" />
+              <Skeleton className="h-3 w-14 rounded" />
+            </div>
+            <Skeleton className="mb-3 h-7 w-32 rounded" />
+            <div className="flex flex-col gap-2.5">
+              {[0, 1, 2].map((i) => (
+                <div key={i} className="flex items-center justify-between">
+                  <Skeleton className="h-3.5 w-28 rounded" />
+                  <Skeleton className="h-3.5 w-16 rounded" />
+                </div>
+              ))}
+            </div>
+          </Card>
+        ) : (
+          <Card>
+            <div className="mb-1 flex items-center justify-between">
+              <p className="text-xs font-semibold uppercase tracking-wide text-[var(--color-icon-secondary)]">
+                Bank accounts
+              </p>
+              <span className="text-[11px] text-[var(--color-icon-secondary)]">As of today</span>
+            </div>
+            <p className="mb-3 text-2xl font-semibold text-[var(--color-text-global)]">
+              {formatMoney(totalBankBalance)}
+            </p>
+            <ul className="flex flex-col divide-y divide-[var(--color-container-background-secondary)]">
+              {bankAccounts.slice(0, 4).map((account) => (
+                <li key={account.id} className="flex items-center justify-between py-1.5 text-sm">
+                  <Link href={`/register?account=${account.id}`} className="truncate text-[var(--color-text-primary)] hover:underline">
+                    {account.name}
+                  </Link>
+                  <span className="text-[var(--color-text-global)]">{formatMoney(account.currentBalance)}</span>
+                </li>
+              ))}
+              {creditCardAccounts.slice(0, 2).map((account) => (
+                <li key={account.id} className="flex items-center justify-between py-1.5 text-sm">
+                  <Link href={`/register?account=${account.id}`} className="truncate text-[var(--color-text-primary)] hover:underline">
+                    {account.name}
+                  </Link>
+                  <span className="text-[var(--color-text-global)]">{formatMoney(account.currentBalance)}</span>
+                </li>
+              ))}
+              {bankAccounts.length === 0 && creditCardAccounts.length === 0 ? (
+                <li className="py-1.5 text-sm text-[var(--color-text-disabled)]">No bank accounts yet.</li>
+              ) : null}
+            </ul>
+            <Link href="/register" className="mt-3 inline-block text-xs text-[var(--color-link-action)] hover:underline">
+              Go to registers
+            </Link>
+          </Card>
+        )}
       </div>
 
       <div className="grid gap-4 md:grid-cols-3">
         {/* Profit & Loss */}
-        <Card>
-          <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-[var(--color-icon-secondary)]">
-            Profit &amp; loss
-          </p>
-          <p className="mb-1 text-sm text-[var(--color-text-primary)]">Net profit &middot; {range.label}</p>
-          <p className="mb-1 text-2xl font-semibold text-[var(--color-text-global)]">{formatMoney(netIncome)}</p>
-          <ChangeBadge percent={netChangePercent} />
-          <div className="mt-4 flex flex-col gap-2 border-t border-[var(--color-divider-tertiary)] pt-4">
-            <div className="flex items-center gap-2">
-              <span className="h-6 w-1 rounded-full bg-[var(--color-positive)]" />
-              <div className="text-sm">
-                <p className="text-[var(--color-text-global)]">{formatMoney(income)}</p>
-                <p className="text-xs text-[var(--color-icon-secondary)]">Income</p>
+        {booksLoading ? (
+          <Card>
+            <MetricCardSkeleton />
+          </Card>
+        ) : (
+          <Card>
+            <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-[var(--color-icon-secondary)]">
+              Profit &amp; loss
+            </p>
+            <p className="mb-1 text-sm text-[var(--color-text-primary)]">Net profit &middot; {range.label}</p>
+            <p className="mb-1 text-2xl font-semibold text-[var(--color-text-global)]">{formatMoney(netIncome)}</p>
+            <ChangeBadge percent={netChangePercent} />
+            <div className="mt-4 flex flex-col gap-2 border-t border-[var(--color-divider-tertiary)] pt-4">
+              <div className="flex items-center gap-2">
+                <span className="h-6 w-1 rounded-full bg-[var(--color-positive)]" />
+                <div className="text-sm">
+                  <p className="text-[var(--color-text-global)]">{formatMoney(income)}</p>
+                  <p className="text-xs text-[var(--color-icon-secondary)]">Income</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="h-6 w-1 rounded-full bg-orange-500" />
+                <div className="text-sm">
+                  <p className="text-[var(--color-text-global)]">{formatMoney(expenses)}</p>
+                  <p className="text-xs text-[var(--color-icon-secondary)]">Expenses</p>
+                </div>
               </div>
             </div>
-            <div className="flex items-center gap-2">
-              <span className="h-6 w-1 rounded-full bg-orange-500" />
-              <div className="text-sm">
-                <p className="text-[var(--color-text-global)]">{formatMoney(expenses)}</p>
-                <p className="text-xs text-[var(--color-icon-secondary)]">Expenses</p>
-              </div>
-            </div>
-          </div>
-          <Link
-            href="/reports/profit-loss"
-            className="mt-4 inline-block text-xs text-[var(--color-link-action)] hover:underline"
-          >
-            View full report
-          </Link>
-        </Card>
+            <Link
+              href="/reports/profit-loss"
+              className="mt-4 inline-block text-xs text-[var(--color-link-action)] hover:underline"
+            >
+              View full report
+            </Link>
+          </Card>
+        )}
 
         {/* Expenses donut */}
-        <Card>
-          <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-[var(--color-icon-secondary)]">
-            Expenses
-          </p>
-          <p className="mb-1 text-sm text-[var(--color-text-primary)]">Spending &middot; {range.label}</p>
-          <p className="mb-1 text-2xl font-semibold text-[var(--color-text-global)]">{formatMoney(expenses)}</p>
-          <ChangeBadge percent={expenseChangePercent} />
-          <div className="mt-4 flex items-center gap-4">
-            <div className="relative h-24 w-24 shrink-0 rounded-full" style={{ background: donutGradient }}>
-              <div className="absolute inset-[10px] rounded-full bg-[var(--color-container-background-primary)]" />
+        {booksLoading ? (
+          <Card>
+            <Skeleton className="mb-1 h-3 w-20 rounded" />
+            <Skeleton className="mb-1 h-3.5 w-32 rounded" />
+            <Skeleton className="mb-1 h-7 w-24 rounded" />
+            <Skeleton className="mb-4 h-4 w-24 rounded" />
+            <div className="flex items-center gap-4">
+              <Skeleton className="h-24 w-24 shrink-0 rounded-full" />
+              <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+                {[0, 1, 2].map((i) => (
+                  <Skeleton key={i} className="h-3 w-full rounded" />
+                ))}
+              </div>
             </div>
-            <ul className="flex min-w-0 flex-col gap-1.5">
-              {expenseSlices.length === 0 ? (
-                <li className="text-xs text-[var(--color-text-disabled)]">No expenses yet this period.</li>
-              ) : (
-                expenseSlices.map(([label, amount], index) => (
-                  <li key={label} className="flex items-center gap-1.5 text-xs">
-                    <span
-                      className="h-2 w-2 shrink-0 rounded-full"
-                      style={{ backgroundColor: DONUT_COLORS[index % DONUT_COLORS.length] }}
-                    />
-                    <span className="truncate text-[var(--color-text-primary)]">{label}</span>
-                    <span className="ml-auto shrink-0 text-[var(--color-text-global)]">{formatMoney(amount)}</span>
-                  </li>
-                ))
-              )}
-            </ul>
-          </div>
-          <Link
-            href="/reports/pl-detail"
-            className="mt-4 inline-block text-xs text-[var(--color-link-action)] hover:underline"
-          >
-            View expense report
-          </Link>
-        </Card>
-
-        {/* AI usage -- real data, standing in for QBO's lending promo slot */}
-        <Card>
-          <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-[var(--color-icon-secondary)]">AI</p>
-          <div className="mb-3 inline-flex rounded-lg bg-[var(--color-highlight-badge-background)] p-2 text-[var(--color-highlight-badge-text)]">
-            <Sparkles className="h-5 w-5" aria-hidden="true" />
-          </div>
-          <h3 className="mb-1 text-lg font-semibold text-[var(--color-text-global)]">
-            {tenant?.aiEnabled ? "AI is helping categorize your books" : "Turn on AI categorization"}
-          </h3>
-          {actionsLimit !== null ? (
-            <>
-              <div className="mb-2 mt-3 flex items-baseline justify-between text-xs text-[var(--color-text-primary)]">
-                <span>
-                  {actionsUsed} of {actionsLimit} actions used
-                </span>
-                <span>{usagePercent}%</span>
-              </div>
-              <div className="h-2 w-full overflow-hidden rounded-full bg-[var(--color-container-background-accent)]">
-                <div
-                  className="h-full rounded-full bg-[var(--color-link-action)]"
-                  style={{ width: `${usagePercent}%` }}
-                />
-              </div>
-            </>
-          ) : (
-            <p className="mt-3 text-xs text-[var(--color-text-primary)]">
-              {actionsUsed} actions used this period.
+          </Card>
+        ) : (
+          <Card>
+            <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-[var(--color-icon-secondary)]">
+              Expenses
             </p>
-          )}
-          <Link
-            href="/settings/ai"
-            className="mt-4 block rounded-lg border border-[var(--color-divider-tertiary)] px-3 py-2 text-center text-sm font-medium text-[var(--color-text-global)] transition-colors hover:bg-[var(--color-action-passive-subtle-hover)]"
-          >
-            Manage AI settings
-          </Link>
-        </Card>
+            <p className="mb-1 text-sm text-[var(--color-text-primary)]">Spending &middot; {range.label}</p>
+            <p className="mb-1 text-2xl font-semibold text-[var(--color-text-global)]">{formatMoney(expenses)}</p>
+            <ChangeBadge percent={expenseChangePercent} />
+            <div className="mt-4 flex items-center gap-4">
+              <div className="relative h-24 w-24 shrink-0 rounded-full" style={{ background: donutGradient }}>
+                <div className="absolute inset-[10px] rounded-full bg-[var(--color-container-background-primary)]" />
+              </div>
+              <ul className="flex min-w-0 flex-col gap-1.5">
+                {expenseSlices.length === 0 ? (
+                  <li className="text-xs text-[var(--color-text-disabled)]">No expenses yet this period.</li>
+                ) : (
+                  expenseSlices.map(([label, amount], index) => (
+                    <li key={label} className="flex items-center gap-1.5 text-xs">
+                      <span
+                        className="h-2 w-2 shrink-0 rounded-full"
+                        style={{ backgroundColor: DONUT_COLORS[index % DONUT_COLORS.length] }}
+                      />
+                      <span className="truncate text-[var(--color-text-primary)]">{label}</span>
+                      <span className="ml-auto shrink-0 text-[var(--color-text-global)]">{formatMoney(amount)}</span>
+                    </li>
+                  ))
+                )}
+              </ul>
+            </div>
+            <Link
+              href="/reports/pl-detail"
+              className="mt-4 inline-block text-xs text-[var(--color-link-action)] hover:underline"
+            >
+              View expense report
+            </Link>
+          </Card>
+        )}
+
+        {/* AI usage -- real data, standing in for QBO's lending promo slot.
+            Gated on its own usageLoading, independent of booksLoading --
+            this card pops in on its own schedule, whichever of the three
+            network calls happens to finish first or last. */}
+        {usageLoading ? (
+          <Card>
+            <Skeleton className="mb-1 h-3 w-6 rounded" />
+            <Skeleton className="mb-3 h-9 w-9 rounded-lg" />
+            <Skeleton className="mb-1 h-5 w-full rounded" />
+            <Skeleton className="mb-4 h-5 w-2/3 rounded" />
+            <Skeleton className="h-2 w-full rounded-full" />
+            <Skeleton className="mt-4 h-9 w-full rounded-lg" />
+          </Card>
+        ) : (
+          <Card>
+            <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-[var(--color-icon-secondary)]">AI</p>
+            <div className="mb-3 inline-flex rounded-lg bg-[var(--color-highlight-badge-background)] p-2 text-[var(--color-highlight-badge-text)]">
+              <Sparkles className="h-5 w-5" aria-hidden="true" />
+            </div>
+            <h3 className="mb-1 text-lg font-semibold text-[var(--color-text-global)]">
+              {tenant?.aiEnabled ? "AI is helping categorize your books" : "Turn on AI categorization"}
+            </h3>
+            {actionsLimit !== null ? (
+              <>
+                <div className="mb-2 mt-3 flex items-baseline justify-between text-xs text-[var(--color-text-primary)]">
+                  <span>
+                    {actionsUsed} of {actionsLimit} actions used
+                  </span>
+                  <span>{usagePercent}%</span>
+                </div>
+                <div className="h-2 w-full overflow-hidden rounded-full bg-[var(--color-container-background-accent)]">
+                  <div
+                    className="h-full rounded-full bg-[var(--color-link-action)]"
+                    style={{ width: `${usagePercent}%` }}
+                  />
+                </div>
+              </>
+            ) : (
+              <p className="mt-3 text-xs text-[var(--color-text-primary)]">
+                {actionsUsed} actions used this period.
+              </p>
+            )}
+            <Link
+              href="/settings/ai"
+              className="mt-4 block rounded-lg border border-[var(--color-divider-tertiary)] px-3 py-2 text-center text-sm font-medium text-[var(--color-text-global)] transition-colors hover:bg-[var(--color-action-passive-subtle-hover)]"
+            >
+              Manage AI settings
+            </Link>
+          </Card>
+        )}
       </div>
     </section>
+  );
+}
+
+function MetricCardSkeleton() {
+  return (
+    <>
+      <Skeleton className="mb-1 h-3 w-20 rounded" />
+      <Skeleton className="mb-1 h-3.5 w-28 rounded" />
+      <Skeleton className="mb-1 h-7 w-24 rounded" />
+      <Skeleton className="mb-4 h-3 w-16 rounded" />
+      <div className="flex flex-col gap-2 border-t border-[var(--color-divider-tertiary)] pt-4">
+        <div className="flex items-center gap-2">
+          <Skeleton className="h-6 w-1 rounded-full" />
+          <div className="flex flex-col gap-1">
+            <Skeleton className="h-4 w-16 rounded" />
+            <Skeleton className="h-3 w-12 rounded" />
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <Skeleton className="h-6 w-1 rounded-full" />
+          <div className="flex flex-col gap-1">
+            <Skeleton className="h-4 w-16 rounded" />
+            <Skeleton className="h-3 w-12 rounded" />
+          </div>
+        </div>
+      </div>
+    </>
   );
 }

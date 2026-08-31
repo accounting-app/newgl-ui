@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Building2, ChevronDown, Plus, Trash2 } from "lucide-react";
 import { InputField } from "@/components/ui/input-field";
 import { Select as SelectField } from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useCompany } from "@/lib/company/company-provider";
 
 // Sits in TopHeader, matching its existing dropdown pattern (avatar menu):
@@ -103,8 +104,18 @@ export function CompanyPicker() {
     }
   }
 
+  // Same footprint as the real trigger button below (icon + text + chevron,
+  // same padding) so the avatar menu on the other side of TopHeader's
+  // justify-between never jumps position while companies are loading --
+  // returning null here used to collapse this side to zero width.
   if (loading || !activeCompany) {
-    return null;
+    return (
+      <div className="flex items-center gap-2 px-3 py-1.5">
+        <Skeleton className="h-4 w-4 rounded" />
+        <Skeleton className="h-4 w-28 rounded" />
+        <Skeleton className="h-3.5 w-3.5 rounded" />
+      </div>
+    );
   }
 
   return (
