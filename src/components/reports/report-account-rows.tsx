@@ -74,31 +74,37 @@ export function ReportAccountRows({
             key={`${rowKeyPrefix}-${row.fullName}`}
             className="border-b border-[var(--color-container-background-secondary)]"
           >
-            <td
-              className={`py-1 pr-3 text-[var(--color-text-primary)]${row.hasChildren ? " cursor-pointer select-none" : ""}`}
-              style={{ paddingLeft }}
-              onClick={row.hasChildren ? () => onToggleCollapse(row.fullName) : undefined}
-            >
-              <span className="flex items-center gap-1">
-                {row.hasChildren ? (
-                  isCollapsed ? (
+            <td className="py-1 pr-3 text-[var(--color-text-primary)]" style={{ paddingLeft }}>
+              {row.hasChildren ? (
+                <button
+                  type="button"
+                  onClick={() => onToggleCollapse(row.fullName)}
+                  aria-expanded={!isCollapsed}
+                  className="flex w-full items-center gap-1 text-left"
+                >
+                  {isCollapsed ? (
                     <ChevronRight className="h-3 w-3 shrink-0 text-[var(--color-icon-secondary)]" />
                   ) : (
                     <ChevronDown className="h-3 w-3 shrink-0 text-[var(--color-icon-secondary)]" />
-                  )
-                ) : null}
-                {row.label}
-              </span>
+                  )}
+                  {row.label}
+                </button>
+              ) : (
+                <span className="flex items-center gap-1">{row.label}</span>
+              )}
             </td>
             {columns ? (
               columns.map((column, index) =>
                 index === 0 ? (
-                  <td
-                    key={column.key}
-                    className="cursor-pointer px-3 py-1 text-right text-[var(--color-link-text)] hover:underline"
-                    onClick={() => onDrillAmount(row)}
-                  >
-                    {formatCell(values?.[index] ?? 0, column.format)}
+                  <td key={column.key} className="px-3 py-1 text-right">
+                    <button
+                      type="button"
+                      onClick={() => onDrillAmount(row)}
+                      aria-label={`View transactions for ${row.label}`}
+                      className="text-[var(--color-link-text)] hover:underline"
+                    >
+                      {formatCell(values?.[index] ?? 0, column.format)}
+                    </button>
                   </td>
                 ) : (
                   <td key={column.key} className="px-3 py-1 text-right text-[var(--color-text-primary)]">
@@ -107,11 +113,15 @@ export function ReportAccountRows({
                 )
               )
             ) : (
-              <td
-                className="cursor-pointer px-3 py-1 text-right text-[var(--color-link-text)] hover:underline"
-                onClick={() => onDrillAmount(row)}
-              >
-                {formatMoney(row.amount)}
+              <td className="px-3 py-1 text-right">
+                <button
+                  type="button"
+                  onClick={() => onDrillAmount(row)}
+                  aria-label={`View transactions for ${row.label}`}
+                  className="text-[var(--color-link-text)] hover:underline"
+                >
+                  {formatMoney(row.amount)}
+                </button>
               </td>
             )}
           </tr>

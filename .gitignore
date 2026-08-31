@@ -28,3 +28,7 @@ pnpm-debug.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# impeccable design skill (local dev tooling, not shared with the team)
+/.claude
+/.impeccable

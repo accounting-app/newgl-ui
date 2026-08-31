@@ -3,9 +3,9 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { forwardRef, useEffect, useRef, useState } from "react";
 import { BookOpen, Home, LayoutGrid, Settings2, Wallet } from "lucide-react";
-import type { ComponentType } from "react";
+import type { ComponentType, FocusEvent, KeyboardEvent } from "react";
 import { AppsFlyout } from "@/components/layout/apps-flyout";
 
 // Hover-intent delay before the flyout opens -- long enough that just
@@ -21,9 +21,18 @@ type NavSquareItemProps = {
   onMouseLeave?: () => void;
 };
 
-function NavSquareItem({ label, icon: Icon, href, active = false, onMouseEnter, onMouseLeave }: NavSquareItemProps) {
+// forwardRef so SideNav can return keyboard focus to this exact trigger
+// when the flyout it opens is dismissed via Escape. Focus/blur on the
+// trigger itself is handled by the wrapping div's capture handlers in
+// SideNav (focus/blur bubble up as focusin/focusout), so no dedicated
+// prop is needed here.
+const NavSquareItem = forwardRef<HTMLAnchorElement, NavSquareItemProps>(function NavSquareItem(
+  { label, icon: Icon, href, active = false, onMouseEnter, onMouseLeave },
+  ref
+) {
   return (
     <Link
+      ref={ref}
       href={href}
       aria-label={label}
       className="group block h-[72px] w-full"
@@ -40,12 +49,14 @@ function NavSquareItem({ label, icon: Icon, href, active = false, onMouseEnter, 
       </div>
     </Link>
   );
-}
+});
 
 export function SideNav() {
   const pathname = usePathname();
   const [isFlyoutOpen, setIsFlyoutOpen] = useState(false);
   const openTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const allAppsTriggerRef = useRef<HTMLAnchorElement>(null);
+  const allAppsWrapperRef = useRef<HTMLDivElement>(null);
 
   const isHomeSelected = pathname === "/";
   const isRegisterSelected = pathname.startsWith("/register");
@@ -64,6 +75,33 @@ export function SideNav() {
       openTimerRef.current = null;
     }
     setIsFlyoutOpen(false);
+  }
+
+  function openImmediately() {
+    if (openTimerRef.current) {
+      clearTimeout(openTimerRef.current);
+      openTimerRef.current = null;
+    }
+    setIsFlyoutOpen(true);
+  }
+
+  // Keyboard-focus equivalent of the hover-intent open above: opens
+  // instantly (no hover delay -- delay only makes sense for a mouse
+  // passing through) and stays open as long as focus is anywhere inside
+  // the trigger + flyout, closing only once focus actually leaves both.
+  function handleFocusCapture() {
+    openImmediately();
+  }
+
+  function handleBlurCapture(event: FocusEvent) {
+    if (allAppsWrapperRef.current?.contains(event.relatedTarget as Node)) return;
+    cancelOpenAndClose();
+  }
+
+  function handleKeyDown(event: KeyboardEvent) {
+    if (event.key !== "Escape") return;
+    cancelOpenAndClose();
+    allAppsTriggerRef.current?.focus();
   }
 
   useEffect(() => {
@@ -86,9 +124,21 @@ export function SideNav() {
 
           {/* Hovering opens the flyout after a short delay; clicking navigates
               straight to the /all-apps accordion page (its own submenu view,
-              same pattern as Settings) -- see UI_DESIGN_SYSTEM_PLAN.md Part 3. */}
-          <div className="relative" onMouseEnter={scheduleOpen} onMouseLeave={cancelOpenAndClose}>
+              same pattern as Settings) -- see UI_DESIGN_SYSTEM_PLAN.md Part 3.
+              Keyboard-focus anywhere inside this wrapper (the trigger or,
+              once open, the flyout's own links) opens it instantly and keeps
+              it open; Escape closes it and returns focus to the trigger. */}
+          <div
+            ref={allAppsWrapperRef}
+            className="relative"
+            onMouseEnter={scheduleOpen}
+            onMouseLeave={cancelOpenAndClose}
+            onFocusCapture={handleFocusCapture}
+            onBlurCapture={handleBlurCapture}
+            onKeyDown={handleKeyDown}
+          >
             <NavSquareItem
+              ref={allAppsTriggerRef}
               label="All apps"
               icon={LayoutGrid}
               href="/all-apps"

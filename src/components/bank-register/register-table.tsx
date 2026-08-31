@@ -210,10 +210,9 @@ export function RegisterTable({
     const startIndex = (currentPage - 1) * rowsPerPage;
     return filteredEntries.slice(startIndex, startIndex + rowsPerPage);
   }, [currentPage, filteredEntries, rowsPerPage]);
-  const paginationStart = useMemo(
-    () => (filteredEntries.length === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1),
-    [currentPage, filteredEntries.length, rowsPerPage]
-  );
+  // Plain arithmetic, not memoized -- cheap enough that useMemo's own
+  // dependency-array check costs more than just recomputing it.
+  const paginationStart = filteredEntries.length === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1;
   const paginationEnd = useMemo(
     () => (filteredEntries.length === 0 ? 0 : Math.min(currentPage * rowsPerPage, filteredEntries.length)),
     [currentPage, filteredEntries.length, rowsPerPage]
@@ -385,7 +384,17 @@ export function RegisterTable({
       <table className="group w-full min-w-[1025px] table-fixed border-collapse text-sm">
         <RegisterTableColumnGroup />
         <tbody>
-          <tr className={`cursor-pointer group-hover:bg-[var(--color-table-row-hover)] ${rowStyle(entry.status)}`} onClick={() => openRowEditor(entry)}>
+          <tr
+            className={`cursor-pointer group-hover:bg-[var(--color-table-row-hover)] ${rowStyle(entry.status)}`}
+            onClick={() => openRowEditor(entry)}
+            onKeyDown={(event) => {
+              if (event.key !== "Enter" && event.key !== " ") return;
+              event.preventDefault();
+              openRowEditor(entry);
+            }}
+            role="button"
+            tabIndex={0}
+          >
             <td className="p-2 text-[13px] align-top text-[var(--color-text-primary)]">
               {entry.date}
             </td>
@@ -414,6 +423,13 @@ export function RegisterTable({
           <tr
             className={`cursor-pointer border-b border-[var(--color-divider-tertiary)] bg-[var(--color-table-row-secondary)] group-hover:bg-[var(--color-table-row-secondary-hover)]`}
             onClick={() => openRowEditor(entry)}
+            onKeyDown={(event) => {
+              if (event.key !== "Enter" && event.key !== " ") return;
+              event.preventDefault();
+              openRowEditor(entry);
+            }}
+            role="button"
+            tabIndex={0}
           >
             <td className="p-2 text-[13px] align-top text-[var(--color-icon-secondary)]">
               &nbsp;
@@ -563,8 +579,8 @@ export function RegisterTable({
                 <div className="dgrid-hider-menu">
                   <div className="hiderMenuConnector" />
                   <div className="hiderMenuContainer">
-                  <label className="mb-1 block text-[13px] text-[var(--color-text-primary)]">Rows</label>
                   <SelectField
+                    label="Rows"
                     value={String(rowsPerPage)}
                     onChange={(value) => {
                       const nextRows = Number(value);

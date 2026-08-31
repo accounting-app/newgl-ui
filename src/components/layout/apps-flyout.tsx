@@ -30,7 +30,12 @@ export function AppsFlyout({ onNavigate }: AppsFlyoutProps) {
           const hasItems = category.items.length > 0;
           const isHovered = hoveredId === category.id;
           return (
-            <div key={category.id} onMouseEnter={() => setHoveredId(category.id)} className="relative">
+            <div
+              key={category.id}
+              onMouseEnter={() => setHoveredId(category.id)}
+              onFocus={() => setHoveredId(category.id)}
+              className="relative"
+            >
               <Link
                 href={category.items[0]?.href ?? "/all-apps"}
                 onClick={onNavigate}

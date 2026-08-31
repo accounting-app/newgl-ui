@@ -64,12 +64,12 @@ export function LedgerVersionHistory({ listVersions, restoreVersion, onRestored 
   }
 
   if (loading) return <p className="text-sm text-[var(--color-text-primary)]">Loading…</p>;
-  if (loadError) return <p className="text-sm text-red-600">{loadError}</p>;
+  if (loadError) return <p className="text-sm text-[var(--color-negative)]">{loadError}</p>;
   if (versions.length === 0) return <p className="text-sm text-[var(--color-text-primary)]">No versions yet.</p>;
 
   return (
     <>
-      {restoreError ? <p className="mb-3 text-sm text-red-600">{restoreError}</p> : null}
+      {restoreError ? <p className="mb-3 text-sm text-[var(--color-negative)]">{restoreError}</p> : null}
       <ul className="flex flex-col divide-y divide-[var(--color-divider-tertiary)]">
         {versions.map((version, index) => (
           <li key={version.version} className="flex items-center justify-between py-3">

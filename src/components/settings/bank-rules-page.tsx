@@ -100,10 +100,20 @@ const OPERATOR_LABELS: Record<BankRuleOperator, string> = {
   between: "is between"
 };
 
-type DraftCondition = { field: BankRuleField; operator: BankRuleOperator; value: string; valueTo: string };
+type DraftCondition = {
+  /** Stable per-row identity for React's key -- see newSplitLine's clientId in use-bank-register.ts for the same pattern. Not used for addressing (update/removeCondition stay index-based); only for the key prop, so a mid-list removal doesn't reuse another row's DOM node. */
+  clientId: string;
+  field: BankRuleField;
+  operator: BankRuleOperator;
+  value: string;
+  valueTo: string;
+};
+
+let conditionIdCounter = 0;
 
 function emptyCondition(): DraftCondition {
-  return { field: "payee", operator: "contains", value: "", valueTo: "" };
+  conditionIdCounter += 1;
+  return { clientId: `condition-${conditionIdCounter}`, field: "payee", operator: "contains", value: "", valueTo: "" };
 }
 
 function operatorOptionsFor(field: BankRuleField) {
@@ -260,12 +270,16 @@ export function BankRulesPage() {
     setName(`${rule.name} (copy)`);
     setTargetAccountId(rule.targetAccountId);
     setConditions(
-      rule.conditions.map((c) => ({
-        field: c.field,
-        operator: c.operator,
-        value: c.value,
-        valueTo: c.valueTo ?? ""
-      }))
+      rule.conditions.map((c) => {
+        conditionIdCounter += 1;
+        return {
+          clientId: `condition-${conditionIdCounter}`,
+          field: c.field,
+          operator: c.operator,
+          value: c.value,
+          valueTo: c.valueTo ?? ""
+        };
+      })
     );
     setDirection(rule.direction);
     setScopedAccountId(rule.scopedAccountId ?? "");
@@ -400,7 +414,7 @@ export function BankRulesPage() {
 
           <div className="flex flex-col gap-2">
             {conditions.map((condition, index) => (
-              <div key={index} className="flex flex-wrap items-end gap-2">
+              <div key={condition.clientId} className="flex flex-wrap items-end gap-2">
                 <div className="w-32">
                   <SelectField
                     label="Field"
@@ -495,7 +509,7 @@ export function BankRulesPage() {
         {loading ? (
           <p className="text-sm text-[var(--color-text-primary)]">Loading…</p>
         ) : loadError ? (
-          <p className="text-sm text-red-600">{loadError}</p>
+          <p className="text-sm text-[var(--color-negative)]">{loadError}</p>
         ) : rules.length === 0 ? (
           <p className="text-sm text-[var(--color-text-disabled)]">No rules yet.</p>
         ) : (

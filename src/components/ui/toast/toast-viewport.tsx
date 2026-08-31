@@ -12,9 +12,17 @@ const VARIANT_ICON: Record<ToastVariant, typeof CheckCircle2> = {
 };
 
 const VARIANT_CLASSES: Record<ToastVariant, string> = {
-  success: "border-emerald-600/30 text-emerald-700",
-  error: "border-red-600/30 text-red-700",
-  info: "border-sky-600/30 text-sky-700"
+  success: "border-[var(--color-positive-border)] text-[var(--color-positive)]",
+  error: "border-[var(--color-negative-border)] text-[var(--color-negative)]",
+  info: "border-[var(--color-info-border)] text-[var(--color-info)]"
+};
+
+// Error toasts need an assertive announcement (role="alert") -- success/info
+// are fine as a polite "status" update that doesn't interrupt.
+const VARIANT_ROLE: Record<ToastVariant, "status" | "alert"> = {
+  success: "status",
+  error: "alert",
+  info: "status"
 };
 
 type ToastViewportProps = {
@@ -36,7 +44,7 @@ export function ToastViewport({ toasts, onDismiss }: ToastViewportProps) {
         return (
           <div
             key={item.id}
-            role="status"
+            role={VARIANT_ROLE[item.variant]}
             className={`pointer-events-auto flex items-start gap-2.5 rounded-lg border bg-[var(--color-container-background-primary)] p-3 shadow-lg ${VARIANT_CLASSES[item.variant]}`}
           >
             <Icon className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />

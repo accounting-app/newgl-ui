@@ -1,8 +1,10 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import { X } from "lucide-react";
 import type { ReactNode } from "react";
 import { useBodyScrollLock } from "@/hooks/use-body-scroll-lock";
+import { useFocusTrap } from "@/hooks/use-focus-trap";
 
 export type ModalSize = "sm" | "md" | "lg";
 
@@ -27,7 +29,25 @@ type ModalProps = {
 // (a different job: a multi-step wizard, not a focused single action), so
 // this doesn't replace those.
 export function Modal({ open, onClose, title, description, size = "md", children }: ModalProps) {
+  const dialogRef = useRef<HTMLDivElement>(null);
   useBodyScrollLock(open);
+  useFocusTrap(dialogRef, open);
+
+  // Latest-ref pattern (same as BeanEditor's onChangeRef) so the effect
+  // only subscribes once per `open`, not on every render where the caller
+  // passes a new onClose closure.
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
+  useEffect(() => {
+    if (!open) return;
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") onCloseRef.current();
+    }
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [open]);
+
   if (!open) return null;
 
   return (
@@ -38,7 +58,12 @@ export function Modal({ open, onClose, title, description, size = "md", children
       }}
     >
       <div
-        className={`w-full ${SIZE_CLASSES[size]} max-h-[85vh] overflow-y-auto rounded-lg border border-[var(--color-divider-tertiary)] bg-[var(--color-container-background-primary)] p-6 shadow-lg`}
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+        tabIndex={-1}
+        className={`w-full ${SIZE_CLASSES[size]} max-h-[85vh] overflow-y-auto rounded-lg border border-[var(--color-divider-tertiary)] bg-[var(--color-container-background-primary)] p-6 shadow-lg outline-none`}
       >
         <div className="mb-4 flex items-start justify-between gap-4">
           <div>

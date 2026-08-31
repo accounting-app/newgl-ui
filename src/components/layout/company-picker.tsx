@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Building2, ChevronDown, Plus, Trash2 } from "lucide-react";
 import { InputField } from "@/components/ui/input-field";
+import { Select as SelectField } from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useCompany } from "@/lib/company/company-provider";
 
 // Sits in TopHeader, matching its existing dropdown pattern (avatar menu):
@@ -24,6 +26,7 @@ export function CompanyPicker() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -35,8 +38,20 @@ export function CompanyPicker() {
         setDeleteError(null);
       }
     }
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      setIsOpen(false);
+      setIsCreating(false);
+      setDeletingName(null);
+      setDeleteError(null);
+      triggerRef.current?.focus();
+    }
     document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
   }, [isOpen]);
 
   async function handleSwitch(name: string) {
@@ -89,13 +104,24 @@ export function CompanyPicker() {
     }
   }
 
+  // Same footprint as the real trigger button below (icon + text + chevron,
+  // same padding) so the avatar menu on the other side of TopHeader's
+  // justify-between never jumps position while companies are loading --
+  // returning null here used to collapse this side to zero width.
   if (loading || !activeCompany) {
-    return null;
+    return (
+      <div className="flex items-center gap-2 px-3 py-1.5">
+        <Skeleton className="h-4 w-4 rounded" />
+        <Skeleton className="h-4 w-28 rounded" />
+        <Skeleton className="h-3.5 w-3.5 rounded" />
+      </div>
+    );
   }
 
   return (
     <div className="relative" ref={menuRef}>
       <button
+        ref={triggerRef}
         type="button"
         className="flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-medium text-[var(--color-text-global)] transition-colors hover:bg-[var(--color-action-passive-subtle-hover)]"
         aria-haspopup="menu"
@@ -120,13 +146,13 @@ export function CompanyPicker() {
                   Delete <span className="font-medium">{company.name}</span>? This permanently removes its chart of
                   accounts and transactions and can&apos;t be undone.
                 </p>
-                {deleteError ? <p className="text-xs text-red-600">{deleteError}</p> : null}
+                {deleteError ? <p className="text-xs text-[var(--color-negative)]">{deleteError}</p> : null}
                 <div className="flex gap-2">
                   <button
                     type="button"
                     onClick={() => handleDelete(company.name)}
                     disabled={isDeleting}
-                    className="rounded bg-red-600 px-2 py-1 text-xs font-medium text-white disabled:opacity-50"
+                    className="rounded bg-[var(--color-negative)] px-2 py-1 text-xs font-medium text-white disabled:opacity-50"
                   >
                     {isDeleting ? "Deleting…" : "Delete"}
                   </button>
@@ -144,9 +170,10 @@ export function CompanyPicker() {
                 </div>
               </div>
             ) : (
-              <div key={company.name} role="menuitem" className="flex w-full items-center justify-between px-3 py-2 text-left text-sm">
+              <div key={company.name} className="flex w-full items-center justify-between px-3 py-2 text-left text-sm">
                 <button
                   type="button"
+                  role="menuitem"
                   onClick={() => handleSwitch(company.name)}
                   className={`flex-1 text-left transition-colors ${
                     company.isActive ? "text-[var(--color-link-action)]" : "text-[var(--color-text-global)]"
@@ -164,7 +191,7 @@ export function CompanyPicker() {
                       setDeletingName(company.name);
                       setDeleteError(null);
                     }}
-                    className="rounded p-1 text-[var(--color-icon-secondary)] transition-colors hover:bg-[var(--color-action-passive-subtle-hover)] hover:text-red-600"
+                    className="rounded p-1 text-[var(--color-icon-secondary)] transition-colors hover:bg-[var(--color-action-passive-subtle-hover)] hover:text-[var(--color-negative)]"
                   >
                     <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
                   </button>
@@ -183,51 +210,42 @@ export function CompanyPicker() {
                   value={newName}
                   onChange={(event) => setNewName(event.target.value)}
                 />
-                <label className="flex flex-col gap-1 text-xs text-[var(--color-icon-secondary)]">
-                  Starting point
-                  <select
-                    value={startingPoint}
-                    onChange={(event) => setStartingPoint(event.target.value as StartingPoint)}
-                    className="input-field h-8 rounded px-2 text-xs text-[var(--color-text-primary)]"
-                  >
-                    <option value="blank">Blank</option>
-                    <option value="template" disabled={templates.length === 0}>
-                      Starter template
-                    </option>
-                    <option value="duplicate" disabled={companies.length === 0}>
-                      Duplicate an existing company
-                    </option>
-                  </select>
-                </label>
+                <SelectField
+                  label="Starting point"
+                  value={startingPoint}
+                  onChange={(value) => setStartingPoint(value as StartingPoint)}
+                  options={[
+                    { value: "blank", label: "Blank" },
+                    ...(templates.length > 0 ? [{ value: "template", label: "Starter template" }] : []),
+                    ...(companies.length > 0 ? [{ value: "duplicate", label: "Duplicate an existing company" }] : [])
+                  ]}
+                  placeholder="Starting point"
+                  allowCustomValue={false}
+                  optionSize="sm"
+                />
                 {startingPoint === "template" ? (
-                  <select
+                  <SelectField
+                    label="Template"
                     value={templateId}
-                    onChange={(event) => setTemplateId(event.target.value)}
-                    className="input-field h-8 rounded px-2 text-xs text-[var(--color-text-primary)]"
-                  >
-                    <option value="">Select a template</option>
-                    {templates.map((template) => (
-                      <option key={template.id} value={template.id} title={template.description}>
-                        {template.label}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={setTemplateId}
+                    options={templates.map((template) => ({ value: template.id, label: template.label }))}
+                    placeholder="Select a template"
+                    allowCustomValue={false}
+                    optionSize="sm"
+                  />
                 ) : null}
                 {startingPoint === "duplicate" ? (
-                  <select
+                  <SelectField
+                    label="Duplicate from"
                     value={duplicateFromName}
-                    onChange={(event) => setDuplicateFromName(event.target.value)}
-                    className="input-field h-8 rounded px-2 text-xs text-[var(--color-text-primary)]"
-                  >
-                    <option value="">Select a company</option>
-                    {companies.map((company) => (
-                      <option key={company.name} value={company.name}>
-                        {company.name}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={setDuplicateFromName}
+                    options={companies.map((company) => ({ value: company.name, label: company.name }))}
+                    placeholder="Select a company"
+                    allowCustomValue={false}
+                    optionSize="sm"
+                  />
                 ) : null}
-                {createError ? <p className="text-xs text-red-600">{createError}</p> : null}
+                {createError ? <p className="text-xs text-[var(--color-negative)]">{createError}</p> : null}
                 <div className="flex gap-2">
                   <button
                     type="submit"
@@ -237,7 +255,7 @@ export function CompanyPicker() {
                       (startingPoint === "template" && templateId === "") ||
                       (startingPoint === "duplicate" && duplicateFromName === "")
                     }
-                    className="rounded bg-[var(--color-link-action)] px-2 py-1 text-xs font-medium text-white disabled:opacity-50"
+                    className="rounded bg-[var(--color-action-standard)] px-2 py-1 text-xs font-medium text-white disabled:opacity-50"
                   >
                     {isSaving ? "Creating…" : "Create"}
                   </button>

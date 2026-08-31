@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { InputField } from "@/components/ui/input-field";
+import { safeRedirectPath } from "@/lib/auth/safe-redirect";
 import { createClient } from "@/lib/supabase/client";
 
 // useSearchParams() (for the post-login `next` redirect) opts this page out
@@ -31,18 +32,23 @@ function LoginForm() {
     setError(null);
     setIsSubmitting(true);
 
-    const supabase = createClient();
-    const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
+    try {
+      const supabase = createClient();
+      const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
 
-    if (signInError) {
-      setError(signInError.message);
+      if (signInError) {
+        setError(signInError.message);
+        return;
+      }
+
+      const next = safeRedirectPath(searchParams.get("next"));
+      router.replace(next);
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
+    } finally {
       setIsSubmitting(false);
-      return;
     }
-
-    const next = searchParams.get("next") || "/";
-    router.replace(next);
-    router.refresh();
   }
 
   return (
@@ -69,7 +75,7 @@ function LoginForm() {
           onChange={(event) => setPassword(event.target.value)}
         />
 
-        {error ? <p className="text-sm text-red-600">{error}</p> : null}
+        {error ? <p className="text-sm text-[var(--color-negative)]">{error}</p> : null}
 
         <Button type="submit" variant="primary" disabled={isSubmitting}>
           {isSubmitting ? "Signing in…" : "Sign in"}

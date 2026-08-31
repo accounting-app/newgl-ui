@@ -216,7 +216,7 @@ function TrialBalancePageInner() {
           </div>
 
           {outOfBalance ? (
-            <p className="mb-4 rounded border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600">
+            <p className="mb-4 rounded border border-red-200 bg-red-50 px-3 py-2 text-xs text-[var(--color-negative)]">
               Debits ({formatMoney(totalDebit)}) and credits ({formatMoney(totalCredit)}) don&apos;t match — check for
               unposted or unbalanced entries.
             </p>

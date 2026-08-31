@@ -21,7 +21,7 @@ export default function OrganizationSettingsPage() {
   }
 
   if (tenantError || !tenant) {
-    return <p className="text-sm text-red-600">{tenantError ?? "Could not load your organization"}</p>;
+    return <p className="text-sm text-[var(--color-negative)]">{tenantError ?? "Could not load your organization"}</p>;
   }
 
   return (

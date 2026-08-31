@@ -136,7 +136,7 @@ export function LedgerFileEditor({ displayName, load, save, onCancel, onSaved }:
       {loading ? (
         <p className="text-sm text-[var(--color-text-primary)]">Loading…</p>
       ) : loadError ? (
-        <p className="text-sm text-red-600">{loadError}</p>
+        <p className="text-sm text-[var(--color-negative)]">{loadError}</p>
       ) : content === null ? null : (
         <>
           <div className="min-h-0 flex-1">
@@ -144,14 +144,14 @@ export function LedgerFileEditor({ displayName, load, save, onCancel, onSaved }:
           </div>
           <div className="mt-3 flex items-center gap-3">
             {errorCount > 0 ? (
-              <span className="text-xs text-red-600">
+              <span className="text-xs text-[var(--color-negative)]">
                 {errorCount} syntax {errorCount === 1 ? "error" : "errors"} — fix before saving
               </span>
             ) : isDirty ? (
               <span className="text-xs text-[var(--color-icon-secondary)]">Unsaved changes</span>
             ) : null}
           </div>
-          {saveError ? <p className="mt-2 text-sm text-red-600">{saveError}</p> : null}
+          {saveError ? <p className="mt-2 text-sm text-[var(--color-negative)]">{saveError}</p> : null}
           {saveNotice ? <p className="mt-2 text-sm text-[var(--color-text-primary)]">{saveNotice}</p> : null}
         </>
       )}

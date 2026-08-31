@@ -63,7 +63,7 @@ export const InputField = forwardRef<HTMLInputElement, InputFieldProps>(function
       ) : null}
       {input}
       {error ? (
-        <p className="text-xs text-red-600">{error}</p>
+        <p className="text-xs text-[var(--color-negative)]">{error}</p>
       ) : hint ? (
         <p className="text-xs text-[var(--color-icon-secondary)]">{hint}</p>
       ) : null}

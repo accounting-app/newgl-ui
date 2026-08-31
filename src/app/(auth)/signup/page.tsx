@@ -20,27 +20,31 @@ export default function SignupPage() {
     setError(null);
     setIsSubmitting(true);
 
-    const supabase = createClient();
-    const { data, error: signUpError } = await supabase.auth.signUp({ email, password });
+    try {
+      const supabase = createClient();
+      const { data, error: signUpError } = await supabase.auth.signUp({ email, password });
 
-    if (signUpError) {
-      setError(signUpError.message);
+      if (signUpError) {
+        setError(signUpError.message);
+        return;
+      }
+
+      // With email confirmations disabled (local dev), signUp returns an
+      // active session immediately -- go straight in. With confirmations
+      // enabled (production), there's no session yet until the user clicks
+      // the emailed link, which lands on /auth/callback.
+      if (data.session) {
+        router.replace("/");
+        router.refresh();
+        return;
+      }
+
+      setCheckEmail(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
+    } finally {
       setIsSubmitting(false);
-      return;
     }
-
-    // With email confirmations disabled (local dev), signUp returns an
-    // active session immediately -- go straight in. With confirmations
-    // enabled (production), there's no session yet until the user clicks
-    // the emailed link, which lands on /auth/callback.
-    if (data.session) {
-      router.replace("/");
-      router.refresh();
-      return;
-    }
-
-    setCheckEmail(true);
-    setIsSubmitting(false);
   }
 
   if (checkEmail) {
@@ -81,7 +85,7 @@ export default function SignupPage() {
           onChange={(event) => setPassword(event.target.value)}
         />
 
-        {error ? <p className="text-sm text-red-600">{error}</p> : null}
+        {error ? <p className="text-sm text-[var(--color-negative)]">{error}</p> : null}
 
         <Button type="submit" variant="primary" disabled={isSubmitting}>
           {isSubmitting ? "Creating account…" : "Sign up"}

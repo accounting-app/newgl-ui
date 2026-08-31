@@ -111,7 +111,7 @@ export default function AiSettingsPage() {
   }
 
   if (loadError) {
-    return <p className="text-sm text-red-600">{loadError}</p>;
+    return <p className="text-sm text-[var(--color-negative)]">{loadError}</p>;
   }
 
   const actionsUsed = usage?.summary.totalActions ?? 0;
@@ -133,7 +133,7 @@ export default function AiSettingsPage() {
             {isTogglingAi ? "Saving…" : tenant?.aiEnabled ? "Turn off" : "Turn on"}
           </Button>
         </div>
-        {toggleError ? <p className="mt-2 text-sm text-red-600">{toggleError}</p> : null}
+        {toggleError ? <p className="mt-2 text-sm text-[var(--color-negative)]">{toggleError}</p> : null}
       </Card>
 
       <Card title="AI key" description="Bring your own Anthropic key, or use New GL's free-plan key." className="mb-6">
@@ -173,7 +173,7 @@ export default function AiSettingsPage() {
               value={apiKey}
               onChange={(event) => setApiKey(event.target.value)}
             />
-            {keyError ? <p className="text-sm text-red-600">{keyError}</p> : null}
+            {keyError ? <p className="text-sm text-[var(--color-negative)]">{keyError}</p> : null}
             <div>
               <Button type="submit" variant="primary" disabled={savingKey}>
                 {savingKey ? "Validating…" : "Save key"}
