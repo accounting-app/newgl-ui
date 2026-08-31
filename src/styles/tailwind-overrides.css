@@ -34,6 +34,8 @@
   --color-action-standard: #00892E;
   --color-ui-primary: #2CA01C;
   --color-ui-positive: #2CA01C;
+  --color-negative: #DC2626;
+  --color-negative-subtle-hover: rgba(220, 38, 38, 0.1);
   --color-text-inverse: #FFFFFF;
   --radius-full: 9999px;
   --color-container-border-primary: #8D9096;
@@ -124,6 +126,8 @@
   --color-table-row-secondary: #25282c;
   --color-table-row-secondary-hover: #2a3441;
   --color-icon-muted: #70757a;
+  --color-negative: #F87171;
+  --color-negative-subtle-hover: rgba(248, 113, 113, 0.16);
   --color-highlight-badge-background: #1a3d1a;
   --color-highlight-badge-text: #5cdb5c;
   --color-link-action: #8ab4f8;
@@ -180,6 +184,8 @@
   --color-table-row-secondary: #fafafd;
   --color-table-row-secondary-hover: #f0efff;
   --color-icon-muted: #c7c7d6;
+  --color-negative: #dc2626;
+  --color-negative-subtle-hover: rgba(220, 38, 38, 0.1);
   --color-highlight-badge-background: #ecebff;
   --color-highlight-badge-text: #4c46c9;
   --color-link-action: #635bff;
@@ -232,6 +238,8 @@
   --color-table-row-secondary: #f8f9f7;
   --color-table-row-secondary-hover: #eef0f2;
   --color-icon-muted: #b8c2d6;
+  --color-negative: #c81e3a;
+  --color-negative-subtle-hover: rgba(200, 30, 58, 0.1);
   --color-highlight-badge-background: #e7ecfa;
   --color-highlight-badge-text: #3c3b6e;
   --color-link-action: #1e5bb8;
@@ -287,6 +295,8 @@
   --color-table-row-secondary: #f8fafc;
   --color-table-row-secondary-hover: #eef2fb;
   --color-icon-muted: #c3cbdf;
+  --color-negative: #dc2626;
+  --color-negative-subtle-hover: rgba(220, 38, 38, 0.1);
   --color-highlight-badge-background: rgba(5, 150, 105, 0.12);
   --color-highlight-badge-text: #059669;
   --color-link-action: #0ea5a4;

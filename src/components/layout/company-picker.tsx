@@ -120,7 +120,7 @@ export function CompanyPicker() {
                   Delete <span className="font-medium">{company.name}</span>? This permanently removes its chart of
                   accounts and transactions and can&apos;t be undone.
                 </p>
-                {deleteError ? <p className="text-xs text-red-600">{deleteError}</p> : null}
+                {deleteError ? <p className="text-xs text-[var(--color-negative)]">{deleteError}</p> : null}
                 <div className="flex gap-2">
                   <button
                     type="button"
@@ -164,7 +164,7 @@ export function CompanyPicker() {
                       setDeletingName(company.name);
                       setDeleteError(null);
                     }}
-                    className="rounded p-1 text-[var(--color-icon-secondary)] transition-colors hover:bg-[var(--color-action-passive-subtle-hover)] hover:text-red-600"
+                    className="rounded p-1 text-[var(--color-icon-secondary)] transition-colors hover:bg-[var(--color-action-passive-subtle-hover)] hover:text-[var(--color-negative)]"
                   >
                     <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
                   </button>
@@ -227,7 +227,7 @@ export function CompanyPicker() {
                     ))}
                   </select>
                 ) : null}
-                {createError ? <p className="text-xs text-red-600">{createError}</p> : null}
+                {createError ? <p className="text-xs text-[var(--color-negative)]">{createError}</p> : null}
                 <div className="flex gap-2">
                   <button
                     type="submit"

@@ -177,7 +177,7 @@ export function CsvReviewTable({
           </Button>
         ) : null}
       </div>
-      {suggestCategoriesError ? <p className="text-sm text-red-600">{suggestCategoriesError}</p> : null}
+      {suggestCategoriesError ? <p className="text-sm text-[var(--color-negative)]">{suggestCategoriesError}</p> : null}
 
       <div className="flex-1 overflow-auto rounded border border-[var(--color-divider-tertiary)]">
         <table className="w-full table-fixed border-collapse text-sm">
@@ -312,7 +312,7 @@ export function CsvReviewTable({
                             <button
                               type="button"
                               aria-label="Remove split line"
-                              className="text-[var(--color-icon-secondary)] hover:text-red-600 disabled:opacity-30"
+                              className="text-[var(--color-icon-secondary)] hover:text-[var(--color-negative)] disabled:opacity-30"
                               onClick={() =>
                                 onRowChange(row.clientRowId, {
                                   categorySplits:
@@ -439,7 +439,7 @@ export function CsvReviewTable({
                         Exclude
                       </button>
                     ) : null}
-                    {error ? <p className="mt-1 text-[11px] text-red-600">{error}</p> : null}
+                    {error ? <p className="mt-1 text-[11px] text-[var(--color-negative)]">{error}</p> : null}
                   </td>
                 </tr>
               );
@@ -449,7 +449,7 @@ export function CsvReviewTable({
       </div>
 
       <div className="flex items-center justify-between">
-        {submitError ? <p className="mr-auto text-sm text-red-600">{submitError}</p> : null}
+        {submitError ? <p className="mr-auto text-sm text-[var(--color-negative)]">{submitError}</p> : null}
         <Button variant="secondary" onClick={onBack} disabled={isSubmitting || backDisabled}>
           Back
         </Button>

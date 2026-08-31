@@ -333,7 +333,7 @@ export function JournalEntryModal({ open, accountOptions, isSaving, onClose, onS
                     <button
                       type="button"
                       aria-label="Remove line"
-                      className="text-[var(--color-icon-secondary)] hover:text-red-600 disabled:opacity-30"
+                      className="text-[var(--color-icon-secondary)] hover:text-[var(--color-negative)] disabled:opacity-30"
                       onClick={() => removeLine(line.clientId)}
                       disabled={lines.length <= 2}
                     >
@@ -375,7 +375,7 @@ export function JournalEntryModal({ open, accountOptions, isSaving, onClose, onS
                 : `Out of balance by ${Math.abs(difference).toFixed(2)} (debits ${totalDebit.toFixed(2)}, credits ${totalCredit.toFixed(2)}).`}
           </div>
 
-          {saveError ? <p className="text-sm text-red-600">{saveError}</p> : null}
+          {saveError ? <p className="text-sm text-[var(--color-negative)]">{saveError}</p> : null}
         </div>
       </div>
 

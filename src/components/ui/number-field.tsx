@@ -60,7 +60,7 @@ export const NumberField = forwardRef<HTMLInputElement, NumberFieldProps>(functi
       ) : null}
       {input}
       {error ? (
-        <p className="text-xs text-red-600">{error}</p>
+        <p className="text-xs text-[var(--color-negative)]">{error}</p>
       ) : hint ? (
         <p className="text-xs text-[var(--color-icon-secondary)]">{hint}</p>
       ) : null}

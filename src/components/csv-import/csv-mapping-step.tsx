@@ -159,7 +159,7 @@ export function CsvMappingStep({
             </Button>
           ) : null}
         </div>
-        {suggestMappingError ? <p className="mb-3 text-sm text-red-600">{suggestMappingError}</p> : null}
+        {suggestMappingError ? <p className="mb-3 text-sm text-[var(--color-negative)]">{suggestMappingError}</p> : null}
         <div>
           <MappingRow
             label="Date"

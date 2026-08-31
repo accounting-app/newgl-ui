@@ -265,12 +265,12 @@ function LedgerSettingsPageInner() {
             }}
           />
         </div>
-        {uploadReadError ? <p className="mb-3 text-sm text-red-600">{uploadReadError}</p> : null}
+        {uploadReadError ? <p className="mb-3 text-sm text-[var(--color-negative)]">{uploadReadError}</p> : null}
 
         {loading ? (
           <p className="text-sm text-[var(--color-text-primary)]">Loading…</p>
         ) : loadError ? (
-          <p className="text-sm text-red-600">{loadError}</p>
+          <p className="text-sm text-[var(--color-negative)]">{loadError}</p>
         ) : (
           <ul className="flex flex-col divide-y divide-[var(--color-divider-tertiary)]">
             {rows.map((row) => {
@@ -289,13 +289,13 @@ function LedgerSettingsPageInner() {
                     </p>
                     {row.label ? <p className="truncate text-xs text-[var(--color-icon-secondary)]">{row.name}</p> : null}
                   </button>
-                  <div className="flex shrink-0 items-center gap-1">
+                  <div className="flex shrink-0 items-center gap-1.5">
                     <button
                       type="button"
                       aria-label={`Rename ${displayName}`}
                       title="Rename"
                       onClick={() => openRename(row)}
-                      className="rounded p-1.5 text-[var(--color-icon-secondary)] transition-colors hover:bg-[var(--color-action-passive-subtle-hover)] hover:text-[var(--color-text-primary)]"
+                      className="rounded p-2 text-[var(--color-icon-secondary)] transition-colors hover:bg-[var(--color-action-passive-subtle-hover)] hover:text-[var(--color-text-primary)]"
                     >
                       <Pencil className="h-4 w-4" aria-hidden="true" />
                     </button>
@@ -305,7 +305,7 @@ function LedgerSettingsPageInner() {
                         aria-label="Bulk paste import"
                         title="Bulk paste import"
                         onClick={() => setModal({ type: "bulkPaste" })}
-                        className="rounded p-1.5 text-[var(--color-icon-secondary)] transition-colors hover:bg-[var(--color-action-passive-subtle-hover)] hover:text-[var(--color-text-primary)]"
+                        className="rounded p-2 text-[var(--color-icon-secondary)] transition-colors hover:bg-[var(--color-action-passive-subtle-hover)] hover:text-[var(--color-text-primary)]"
                       >
                         <ClipboardList className="h-4 w-4" aria-hidden="true" />
                       </button>
@@ -315,7 +315,7 @@ function LedgerSettingsPageInner() {
                       aria-label={`Download ${displayName}`}
                       title="Download / copy"
                       onClick={() => setModal({ type: "download", row })}
-                      className="rounded p-1.5 text-[var(--color-icon-secondary)] transition-colors hover:bg-[var(--color-action-passive-subtle-hover)] hover:text-[var(--color-text-primary)]"
+                      className="rounded p-2 text-[var(--color-icon-secondary)] transition-colors hover:bg-[var(--color-action-passive-subtle-hover)] hover:text-[var(--color-text-primary)]"
                     >
                       <Download className="h-4 w-4" aria-hidden="true" />
                     </button>
@@ -324,7 +324,7 @@ function LedgerSettingsPageInner() {
                       aria-label={`Version history for ${displayName}`}
                       title="Version history"
                       onClick={() => setModal({ type: "history", row })}
-                      className="rounded p-1.5 text-[var(--color-icon-secondary)] transition-colors hover:bg-[var(--color-action-passive-subtle-hover)] hover:text-[var(--color-text-primary)]"
+                      className="rounded p-2 text-[var(--color-icon-secondary)] transition-colors hover:bg-[var(--color-action-passive-subtle-hover)] hover:text-[var(--color-text-primary)]"
                     >
                       <History className="h-4 w-4" aria-hidden="true" />
                     </button>
@@ -337,7 +337,7 @@ function LedgerSettingsPageInner() {
                           setDeleteError(null);
                           setModal({ type: "delete", row });
                         }}
-                        className="rounded p-1.5 text-[var(--color-icon-secondary)] transition-colors hover:bg-[var(--color-action-passive-subtle-hover)] hover:text-red-600"
+                        className="rounded p-2 text-[var(--color-icon-secondary)] transition-colors hover:bg-[var(--color-action-passive-subtle-hover)] hover:text-[var(--color-negative)]"
                       >
                         <Trash2 className="h-4 w-4" aria-hidden="true" />
                       </button>
@@ -422,7 +422,7 @@ function LedgerSettingsPageInner() {
             placeholder="e.g. Payroll ledger"
             autoFocus
           />
-          {renameError ? <p className="text-sm text-red-600">{renameError}</p> : null}
+          {renameError ? <p className="text-sm text-[var(--color-negative)]">{renameError}</p> : null}
           <div className="flex items-center gap-2">
             <Button variant="primary" onClick={handleRenameSave} disabled={renameSaving}>
               {renameSaving ? "Saving…" : "Save"}
@@ -441,7 +441,7 @@ function LedgerSettingsPageInner() {
               Delete <span className="font-medium">{modal.row.label || modal.row.name}</span>? This permanently
               removes it and can&apos;t be undone.
             </p>
-            {deleteError ? <p className="text-sm text-red-600">{deleteError}</p> : null}
+            {deleteError ? <p className="text-sm text-[var(--color-negative)]">{deleteError}</p> : null}
             <div className="flex items-center gap-2">
               <Button variant="destructive" onClick={handleDeleteConfirm} disabled={deleting}>
                 {deleting ? "Deleting…" : "Delete"}

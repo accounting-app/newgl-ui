@@ -39,7 +39,7 @@ const VARIANT_CLASSES: Record<ButtonVariant, string> = {
     "border border-transparent bg-transparent text-[var(--color-text-primary)] " +
     "hover:bg-[var(--color-action-passive-subtle-hover)]",
   destructive:
-    "border border-red-600 bg-transparent text-red-600 hover:bg-red-600 hover:text-white"
+    "border border-red-600 bg-transparent text-[var(--color-negative)] hover:bg-red-600 hover:text-white"
 };
 
 const ICON_SIZE: Record<ButtonSize, string> = {

@@ -15,7 +15,7 @@ export default function BillingSettingsPage() {
   }
 
   if (error || !tenant) {
-    return <p className="text-sm text-red-600">{error ?? "Could not load your plan"}</p>;
+    return <p className="text-sm text-[var(--color-negative)]">{error ?? "Could not load your plan"}</p>;
   }
 
   return (

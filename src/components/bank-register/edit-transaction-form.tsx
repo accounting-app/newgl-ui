@@ -135,7 +135,7 @@ export function EditTransactionForm({
             edit it, or create a reversal.
           </p>
         ) : null}
-        {rowError ? <p className="mb-1 text-xs text-red-600">{rowError}</p> : null}
+        {rowError ? <p className="mb-1 text-xs text-[var(--color-negative)]">{rowError}</p> : null}
         <Button
           variant="secondary"
           disabled={isDeletingRow || isSavingRow || locked}

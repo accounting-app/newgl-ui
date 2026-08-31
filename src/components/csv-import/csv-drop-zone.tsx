@@ -58,7 +58,7 @@ export function CsvDropZone({ onFileSelected, error }: CsvDropZoneProps) {
 
       <p className="text-center text-xs text-[var(--color-icon-secondary)]">Supported formats: CSV</p>
 
-      {error ? <p className="text-sm text-red-600">{error}</p> : null}
+      {error ? <p className="text-sm text-[var(--color-negative)]">{error}</p> : null}
     </div>
   );
 }

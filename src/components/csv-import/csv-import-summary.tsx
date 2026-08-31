@@ -44,7 +44,7 @@ export function CsvImportSummary({ result, rows, skippedCount, onClose }: CsvImp
                   <span className="text-[var(--color-text-primary)]">
                     {source?.rawDate || "—"} · {source?.payee || "—"} · {source?.rawAmount || "—"}
                   </span>
-                  <p className="text-xs text-red-600">{row.error}</p>
+                  <p className="text-xs text-[var(--color-negative)]">{row.error}</p>
                 </li>
               );
             })}

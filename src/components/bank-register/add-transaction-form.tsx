@@ -74,7 +74,7 @@ export function AddTransactionForm({
                   onChange={(event) => onDraftFieldChange("date", event.target.value)}
                   className="w-full placeholder:text-[var(--color-text-disabled)]"
                 />
-                {draftErrors.date ? <p className="mt-1 text-xs text-red-600">{draftErrors.date}</p> : null}
+                {draftErrors.date ? <p className="mt-1 text-xs text-[var(--color-negative)]">{draftErrors.date}</p> : null}
               </td>
               <td className="form-control">
                 <InputField
@@ -117,8 +117,8 @@ export function AddTransactionForm({
                     {isSplitMode ? "Use a single account instead" : "Split into multiple accounts"}
                   </button>
                 ) : null}
-                {draftErrors.payee ? <p className="mt-1 text-xs text-red-600">{draftErrors.payee}</p> : null}
-                {draftErrors.accountTypeId ? <p className="mt-1 text-xs text-red-600">{draftErrors.accountTypeId}</p> : null}
+                {draftErrors.payee ? <p className="mt-1 text-xs text-[var(--color-negative)]">{draftErrors.payee}</p> : null}
+                {draftErrors.accountTypeId ? <p className="mt-1 text-xs text-[var(--color-negative)]">{draftErrors.accountTypeId}</p> : null}
               </td>
               <td className="form-control">
                 <InputField
@@ -140,7 +140,7 @@ export function AddTransactionForm({
                   placeholder="0.00"
                   className="w-full text-right placeholder:text-[var(--color-text-disabled)]"
                 />
-                {draftErrors.payment ? <p className="mt-1 text-xs text-red-600">{draftErrors.payment}</p> : null}
+                {draftErrors.payment ? <p className="mt-1 text-xs text-[var(--color-negative)]">{draftErrors.payment}</p> : null}
               </td>
               <td className="form-control">
                 <InputField
@@ -153,7 +153,7 @@ export function AddTransactionForm({
                   placeholder="0.00"
                   className="w-full text-right placeholder:text-[var(--color-text-disabled)]"
                 />
-                {draftErrors.deposit ? <p className="mt-1 text-xs text-red-600">{draftErrors.deposit}</p> : null}
+                {draftErrors.deposit ? <p className="mt-1 text-xs text-[var(--color-negative)]">{draftErrors.deposit}</p> : null}
               </td>
               <ReconcileStatusCell status={draftTransaction.reconcileStatus} onCycle={onReconcileCycle} />
               <td className="form-control">
@@ -201,7 +201,7 @@ export function AddTransactionForm({
                     <button
                       type="button"
                       aria-label="Remove split line"
-                      className="text-[var(--color-icon-secondary)] hover:text-red-600 disabled:opacity-30"
+                      className="text-[var(--color-icon-secondary)] hover:text-[var(--color-negative)] disabled:opacity-30"
                       onClick={() => onRemoveSplitLine(line.clientId)}
                       disabled={draftSplits.length <= 2}
                     >
@@ -237,8 +237,8 @@ export function AddTransactionForm({
           {isSavingDraft ? "Saving..." : "Save"}
         </Button>
       </div>
-      {draftErrors.amount ? <p className="mb-1 text-xs text-red-600">{draftErrors.amount}</p> : null}
-      {draftErrors.form ? <p className="mb-1 text-xs text-red-600">{draftErrors.form}</p> : null}
+      {draftErrors.amount ? <p className="mb-1 text-xs text-[var(--color-negative)]">{draftErrors.amount}</p> : null}
+      {draftErrors.form ? <p className="mb-1 text-xs text-[var(--color-negative)]">{draftErrors.form}</p> : null}
     </div>
   );
 }

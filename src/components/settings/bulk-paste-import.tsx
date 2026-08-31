@@ -288,7 +288,7 @@ export function BulkPasteImport() {
                             optionSize="sm"
                           />
                           {row.unmatchedAccount ? (
-                            <p className="mt-0.5 text-[11px] text-red-600">Unmatched: {row.unmatchedAccount}</p>
+                            <p className="mt-0.5 text-[11px] text-[var(--color-negative)]">Unmatched: {row.unmatchedAccount}</p>
                           ) : null}
                         </td>
                         <td className="px-2 py-1.5 align-top">
@@ -303,10 +303,10 @@ export function BulkPasteImport() {
                             optionSize="sm"
                           />
                           {row.unmatchedOffsetAccount ? (
-                            <p className="mt-0.5 text-[11px] text-red-600">Unmatched: {row.unmatchedOffsetAccount}</p>
+                            <p className="mt-0.5 text-[11px] text-[var(--color-negative)]">Unmatched: {row.unmatchedOffsetAccount}</p>
                           ) : null}
                           {row.accountId && row.accountId === row.offsetAccountId ? (
-                            <p className="mt-0.5 text-[11px] text-red-600">Must differ from Account.</p>
+                            <p className="mt-0.5 text-[11px] text-[var(--color-negative)]">Must differ from Account.</p>
                           ) : null}
                         </td>
                         <td className="px-2 py-1.5 align-top">
@@ -325,7 +325,7 @@ export function BulkPasteImport() {
                             onChange={(e) => updateRow(row.clientRowId, { memo: e.target.value })}
                             className="w-full"
                           />
-                          {!ready ? <p className="mt-0.5 text-[11px] text-red-600">Incomplete.</p> : null}
+                          {!ready ? <p className="mt-0.5 text-[11px] text-[var(--color-negative)]">Incomplete.</p> : null}
                         </td>
                       </tr>
                     );
@@ -356,7 +356,7 @@ export function BulkPasteImport() {
                   {result.succeeded + result.failed === 1 ? "" : "s"}.
                 </p>
                 {result.errors.length > 0 ? (
-                  <p className="mt-1 whitespace-pre-line text-red-600">{result.errors.join("\n")}</p>
+                  <p className="mt-1 whitespace-pre-line text-[var(--color-negative)]">{result.errors.join("\n")}</p>
                 ) : null}
               </div>
             ) : null}

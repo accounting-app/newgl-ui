@@ -440,7 +440,7 @@ export function PayeeSideModal({ open, onClose, onSave }: PayeeSideModalProps) {
           </div>
         )}
 
-        {error ? <p className="mt-3 text-xs text-red-600">{error}</p> : null}
+        {error ? <p className="mt-3 text-xs text-[var(--color-negative)]">{error}</p> : null}
 
         <footer className="mt-6 flex justify-end gap-2">
           <Button variant="secondary" onClick={handleClose}>

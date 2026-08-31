@@ -84,9 +84,9 @@ export function LedgerCreateFileView({
         </Button>
       </div>
 
-      {error ? <p className="mt-2 text-sm text-red-600">{error}</p> : null}
+      {error ? <p className="mt-2 text-sm text-[var(--color-negative)]">{error}</p> : null}
       {errorCount > 0 ? (
-        <p className="mt-2 text-xs text-red-600">
+        <p className="mt-2 text-xs text-[var(--color-negative)]">
           {errorCount} syntax {errorCount === 1 ? "error" : "errors"} — fix before saving
         </p>
       ) : null}

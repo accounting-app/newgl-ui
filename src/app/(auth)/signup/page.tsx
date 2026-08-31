@@ -85,7 +85,7 @@ export default function SignupPage() {
           onChange={(event) => setPassword(event.target.value)}
         />
 
-        {error ? <p className="text-sm text-red-600">{error}</p> : null}
+        {error ? <p className="text-sm text-[var(--color-negative)]">{error}</p> : null}
 
         <Button type="submit" variant="primary" disabled={isSubmitting}>
           {isSubmitting ? "Creating account…" : "Sign up"}

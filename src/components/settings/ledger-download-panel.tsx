@@ -82,8 +82,8 @@ export function LedgerDownloadPanel({ fileBaseName, fetchContent, dateRangeSuppo
           {copying ? "Copying…" : "Copy to clipboard"}
         </Button>
       </div>
-      {downloadError ? <p className="mt-2 text-sm text-red-600">{downloadError}</p> : null}
-      {copyError ? <p className="mt-2 text-sm text-red-600">{copyError}</p> : null}
+      {downloadError ? <p className="mt-2 text-sm text-[var(--color-negative)]">{downloadError}</p> : null}
+      {copyError ? <p className="mt-2 text-sm text-[var(--color-negative)]">{copyError}</p> : null}
       {copyNotice ? <p className="mt-2 text-sm text-[var(--color-text-primary)]">{copyNotice}</p> : null}
     </div>
   );

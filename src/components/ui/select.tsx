@@ -214,7 +214,7 @@ export function Select({
         </label>
       ) : null}
       {field}
-      {error ? <p className="text-xs text-red-600">{error}</p> : null}
+      {error ? <p className="text-xs text-[var(--color-negative)]">{error}</p> : null}
     </div>
   );
 }

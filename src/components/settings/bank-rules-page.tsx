@@ -495,7 +495,7 @@ export function BankRulesPage() {
         {loading ? (
           <p className="text-sm text-[var(--color-text-primary)]">Loading…</p>
         ) : loadError ? (
-          <p className="text-sm text-red-600">{loadError}</p>
+          <p className="text-sm text-[var(--color-negative)]">{loadError}</p>
         ) : rules.length === 0 ? (
           <p className="text-sm text-[var(--color-text-disabled)]">No rules yet.</p>
         ) : (
