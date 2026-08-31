@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { LogOut } from "lucide-react";
 import { CompanyPicker } from "@/components/layout/company-picker";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
+import { Skeleton } from "@/components/ui/skeleton";
 import { createClient } from "@/lib/supabase/client";
 
 // Every page under (app) is authenticated now (Frontend Phase F1) -- this
@@ -13,6 +14,7 @@ import { createClient } from "@/lib/supabase/client";
 // point in the app.
 export function TopHeader() {
   const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [isUserLoading, setIsUserLoading] = useState(true);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isSigningOut, setIsSigningOut] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -20,7 +22,10 @@ export function TopHeader() {
 
   useEffect(() => {
     const supabase = createClient();
-    supabase.auth.getUser().then(({ data }) => setUserEmail(data.user?.email ?? null));
+    supabase.auth
+      .getUser()
+      .then(({ data }) => setUserEmail(data.user?.email ?? null))
+      .finally(() => setIsUserLoading(false));
   }, []);
 
   useEffect(() => {
@@ -62,22 +67,33 @@ export function TopHeader() {
       <div className="flex items-center gap-3">
       <ThemeToggle />
       <div className="relative" ref={menuRef}>
-        <button
-          ref={triggerRef}
-          type="button"
-          className="flex items-center gap-3 rounded-full py-1 pl-1 pr-2 transition-colors hover:bg-[var(--color-action-passive-subtle-hover)]"
-          aria-haspopup="menu"
-          aria-expanded={isMenuOpen}
-          onClick={() => setIsMenuOpen((current) => !current)}
-        >
-          <div
-            aria-hidden="true"
-            className="avatar-circle flex h-8 w-8 items-center justify-center rounded-full bg-[var(--color-avatar-background)] text-xs font-semibold text-white"
-          >
-            {avatarLetter}
+        {isUserLoading ? (
+          // Same footprint as the real trigger button below (avatar circle
+          // + name, same padding) so nothing in the header shifts once the
+          // signed-in user loads -- not a button yet, since there's no
+          // known user to open a menu for.
+          <div className="flex items-center gap-3 rounded-full py-1 pl-1 pr-2">
+            <Skeleton className="h-8 w-8 shrink-0 rounded-full" />
+            <Skeleton className="h-4 w-32 rounded" />
           </div>
-          <span className="text-sm font-medium text-[var(--color-text-global)]">{userEmail ?? "\u00A0"}</span>
-        </button>
+        ) : (
+          <button
+            ref={triggerRef}
+            type="button"
+            className="flex items-center gap-3 rounded-full py-1 pl-1 pr-2 transition-colors hover:bg-[var(--color-action-passive-subtle-hover)]"
+            aria-haspopup="menu"
+            aria-expanded={isMenuOpen}
+            onClick={() => setIsMenuOpen((current) => !current)}
+          >
+            <div
+              aria-hidden="true"
+              className="avatar-circle flex h-8 w-8 items-center justify-center rounded-full bg-[var(--color-avatar-background)] text-xs font-semibold text-white"
+            >
+              {avatarLetter}
+            </div>
+            <span className="text-sm font-medium text-[var(--color-text-global)]">{userEmail ?? "\u00A0"}</span>
+          </button>
+        )}
 
         {isMenuOpen ? (
           <div
