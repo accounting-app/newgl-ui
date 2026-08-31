@@ -24,6 +24,7 @@ export function CompanyPicker() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -35,8 +36,20 @@ export function CompanyPicker() {
         setDeleteError(null);
       }
     }
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      setIsOpen(false);
+      setIsCreating(false);
+      setDeletingName(null);
+      setDeleteError(null);
+      triggerRef.current?.focus();
+    }
     document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
   }, [isOpen]);
 
   async function handleSwitch(name: string) {
@@ -96,6 +109,7 @@ export function CompanyPicker() {
   return (
     <div className="relative" ref={menuRef}>
       <button
+        ref={triggerRef}
         type="button"
         className="flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-medium text-[var(--color-text-global)] transition-colors hover:bg-[var(--color-action-passive-subtle-hover)]"
         aria-haspopup="menu"
@@ -126,7 +140,7 @@ export function CompanyPicker() {
                     type="button"
                     onClick={() => handleDelete(company.name)}
                     disabled={isDeleting}
-                    className="rounded bg-red-600 px-2 py-1 text-xs font-medium text-white disabled:opacity-50"
+                    className="rounded bg-[var(--color-negative)] px-2 py-1 text-xs font-medium text-white disabled:opacity-50"
                   >
                     {isDeleting ? "Deleting…" : "Delete"}
                   </button>
@@ -144,9 +158,10 @@ export function CompanyPicker() {
                 </div>
               </div>
             ) : (
-              <div key={company.name} role="menuitem" className="flex w-full items-center justify-between px-3 py-2 text-left text-sm">
+              <div key={company.name} className="flex w-full items-center justify-between px-3 py-2 text-left text-sm">
                 <button
                   type="button"
+                  role="menuitem"
                   onClick={() => handleSwitch(company.name)}
                   className={`flex-1 text-left transition-colors ${
                     company.isActive ? "text-[var(--color-link-action)]" : "text-[var(--color-text-global)]"
@@ -237,7 +252,7 @@ export function CompanyPicker() {
                       (startingPoint === "template" && templateId === "") ||
                       (startingPoint === "duplicate" && duplicateFromName === "")
                     }
-                    className="rounded bg-[var(--color-link-action)] px-2 py-1 text-xs font-medium text-white disabled:opacity-50"
+                    className="rounded bg-[var(--color-action-standard)] px-2 py-1 text-xs font-medium text-white disabled:opacity-50"
                   >
                     {isSaving ? "Creating…" : "Create"}
                   </button>

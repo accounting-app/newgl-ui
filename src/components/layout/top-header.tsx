@@ -16,6 +16,7 @@ export function TopHeader() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isSigningOut, setIsSigningOut] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     const supabase = createClient();
@@ -29,8 +30,17 @@ export function TopHeader() {
         setIsMenuOpen(false);
       }
     }
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      setIsMenuOpen(false);
+      triggerRef.current?.focus();
+    }
     document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
   }, [isMenuOpen]);
 
   async function handleSignOut() {
@@ -53,6 +63,7 @@ export function TopHeader() {
       <ThemeToggle />
       <div className="relative" ref={menuRef}>
         <button
+          ref={triggerRef}
           type="button"
           className="flex items-center gap-3 rounded-full py-1 pl-1 pr-2 transition-colors hover:bg-[var(--color-action-passive-subtle-hover)]"
           aria-haspopup="menu"
