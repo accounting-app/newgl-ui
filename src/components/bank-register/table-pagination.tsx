@@ -1,5 +1,3 @@
-import type { MouseEvent } from "react";
-
 type TablePaginationProps = {
   totalItems: number;
   currentPage: number;
@@ -12,77 +10,47 @@ type TablePaginationProps = {
 export function TablePagination({ totalItems, currentPage, totalPages, start, end, onPageChange }: TablePaginationProps) {
   const hasPages = totalItems > 0 && totalPages > 0;
 
-  const linkBaseClass = "text-sm transition-colors";
-  const enabledClass = "text-[var(--color-text-primary)] hover:text-[var(--color-text-highlight)]";
-  const disabledClass = "pointer-events-none cursor-not-allowed text-[var(--color-text-disabled)]";
+  const buttonBaseClass = "text-sm transition-colors disabled:cursor-not-allowed disabled:text-[var(--color-text-disabled)]";
+  const buttonClass = `${buttonBaseClass} text-[var(--color-text-primary)] hover:enabled:text-[var(--color-text-highlight)]`;
 
-  const linkClass = (enabled: boolean) =>
-    `${linkBaseClass} ${enabled ? enabledClass : disabledClass}`;
-  const handleLinkClick = (event: MouseEvent<HTMLAnchorElement>, page?: number) => {
-    event.preventDefault();
-    if (!hasPages || !page || page < 1 || page > totalPages || page === currentPage) return;
+  function goTo(page: number) {
+    if (!hasPages || page < 1 || page > totalPages || page === currentPage) return;
     onPageChange(page);
-  };
+  }
+
+  const atFirstPage = !hasPages || currentPage <= 1;
+  const atLastPage = !hasPages || currentPage >= totalPages;
 
   return (
     <div className="m-0 mb-5 flex justify-end px-[5px] py-0">
       <div className="flex flex-wrap items-center gap-2 text-sm text-[var(--color-text-primary)]">
         <span>Go to:</span>
-        <a href="#" aria-disabled={!hasPages} className={linkClass(hasPages)} onClick={(event) => handleLinkClick(event)}>
-          {currentPage}
-        </a>
+        {/* Not a control -- clicking the current page number is a no-op by
+            definition, so this is display text, not a link pretending to
+            be interactive. */}
+        <span aria-current="page">{currentPage}</span>
         <span>of {totalPages}</span>
-        <a
-          href="#"
-          aria-disabled={!hasPages || currentPage <= 1}
-          className={linkClass(hasPages && currentPage > 1)}
-          onClick={(event) => handleLinkClick(event, currentPage - 1)}
-        >
+        <button type="button" disabled={atFirstPage} className={buttonClass} onClick={() => goTo(currentPage - 1)} aria-label="Previous page">
           {"<"}
-        </a>
-        <a
-          href="#"
-          aria-disabled={!hasPages || currentPage <= 1}
-          className={linkClass(hasPages && currentPage > 1)}
-          onClick={(event) => handleLinkClick(event, 1)}
-        >
+        </button>
+        <button type="button" disabled={atFirstPage} className={buttonClass} onClick={() => goTo(1)}>
           First
-        </a>
-        <a
-          href="#"
-          aria-disabled={!hasPages || currentPage <= 1}
-          className={linkClass(hasPages && currentPage > 1)}
-          onClick={(event) => handleLinkClick(event, currentPage - 1)}
-        >
+        </button>
+        <button type="button" disabled={atFirstPage} className={buttonClass} onClick={() => goTo(currentPage - 1)}>
           Previous
-        </a>
+        </button>
         <span>
           {start}-{end} of {totalItems}
         </span>
-        <a
-          href="#"
-          aria-disabled={!hasPages || currentPage >= totalPages}
-          className={linkClass(hasPages && currentPage < totalPages)}
-          onClick={(event) => handleLinkClick(event, currentPage + 1)}
-        >
+        <button type="button" disabled={atLastPage} className={buttonClass} onClick={() => goTo(currentPage + 1)}>
           Next
-        </a>
-        <a
-          href="#"
-          aria-disabled={!hasPages || currentPage >= totalPages}
-          className={linkClass(hasPages && currentPage < totalPages)}
-          onClick={(event) => handleLinkClick(event, totalPages)}
-        >
+        </button>
+        <button type="button" disabled={atLastPage} className={buttonClass} onClick={() => goTo(totalPages)}>
           Last
-        </a>
-        <a
-          href="#"
-          aria-disabled={!hasPages || currentPage >= totalPages}
-          className={linkClass(hasPages && currentPage < totalPages)}
-          onClick={(event) => handleLinkClick(event, currentPage + 1)}
-        >
+        </button>
+        <button type="button" disabled={atLastPage} className={buttonClass} onClick={() => goTo(currentPage + 1)} aria-label="Next page">
           {">"}
-        </a>
+        </button>
       </div>
     </div>
   );

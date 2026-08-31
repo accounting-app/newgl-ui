@@ -67,8 +67,8 @@ export function FilterFormPopover({
     >
       <div className="space-y-3 px-4 pb-4">
         <div>
-          <label className="mb-1 block text-xs font-semibold text-[var(--color-text-primary)]">Find</label>
           <InputField
+            label="Find"
             type="text"
             value={filterDraft.find}
             onChange={(event) => onFindChange(event.target.value)}
@@ -78,56 +78,48 @@ export function FilterFormPopover({
         </div>
 
         <div className="grid grid-cols-3 gap-3">
-          <div>
-            <label className="mb-1 block text-xs font-semibold text-[var(--color-text-primary)]">Reconcile status</label>
-            <SelectField
-              value={filterDraft.reconcileStatus}
-              onChange={onReconcileStatusChange}
-              options={reconcileOptions}
-              placeholder="Select status"
-              allowCustomValue={false}
-              optionSize="sm"
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-xs font-semibold text-[var(--color-text-primary)]">Transaction type</label>
-            <SelectField
-              value={filterDraft.transactionType}
-              onChange={onTransactionTypeChange}
-              options={transactionTypeOptions}
-              placeholder="All"
-              allowCustomValue={false}
-              optionSize="sm"
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-xs font-semibold text-[var(--color-text-primary)]">Payee</label>
-            <SelectField
-              value={filterDraft.payee}
-              onChange={onPayeeChange}
-              options={payeeOptions}
-              placeholder="All"
-              allowCustomValue={false}
-              optionSize="sm"
-            />
-          </div>
+          <SelectField
+            label="Reconcile status"
+            value={filterDraft.reconcileStatus}
+            onChange={onReconcileStatusChange}
+            options={reconcileOptions}
+            placeholder="Select status"
+            allowCustomValue={false}
+            optionSize="sm"
+          />
+          <SelectField
+            label="Transaction type"
+            value={filterDraft.transactionType}
+            onChange={onTransactionTypeChange}
+            options={transactionTypeOptions}
+            placeholder="All"
+            allowCustomValue={false}
+            optionSize="sm"
+          />
+          <SelectField
+            label="Payee"
+            value={filterDraft.payee}
+            onChange={onPayeeChange}
+            options={payeeOptions}
+            placeholder="All"
+            allowCustomValue={false}
+            optionSize="sm"
+          />
         </div>
 
         <div className="grid grid-cols-3 gap-3">
+          <SelectField
+            label="Date"
+            value={filterDraft.datePreset}
+            onChange={onDatePresetChange}
+            options={dateOptions}
+            placeholder="All dates"
+            allowCustomValue={false}
+            optionSize="sm"
+          />
           <div>
-            <label className="mb-1 block text-xs font-semibold text-[var(--color-text-primary)]">Date</label>
-            <SelectField
-              value={filterDraft.datePreset}
-              onChange={onDatePresetChange}
-              options={dateOptions}
-              placeholder="All dates"
-              allowCustomValue={false}
-              optionSize="sm"
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-xs font-semibold text-[var(--color-text-primary)]">From</label>
             <InputField
+              label="From"
               type={isFromDateActive || Boolean(filterDraft.from) ? "date" : "text"}
               value={filterDraft.from || ""}
               placeholder=""
@@ -138,8 +130,8 @@ export function FilterFormPopover({
             />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-semibold text-[var(--color-text-primary)]">To</label>
             <InputField
+              label="To"
               type={isToDateActive || Boolean(filterDraft.to) ? "date" : "text"}
               value={filterDraft.to || ""}
               placeholder=""

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Building2, ChevronDown, Plus, Trash2 } from "lucide-react";
 import { InputField } from "@/components/ui/input-field";
+import { Select as SelectField } from "@/components/ui/select";
 import { useCompany } from "@/lib/company/company-provider";
 
 // Sits in TopHeader, matching its existing dropdown pattern (avatar menu):
@@ -198,49 +199,40 @@ export function CompanyPicker() {
                   value={newName}
                   onChange={(event) => setNewName(event.target.value)}
                 />
-                <label className="flex flex-col gap-1 text-xs text-[var(--color-icon-secondary)]">
-                  Starting point
-                  <select
-                    value={startingPoint}
-                    onChange={(event) => setStartingPoint(event.target.value as StartingPoint)}
-                    className="input-field h-8 rounded px-2 text-xs text-[var(--color-text-primary)]"
-                  >
-                    <option value="blank">Blank</option>
-                    <option value="template" disabled={templates.length === 0}>
-                      Starter template
-                    </option>
-                    <option value="duplicate" disabled={companies.length === 0}>
-                      Duplicate an existing company
-                    </option>
-                  </select>
-                </label>
+                <SelectField
+                  label="Starting point"
+                  value={startingPoint}
+                  onChange={(value) => setStartingPoint(value as StartingPoint)}
+                  options={[
+                    { value: "blank", label: "Blank" },
+                    ...(templates.length > 0 ? [{ value: "template", label: "Starter template" }] : []),
+                    ...(companies.length > 0 ? [{ value: "duplicate", label: "Duplicate an existing company" }] : [])
+                  ]}
+                  placeholder="Starting point"
+                  allowCustomValue={false}
+                  optionSize="sm"
+                />
                 {startingPoint === "template" ? (
-                  <select
+                  <SelectField
+                    label="Template"
                     value={templateId}
-                    onChange={(event) => setTemplateId(event.target.value)}
-                    className="input-field h-8 rounded px-2 text-xs text-[var(--color-text-primary)]"
-                  >
-                    <option value="">Select a template</option>
-                    {templates.map((template) => (
-                      <option key={template.id} value={template.id} title={template.description}>
-                        {template.label}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={setTemplateId}
+                    options={templates.map((template) => ({ value: template.id, label: template.label }))}
+                    placeholder="Select a template"
+                    allowCustomValue={false}
+                    optionSize="sm"
+                  />
                 ) : null}
                 {startingPoint === "duplicate" ? (
-                  <select
+                  <SelectField
+                    label="Duplicate from"
                     value={duplicateFromName}
-                    onChange={(event) => setDuplicateFromName(event.target.value)}
-                    className="input-field h-8 rounded px-2 text-xs text-[var(--color-text-primary)]"
-                  >
-                    <option value="">Select a company</option>
-                    {companies.map((company) => (
-                      <option key={company.name} value={company.name}>
-                        {company.name}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={setDuplicateFromName}
+                    options={companies.map((company) => ({ value: company.name, label: company.name }))}
+                    placeholder="Select a company"
+                    allowCustomValue={false}
+                    optionSize="sm"
+                  />
                 ) : null}
                 {createError ? <p className="text-xs text-[var(--color-negative)]">{createError}</p> : null}
                 <div className="flex gap-2">
