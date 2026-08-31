@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
+import { useFocusTrap } from "@/hooks/use-focus-trap";
 
 type ImportConfirmDialogProps = {
   open: boolean;
@@ -18,6 +19,9 @@ export function ImportConfirmDialog({
   onCancel,
   onConfirm
 }: ImportConfirmDialogProps) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(dialogRef, open);
+
   useEffect(() => {
     if (!open) return;
     function handleKeyDown(event: KeyboardEvent) {
@@ -32,10 +36,12 @@ export function ImportConfirmDialog({
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40">
       <div
+        ref={dialogRef}
         role="alertdialog"
         aria-modal="true"
         aria-label="Confirm import"
-        className="mx-4 w-full max-w-[440px] rounded border border-[var(--color-divider-tertiary)] bg-[var(--color-container-background-primary)] p-6 shadow-lg"
+        tabIndex={-1}
+        className="mx-4 w-full max-w-[440px] rounded border border-[var(--color-divider-tertiary)] bg-[var(--color-container-background-primary)] p-6 shadow-lg outline-none"
       >
         <p className="text-base font-medium text-[var(--color-text-primary)]">
           New GL will import {transactionCount} transaction{transactionCount === 1 ? "" : "s"} using the
