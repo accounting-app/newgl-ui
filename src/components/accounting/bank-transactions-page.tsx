@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
-import { ChevronDown, Landmark, MessageSquarePlus, Paperclip, Plus, Printer, RefreshCw, Search, Settings, Share, TriangleAlert } from "lucide-react";
+import { ChevronDown, ChevronUp, Landmark, MessageSquarePlus, Paperclip, Pencil, Plus, Printer, RefreshCw, Search, Settings, Share, TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { IconButton } from "@/components/ui/icon-button";
 import { InputField } from "@/components/ui/input-field";
@@ -44,6 +44,7 @@ export function BankTransactionsPage() {
   const bankAccounts = useMemo(() => accounts.filter((a) => isRegisterAccountCategory(a.category)), [accounts]);
   const [selectedAccountId, setSelectedAccountId] = useState("");
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
+  const [accountSearch, setAccountSearch] = useState("");
   useEffect(() => {
     if (!selectedAccountId && bankAccounts.length > 0) setSelectedAccountId(bankAccounts[0].id);
   }, [bankAccounts, selectedAccountId]);
@@ -54,6 +55,18 @@ export function BankTransactionsPage() {
     txnsKey ?? "newgl:phase1:pending:pending-bank-txns"
   );
   const accountTxns = useMemo(() => allTxns.filter((t) => t.accountId === selectedAccountId), [allTxns, selectedAccountId]);
+  const pendingCountByAccount = useMemo(() => {
+    const counts = new Map<string, number>();
+    allTxns.forEach((t) => {
+      if (t.status !== "PENDING") return;
+      counts.set(t.accountId, (counts.get(t.accountId) ?? 0) + 1);
+    });
+    return counts;
+  }, [allTxns]);
+  const filteredBankAccounts = useMemo(
+    () => bankAccounts.filter((a) => accountSearch.trim() === "" || a.name.toLowerCase().includes(accountSearch.trim().toLowerCase())),
+    [bankAccounts, accountSearch]
+  );
 
   const [tab, setTab] = useState<PendingTxnStatus>("PENDING");
   const [search, setSearch] = useState("");
@@ -159,23 +172,71 @@ export function BankTransactionsPage() {
               <Landmark className="h-4 w-4" aria-hidden="true" />
             </span>
             {selectedAccount?.name ?? "Select account"}
-            <ChevronDown className="h-4 w-4 text-[var(--color-icon-secondary)]" aria-hidden="true" />
+            {accountMenuOpen ? (
+              <ChevronUp className="h-4 w-4 text-[var(--color-icon-secondary)]" aria-hidden="true" />
+            ) : (
+              <ChevronDown className="h-4 w-4 text-[var(--color-icon-secondary)]" aria-hidden="true" />
+            )}
           </button>
           {accountMenuOpen ? (
-            <div className="absolute left-0 top-full z-10 mt-1 w-56 rounded-lg border border-[var(--color-divider-tertiary)] bg-[var(--color-container-background-primary)] py-1 shadow-lg">
-              {bankAccounts.map((a) => (
-                <button
-                  key={a.id}
-                  type="button"
-                  onClick={() => {
-                    setSelectedAccountId(a.id);
-                    setAccountMenuOpen(false);
-                  }}
-                  className="block w-full px-3 py-2 text-left text-sm text-[var(--color-text-global)] hover:bg-[var(--color-action-passive-subtle-hover)]"
-                >
-                  {a.name}
-                </button>
-              ))}
+            <div className="absolute left-0 top-full z-20 mt-2 w-[560px] max-w-[90vw] rounded-lg border border-[var(--color-divider-tertiary)] bg-[var(--color-container-background-primary)] p-3 shadow-lg">
+              <div className="relative mb-2">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--color-icon-secondary)]" aria-hidden="true" />
+                <input
+                  autoFocus
+                  type="text"
+                  value={accountSearch}
+                  onChange={(e) => setAccountSearch(e.target.value)}
+                  placeholder="Search by account name"
+                  className="h-10 w-full rounded-lg border-2 border-[var(--override-focus)] bg-[var(--color-input-background)] pl-9 pr-3 text-sm text-[var(--color-input-text)] outline-none placeholder:text-[var(--color-text-disabled)]"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => setAccountMenuOpen(false)}
+                className="mb-1 px-1 text-sm font-medium text-[var(--color-link-action)] hover:underline"
+              >
+                Show account cards
+              </button>
+              <div className="max-h-72 overflow-y-auto">
+                {filteredBankAccounts.length === 0 ? (
+                  <p className="px-1 py-3 text-sm text-[var(--color-text-disabled)]">No accounts match "{accountSearch}".</p>
+                ) : (
+                  filteredBankAccounts.map((a) => (
+                    <button
+                      key={a.id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedAccountId(a.id);
+                        setAccountMenuOpen(false);
+                        setAccountSearch("");
+                      }}
+                      className="flex w-full items-start gap-3 rounded-lg px-2 py-2.5 text-left hover:bg-[var(--color-action-passive-subtle-hover)]"
+                    >
+                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--color-ui-primary)] text-white">
+                        <Landmark className="h-4 w-4" aria-hidden="true" />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="flex items-center gap-2">
+                          <span className="font-semibold text-[var(--color-text-global)]">{a.name}</span>
+                          <Link
+                            href="/all-apps/chart-of-accounts"
+                            onClick={(e) => e.stopPropagation()}
+                            aria-label={`Edit ${a.name} in Chart of Accounts`}
+                            className="text-[var(--color-icon-secondary)] hover:text-[var(--color-text-global)]"
+                          >
+                            <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
+                          </Link>
+                        </span>
+                        <span className="block text-sm text-[var(--color-text-primary)]">Bank balance: {formatMoney(a.currentBalance)}</span>
+                        <span className="block text-sm text-[var(--color-text-primary)]">
+                          {pendingCountByAccount.get(a.id) ?? 0} pending transaction{(pendingCountByAccount.get(a.id) ?? 0) === 1 ? "" : "s"}
+                        </span>
+                      </span>
+                    </button>
+                  ))
+                )}
+              </div>
             </div>
           ) : null}
         </div>
