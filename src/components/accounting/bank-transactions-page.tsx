@@ -13,12 +13,29 @@ import { useCompany } from "@/lib/company/company-provider";
 import { companyScopedKey, localId, useLocalCollection } from "@/lib/local-store/use-local-collection";
 import type { PendingBankTxn, PendingTxnStatus } from "@/lib/local-store/accounting-types";
 import { getServiceContainer } from "@/lib/services/service-container-v2";
+import { DEBIT_NORMAL_CATEGORIES } from "@/modules/accounting/domain/accounting-reports";
 import { isRegisterAccountCategory } from "@/modules/accounting/presentation/transaction-type-policy";
-import type { Account } from "@/modules/accounting/domain/models";
+import type { Account, Transaction } from "@/modules/accounting/domain/models";
 
 function formatMoney(value: number): string {
   return value.toLocaleString("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
+
+// A row shape both the real Posted transactions and the local-only
+// Pending/Excluded staging rows can render through the same <table>.
+type DisplayRow = {
+  id: string;
+  date: string;
+  description: string;
+  spent?: number;
+  received?: number;
+  payee?: string;
+  categoryLabel?: string;
+  /** Only set (and only editable) for local-only Pending/Excluded rows -- real Posted rows derive categoryLabel straight from the transaction's own postings instead. */
+  categoryAccountId?: string;
+  /** True for local-only staging rows (deletable); false/undefined for real transactions (not something this Phase-1 screen can delete). */
+  isLocal?: boolean;
+};
 
 const TABS: { value: PendingTxnStatus; label: string }[] = [
   { value: "PENDING", label: "Pending" },
@@ -37,14 +54,34 @@ export function BankTransactionsPage() {
   const { toast } = useToast();
   const services = useMemo(() => getServiceContainer(), []);
   const [accounts, setAccounts] = useState<Account[]>([]);
+  const [postedTransactions, setPostedTransactions] = useState<Transaction[]>([]);
   useEffect(() => {
     services.accountService.listAccounts().then(setAccounts).catch(() => setAccounts([]));
+    services.transactionService.listTransactions({ status: "POSTED" }).then(setPostedTransactions).catch(() => setPostedTransactions([]));
   }, [services]);
 
   const bankAccounts = useMemo(() => accounts.filter((a) => isRegisterAccountCategory(a.category)), [accounts]);
   const [selectedAccountId, setSelectedAccountId] = useState("");
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const [accountSearch, setAccountSearch] = useState("");
+  const accountMenuRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!accountMenuOpen) return;
+    function handleClickOutside(event: MouseEvent) {
+      if (accountMenuRef.current && !accountMenuRef.current.contains(event.target as Node)) {
+        setAccountMenuOpen(false);
+      }
+    }
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") setAccountMenuOpen(false);
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [accountMenuOpen]);
   useEffect(() => {
     if (!selectedAccountId && bankAccounts.length > 0) setSelectedAccountId(bankAccounts[0].id);
   }, [bankAccounts, selectedAccountId]);
@@ -68,18 +105,68 @@ export function BankTransactionsPage() {
     [bankAccounts, accountSearch]
   );
 
+  const accountById = useMemo(() => new Map(accounts.map((a) => [a.id, a])), [accounts]);
+
+  // Real posted transactions for the selected account -- this is the fix
+  // for "transactions aren't rendering": Posted was local-only staging
+  // that starts empty, but this app already has real posted transactions
+  // for these accounts (same data Register/Expense Transactions read), so
+  // Posted now shows those instead of an always-empty local list.
+  const realPostedRows = useMemo<DisplayRow[]>(() => {
+    if (!selectedAccountId) return [];
+    const account = accountById.get(selectedAccountId);
+    if (!account) return [];
+    const isDebitNormal = DEBIT_NORMAL_CATEGORIES.has(account.category);
+    return postedTransactions
+      .filter((txn) => txn.postings.some((p) => p.accountId === selectedAccountId))
+      .map((txn) => {
+        const ownPosting = txn.postings.find((p) => p.accountId === selectedAccountId)!;
+        const increases = isDebitNormal ? ownPosting.type === "DEBIT" : ownPosting.type === "CREDIT";
+        const otherPostings = txn.postings.filter((p) => p.accountId !== selectedAccountId);
+        const otherAccount = otherPostings.length === 1 ? accountById.get(otherPostings[0].accountId) : undefined;
+        return {
+          id: txn.id,
+          date: txn.transactionDate,
+          description: txn.memo || txn.payee || "Transaction",
+          received: increases ? ownPosting.amount : undefined,
+          spent: !increases ? ownPosting.amount : undefined,
+          payee: txn.payee,
+          categoryLabel: otherPostings.length > 1 ? "Split" : otherAccount?.name
+        };
+      })
+      .sort((a, b) => b.date.localeCompare(a.date));
+  }, [postedTransactions, selectedAccountId, accountById]);
+
   const [tab, setTab] = useState<PendingTxnStatus>("PENDING");
   const [search, setSearch] = useState("");
-  const filteredTxns = useMemo(
+  const stagingRowsForTab = useMemo<DisplayRow[]>(
+    () => accountTxns.filter((t) => t.status === tab).map((t) => ({ ...t, categoryLabel: t.categoryAccountId ? accountById.get(t.categoryAccountId)?.name : undefined, isLocal: true })),
+    [accountTxns, tab, accountById]
+  );
+  // Posted shows real transactions plus any locally-staged rows the user
+  // has clicked "Post" on -- posting a staged row still needs somewhere
+  // to land, not just vanish from Pending with nothing to show for it.
+  const locallyPostedRows = useMemo<DisplayRow[]>(
     () =>
       accountTxns
-        .filter((t) => t.status === tab)
-        .filter((t) => search.trim() === "" || t.description.toLowerCase().includes(search.trim().toLowerCase())),
-    [accountTxns, tab, search]
+        .filter((t) => t.status === "POSTED")
+        .map((t) => ({ ...t, categoryLabel: t.categoryAccountId ? accountById.get(t.categoryAccountId)?.name : undefined, isLocal: true })),
+    [accountTxns, accountById]
+  );
+  const filteredTxns = useMemo(
+    () =>
+      (tab === "POSTED" ? [...realPostedRows, ...locallyPostedRows] : stagingRowsForTab).filter(
+        (t) => search.trim() === "" || t.description.toLowerCase().includes(search.trim().toLowerCase())
+      ),
+    [tab, realPostedRows, locallyPostedRows, stagingRowsForTab, search]
   );
   const tabCounts = useMemo(
-    () => Object.fromEntries(TABS.map(({ value }) => [value, accountTxns.filter((t) => t.status === value).length])),
-    [accountTxns]
+    () => ({
+      PENDING: accountTxns.filter((t) => t.status === "PENDING").length,
+      POSTED: realPostedRows.length + locallyPostedRows.length,
+      EXCLUDED: accountTxns.filter((t) => t.status === "EXCLUDED").length
+    }),
+    [accountTxns, realPostedRows, locallyPostedRows]
   );
 
   const postedTotal = useMemo(() => selectedAccount?.currentBalance ?? 0, [selectedAccount]);
@@ -91,7 +178,6 @@ export function BankTransactionsPage() {
   const vendorsKey = activeCompany ? companyScopedKey(activeCompany.name, "vendors") : null;
   const { items: vendors } = useLocalCollection<{ id: string; name: string }>(vendorsKey ?? "newgl:phase1:pending:vendors");
   const vendorOptions = useMemo(() => vendors.map((v) => ({ value: v.id, label: v.name })), [vendors]);
-  const accountNameById = useMemo(() => new Map(accounts.map((a) => [a.id, a.name])), [accounts]);
 
   const [showAddForm, setShowAddForm] = useState(false);
   const today = new Date().toISOString().slice(0, 10);
@@ -124,7 +210,7 @@ export function BankTransactionsPage() {
     toast({ variant: "success", title: "Transaction added" });
   }
 
-  function handlePost(txn: PendingBankTxn) {
+  function handlePost(txn: DisplayRow) {
     if (!txn.categoryAccountId) {
       toast({ variant: "error", title: "Select a category first" });
       return;
@@ -133,7 +219,7 @@ export function BankTransactionsPage() {
     toast({ variant: "success", title: "Marked posted", description: "Local-only for now -- this doesn't create a real transaction yet." });
   }
 
-  function handleExclude(txn: PendingBankTxn) {
+  function handleExclude(txn: DisplayRow) {
     update(txn.id, { status: "EXCLUDED" });
   }
 
@@ -162,7 +248,7 @@ export function BankTransactionsPage() {
 
       {/* Account header row */}
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <div className="relative">
+        <div className="relative" ref={accountMenuRef}>
           <button
             type="button"
             onClick={() => setAccountMenuOpen((v) => !v)}
@@ -191,14 +277,7 @@ export function BankTransactionsPage() {
                   className="h-10 w-full rounded-lg border-2 border-[var(--override-focus)] bg-[var(--color-input-background)] pl-9 pr-3 text-sm text-[var(--color-input-text)] outline-none placeholder:text-[var(--color-text-disabled)]"
                 />
               </div>
-              <button
-                type="button"
-                onClick={() => setAccountMenuOpen(false)}
-                className="mb-1 px-1 text-sm font-medium text-[var(--color-link-action)] hover:underline"
-              >
-                Show account cards
-              </button>
-              <div className="max-h-72 overflow-y-auto">
+              <div className="mt-2 max-h-72 overflow-y-auto">
                 {filteredBankAccounts.length === 0 ? (
                   <p className="px-1 py-3 text-sm text-[var(--color-text-disabled)]">No accounts match "{accountSearch}".</p>
                 ) : (
@@ -241,7 +320,11 @@ export function BankTransactionsPage() {
           ) : null}
         </div>
         <div className="flex items-center gap-4">
-          <button type="button" className="flex items-center gap-1.5 text-sm font-medium text-[var(--color-link-action)] hover:underline">
+          <button
+            type="button"
+            disabled
+            className="flex items-center gap-1.5 text-sm font-medium text-[var(--color-text-disabled)] cursor-not-allowed"
+          >
             <MessageSquarePlus className="h-4 w-4" aria-hidden="true" />
             Give feedback
           </button>
@@ -408,7 +491,7 @@ export function BankTransactionsPage() {
                         />
                       </div>
                     ) : (
-                      <span className="text-[var(--color-text-primary)]">{txn.categoryAccountId ? accountNameById.get(txn.categoryAccountId) ?? "--" : "--"}</span>
+                      <span className="text-[var(--color-text-primary)]">{txn.categoryLabel ?? "--"}</span>
                     )}
                   </td>
                   <td className="px-3 py-2.5 text-right">
@@ -421,10 +504,12 @@ export function BankTransactionsPage() {
                           <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
                         </button>
                       </div>
-                    ) : (
+                    ) : txn.isLocal ? (
                       <button type="button" onClick={() => remove(txn.id)} className="text-sm font-medium text-[var(--color-negative)] hover:underline">
                         Delete
                       </button>
+                    ) : (
+                      <span className="text-xs text-[var(--color-icon-secondary)]">Posted</span>
                     )}
                   </td>
                 </tr>
