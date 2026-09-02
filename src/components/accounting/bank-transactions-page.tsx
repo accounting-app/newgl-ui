@@ -222,12 +222,19 @@ export function BankTransactionsPage() {
     const now = new Date();
     const isoDaysAgo = (days: number) => new Date(now.getTime() - days * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
     const samples: Omit<PendingBankTxn, "id" | "accountId" | "createdAt">[] = [
+      // Pending -- the bulk of the sample set, since this is the tab that
+      // actually needs testing (categorize, post, exclude). A mix of
+      // already-categorized and not, so the warning triangle shows too.
       { date: isoDaysAgo(1), description: "Interest Earned", received: 12.44, status: "PENDING" },
-      { date: isoDaysAgo(4), description: "Printer Paper & Ink", spent: 63.15, payee: "Airtek", categoryAccountId: expenseAccount?.id, status: "PENDING" },
-      { date: isoDaysAgo(6), description: "Salary Deposit", received: 3200, status: "PENDING" },
-      { date: isoDaysAgo(9), description: "Customer Refund", spent: 45, status: "PENDING" },
+      { date: isoDaysAgo(2), description: "Printer Paper & Ink", spent: 63.15, payee: "Airtek", categoryAccountId: expenseAccount?.id, status: "PENDING" },
+      { date: isoDaysAgo(3), description: "Salary Deposit", received: 3200, status: "PENDING" },
+      { date: isoDaysAgo(4), description: "Customer Refund", spent: 45, status: "PENDING" },
+      { date: isoDaysAgo(5), description: "Freelance Web Work", received: 900, status: "PENDING" },
+      { date: isoDaysAgo(6), description: "Consulting Invoice Payment", received: 1450, status: "PENDING" },
+      { date: isoDaysAgo(7), description: "Internet & Cable", spent: 120, payee: "Comcast", categoryAccountId: expenseAccount?.id, status: "PENDING" },
+      { date: isoDaysAgo(8), description: "Fees Billed", received: 675.5, status: "PENDING" },
       { date: isoDaysAgo(12), description: "Business Trip Lodging", spent: 410.2, categoryAccountId: expenseAccount?.id, status: "POSTED" },
-      { date: isoDaysAgo(15), description: "Fees Billed", received: 675.5, categoryAccountId: incomeAccount?.id, status: "POSTED" },
+      { date: isoDaysAgo(15), description: "Office Rent", received: 675.5, categoryAccountId: incomeAccount?.id, status: "POSTED" },
       { date: isoDaysAgo(18), description: "Duplicate Bank Fee", spent: 35, status: "EXCLUDED" },
       { date: isoDaysAgo(20), description: "Personal Purchase", spent: 22.5, status: "EXCLUDED" }
     ];
@@ -413,11 +420,9 @@ export function BankTransactionsPage() {
             <Plus className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
             {showAddForm ? "Cancel" : "Add transaction"}
           </Button>
-          {accountTxns.length === 0 ? (
-            <Button variant="secondary" size="sm" onClick={handleLoadSampleData} title="Local-only sample data, for trying out Pending/Posted/Excluded">
-              Load sample transactions
-            </Button>
-          ) : null}
+          <Button variant="secondary" size="sm" onClick={handleLoadSampleData} title="Local-only sample data, for trying out Pending/Posted/Excluded">
+            Load sample transactions
+          </Button>
         </div>
         <div className="flex items-center gap-3">
           <span className="text-sm text-[var(--color-text-primary)]">{filteredTxns.length ? `1-${filteredTxns.length} of ${filteredTxns.length}` : "0 of 0"}</span>
