@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
-import { ChevronDown, ChevronUp, Landmark, MessageSquarePlus, Paperclip, Pencil, Plus, Printer, RefreshCw, Search, Settings, Share, TriangleAlert } from "lucide-react";
+import { ChevronDown, ChevronUp, Landmark, MessageSquarePlus, Pencil, Plus, Printer, RefreshCw, Search, Settings, Share, TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { IconButton } from "@/components/ui/icon-button";
 import { InputField } from "@/components/ui/input-field";
@@ -241,6 +241,16 @@ export function BankTransactionsPage() {
     samples.forEach((sample) => {
       add({ id: localId(), accountId: selectedAccountId, createdAt: new Date().toISOString(), ...sample });
     });
+    // The sample transactions above set `payee` as a plain string (e.g.
+    // "Airtek", "Comcast") -- that alone doesn't create a real Vendor
+    // record, so the From/To dropdown's option list would stay empty.
+    // Seed matching Vendor records too, so there's something to actually
+    // select while trying this screen out.
+    const samplePayees = Array.from(new Set(samples.map((s) => s.payee).filter((p): p is string => Boolean(p))));
+    samplePayees.forEach((name) => {
+      if (vendors.some((v) => v.name.toLowerCase() === name.toLowerCase())) return;
+      addVendor({ id: localId(), name, is1099Contractor: false, status: "ACTIVE", createdAt: new Date().toISOString() });
+    });
     toast({ variant: "success", title: "Sample transactions loaded", description: "Local-only, for trying out Pending/Posted/Excluded -- delete anytime." });
   }
 
@@ -459,57 +469,56 @@ export function BankTransactionsPage() {
         </div>
       ) : null}
 
-      {/* Table */}
-      <div className="overflow-auto rounded-lg border border-[var(--color-divider-tertiary)]">
-        <table className="w-full min-w-[1100px] border-collapse text-sm">
-          <thead className="bg-[var(--color-container-background-accent)]">
+      {/* Table -- styled to match /register's table (tailwind-overrides.css
+          .header-table/.content-table classes): primary-background header
+          with a 2px bottom divider and 12px uppercase/semibold labels,
+          13px body cells with dotted column dividers, row hover using the
+          same --color-table-row-hover token. Kept as its own hand-rolled
+          <table> rather than migrated to ui/table.tsx since /register
+          itself (the style being matched here) predates and doesn't use
+          that shared component either. */}
+      <div className="tw-override overflow-auto rounded-lg border border-[var(--color-divider-tertiary)]">
+        <table className="w-full min-w-[1000px] border-collapse text-sm">
+          <thead className="header-table text-left uppercase tracking-wide">
             <tr>
-              <th className="w-10 px-3 py-2 text-left">
+              <th className="w-10 px-2 pb-[5px] pt-2 text-left align-middle">
                 <input type="checkbox" disabled />
               </th>
-              <th className="px-3 py-2 text-left font-medium text-[var(--color-text-primary)]">
+              <th className="border-l-custom px-2 pb-[5px] pt-2 text-left align-middle">
                 <span className="inline-flex items-center gap-1">Date <ChevronDown className="h-3 w-3" aria-hidden="true" /></span>
               </th>
-              <th className="px-3 py-2 text-left font-medium text-[var(--color-text-primary)]">Bank description</th>
-              <th className="px-3 py-2 text-right font-medium text-[var(--color-text-primary)]">Spent</th>
-              <th className="px-3 py-2 text-right font-medium text-[var(--color-text-primary)]">Received</th>
-              <th className="w-10 px-2 py-2" />
-              <th className="w-10 px-2 py-2" />
-              <th className="px-3 py-2 text-left font-medium text-[var(--color-text-primary)]">From/To</th>
-              <th className="px-3 py-2 text-left font-medium text-[var(--color-text-primary)]">Match/Categorize</th>
-              <th className="px-3 py-2 text-right font-medium text-[var(--color-text-primary)]">Action</th>
+              <th className="border-l-custom px-2 pb-[5px] pt-2 text-left align-middle">Bank description</th>
+              <th className="border-l-custom px-2 pb-[5px] pt-2 text-right align-middle">Spent</th>
+              <th className="border-l-custom px-2 pb-[5px] pt-2 text-right align-middle">Received</th>
+              <th className="border-l-custom px-2 pb-[5px] pt-2 text-left align-middle">From/To</th>
+              <th className="border-l-custom px-2 pb-[5px] pt-2 text-left align-middle">Match/Categorize</th>
+              <th className="border-l-custom px-2 pb-[5px] pt-2 text-right align-middle">Action</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className="content-table">
             {!hydrated ? (
               <tr>
-                <td colSpan={10} className="px-3 py-6 text-center text-sm text-[var(--color-text-primary)]">
+                <td colSpan={8} className="px-3 py-6 text-center text-sm text-[var(--color-text-primary)]">
                   Loading…
                 </td>
               </tr>
             ) : filteredTxns.length === 0 ? (
               <tr>
-                <td colSpan={10} className="px-3 py-6 text-center text-sm text-[var(--color-text-disabled)]">
+                <td colSpan={8} className="px-3 py-6 text-center text-sm text-[var(--color-text-disabled)]">
                   No {tab.toLowerCase()} transactions.
                 </td>
               </tr>
             ) : (
               filteredTxns.map((txn) => (
-                <tr key={txn.id} className="border-t border-[var(--color-container-background-secondary)] hover:bg-[var(--color-table-row-hover)]">
-                  <td className="px-3 py-2.5">
+                <tr key={txn.id} className="border-t border-[var(--color-divider-tertiary)] hover:bg-[var(--color-table-row-hover)]">
+                  <td className="p-2 align-top">
                     <input type="checkbox" disabled />
                   </td>
-                  <td className="px-3 py-2.5 text-[var(--color-text-primary)]">{txn.date}</td>
-                  <td className="px-3 py-2.5 text-[var(--color-text-primary)]">{txn.description}</td>
-                  <td className="px-3 py-2.5 text-right text-[var(--color-text-global)]">{txn.spent ? formatMoney(txn.spent) : ""}</td>
-                  <td className="px-3 py-2.5 text-right text-[var(--color-text-global)]">{txn.received ? formatMoney(txn.received) : ""}</td>
-                  <td className="px-2 py-2.5 text-center">
-                    <Paperclip className="mx-auto h-3.5 w-3.5 text-[var(--color-icon-muted)]" aria-hidden="true" />
-                  </td>
-                  <td className="px-2 py-2.5 text-center">
-                    <MessageSquarePlus className="mx-auto h-3.5 w-3.5 text-[var(--color-icon-muted)]" aria-hidden="true" />
-                  </td>
-                  <td className="w-44 px-3 py-2.5">
+                  <td className="border-l border-l-dotted border-l-[var(--color-divider-tertiary)] p-2 align-top text-[13px] text-[var(--color-text-primary)]">{txn.date}</td>
+                  <td className="border-l border-l-dotted border-l-[var(--color-divider-tertiary)] p-2 align-top text-[13px] text-[var(--color-text-primary)]">{txn.description}</td>
+                  <td className="border-l border-l-dotted border-l-[var(--color-divider-tertiary)] p-2 align-top text-right text-[13px] text-[var(--color-text-global)]">{txn.spent ? formatMoney(txn.spent) : ""}</td>
+                  <td className="border-l border-l-dotted border-l-[var(--color-divider-tertiary)] p-2 align-top text-right text-[13px] text-[var(--color-text-global)]">{txn.received ? formatMoney(txn.received) : ""}</td>
+                  <td className="border-l border-l-dotted border-l-[var(--color-divider-tertiary)] w-44 p-2 align-top">
                     {tab === "PENDING" ? (
                       <Select
                         value={txn.payee ?? ""}
@@ -528,10 +537,10 @@ export function BankTransactionsPage() {
                         optionSize="sm"
                       />
                     ) : (
-                      <span className="text-[var(--color-text-primary)]">{txn.payee || "--"}</span>
+                      <span className="text-[13px] text-[var(--color-text-primary)]">{txn.payee || "--"}</span>
                     )}
                   </td>
-                  <td className="w-52 px-3 py-2.5">
+                  <td className="border-l border-l-dotted border-l-[var(--color-divider-tertiary)] w-52 p-2 align-top">
                     {tab === "PENDING" ? (
                       <div className="flex items-center gap-1.5">
                         {!txn.categoryAccountId ? <TriangleAlert className="h-3.5 w-3.5 shrink-0 text-[var(--color-warning-text)]" aria-hidden="true" /> : null}
@@ -545,10 +554,10 @@ export function BankTransactionsPage() {
                         />
                       </div>
                     ) : (
-                      <span className="text-[var(--color-text-primary)]">{txn.categoryLabel ?? "--"}</span>
+                      <span className="text-[13px] text-[var(--color-text-primary)]">{txn.categoryLabel ?? "--"}</span>
                     )}
                   </td>
-                  <td className="px-3 py-2.5 text-right">
+                  <td className="border-l border-l-dotted border-l-[var(--color-divider-tertiary)] p-2 align-top text-right">
                     {tab === "PENDING" ? (
                       <PendingRowActions
                         txn={txn}
