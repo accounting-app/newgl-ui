@@ -31,25 +31,37 @@ export function useLocalCollection<T extends { id: string }>(storageKey: string)
     }
   }, [storageKey]);
 
-  const persist = useCallback(
-    (next: T[]) => {
-      setItems(next);
-      try {
-        window.localStorage.setItem(storageKey, JSON.stringify(next));
-      } catch {
-        // Best-effort only -- private browsing, storage full, etc. This is
-        // a Phase-1 stand-in, not the real persistence layer.
-      }
-    },
-    [storageKey]
-  );
+  // Persists to localStorage as its own effect reacting to `items`, not as
+  // a side effect inside the state updater below -- an updater function
+  // must stay pure (React can invoke it more than once for the same
+  // update), so writing storage from inside one is the same anti-pattern
+  // flagged elsewhere in this codebase's own react-doctor pass. Gated on
+  // `hydrated` so the initial mount (items still []) never overwrites
+  // whatever was already in storage before hydration finishes reading it.
+  useEffect(() => {
+    if (!hydrated) return;
+    try {
+      window.localStorage.setItem(storageKey, JSON.stringify(items));
+    } catch {
+      // Best-effort only -- private browsing, storage full, etc. This is a
+      // Phase-1 stand-in, not the real persistence layer.
+    }
+  }, [items, storageKey, hydrated]);
 
-  const add = useCallback((item: T) => persist([...items, item]), [items, persist]);
+  // Functional state updates, not `setItems([...items, item])` computed
+  // from the `items` closure -- calling add/update/remove more than once
+  // in the same tick (a seed loop, several quick clicks before a
+  // re-render) used to have every call compute its result from the SAME
+  // stale snapshot, so only the last call's result actually survived.
+  // React applies a functional updater against whatever the previous call
+  // in the same batch just produced, so this is correct under
+  // looped/rapid calls too.
+  const add = useCallback((item: T) => setItems((current) => [...current, item]), []);
   const update = useCallback(
-    (id: string, patch: Partial<T>) => persist(items.map((item) => (item.id === id ? { ...item, ...patch } : item))),
-    [items, persist]
+    (id: string, patch: Partial<T>) => setItems((current) => current.map((item) => (item.id === id ? { ...item, ...patch } : item))),
+    []
   );
-  const remove = useCallback((id: string) => persist(items.filter((item) => item.id !== id)), [items, persist]);
+  const remove = useCallback((id: string) => setItems((current) => current.filter((item) => item.id !== id)), []);
 
   return { items, hydrated, add, update, remove };
 }

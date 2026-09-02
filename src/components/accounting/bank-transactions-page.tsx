@@ -420,9 +420,11 @@ export function BankTransactionsPage() {
             <Plus className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
             {showAddForm ? "Cancel" : "Add transaction"}
           </Button>
-          <Button variant="secondary" size="sm" onClick={handleLoadSampleData} title="Local-only sample data, for trying out Pending/Posted/Excluded">
-            Load sample transactions
-          </Button>
+          {process.env.NODE_ENV !== "production" ? (
+            <Button variant="secondary" size="sm" onClick={handleLoadSampleData} title="Dev-only: local sample data for trying out Pending/Posted/Excluded">
+              Load sample transactions
+            </Button>
+          ) : null}
         </div>
         <div className="flex items-center gap-3">
           <span className="text-sm text-[var(--color-text-primary)]">{filteredTxns.length ? `1-${filteredTxns.length} of ${filteredTxns.length}` : "0 of 0"}</span>
