@@ -57,7 +57,7 @@ export function AppsFlyout({ onNavigate }: AppsFlyoutProps) {
                     const ItemIcon = item.icon;
                     return (
                       <Link
-                        key={item.href}
+                        key={`${item.href}-${item.label}`}
                         href={item.href}
                         onClick={onNavigate}
                         role="menuitem"
