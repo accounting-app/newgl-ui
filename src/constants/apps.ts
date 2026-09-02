@@ -1,4 +1,18 @@
-import { Building2, CreditCard, Database, Landmark, Sparkles, Users } from "lucide-react";
+import {
+  Banknote,
+  Building2,
+  Car,
+  CreditCard,
+  Database,
+  FileStack,
+  FileText,
+  Landmark,
+  LayoutGrid,
+  Receipt,
+  ScrollText,
+  Sparkles,
+  Users
+} from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 export type AppNavItem = {
@@ -25,8 +39,33 @@ export const ALL_APPS_CATEGORIES: AppCategory[] = [
     label: "Accounting",
     icon: Landmark,
     items: [
+      // Chart of Accounts stays first -- it's items[0], the target when the
+      // category header itself is clicked (not hovered into), and Register
+      // already has its own top-level rail icon, so a Register-routing item
+      // shouldn't be the category's default destination.
       { label: "Chart of Accounts", href: "/all-apps/chart-of-accounts", icon: Building2 },
-      { label: "Bank Rules", href: "/all-apps/bank-rules", icon: Landmark }
+      { label: "Receipts", href: "/all-apps/receipts", icon: Receipt },
+      { label: "Bank Rules", href: "/all-apps/bank-rules", icon: Landmark },
+      // Bank transactions and Reconcile route straight to the existing
+      // Register (its own reconcile-status cell already handles cycling
+      // uncleared/cleared/reconciled) rather than duplicating that work --
+      // see newgl-specs/plans/qbo-free-features/QBO_FREE_FEATURES_PLAN.md.
+      { label: "Bank Transactions", href: "/register", icon: Banknote },
+      { label: "Reconcile", href: "/register", icon: ScrollText }
+    ]
+  },
+  {
+    id: "expenses-bills",
+    label: "Expenses & Bills",
+    icon: FileText,
+    items: [
+      { label: "Overview", href: "/all-apps/expenses-bills", icon: LayoutGrid },
+      { label: "Expense Transactions", href: "/all-apps/expenses-bills/expense-transactions", icon: Receipt },
+      { label: "Vendors", href: "/all-apps/expenses-bills/vendors", icon: Users },
+      { label: "Bills", href: "/all-apps/expenses-bills/bills", icon: FileStack },
+      { label: "Mileage", href: "/all-apps/expenses-bills/mileage", icon: Car },
+      { label: "Contractors", href: "/all-apps/expenses-bills/contractors", icon: Users },
+      { label: "1099s", href: "/all-apps/expenses-bills/1099s", icon: FileText }
     ]
   }
 ];
