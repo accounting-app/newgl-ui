@@ -39,14 +39,13 @@ export const ALL_APPS_CATEGORIES: AppCategory[] = [
     label: "Accounting",
     icon: Landmark,
     items: [
-      // Chart of Accounts stays first -- it's items[0], the target when the
-      // category header itself is clicked (not hovered into), and Register
-      // already has its own top-level rail icon, so a Register-routing item
-      // shouldn't be the category's default destination.
-      { label: "Chart of Accounts", href: "/all-apps/chart-of-accounts", icon: Building2 },
+      // Order matches QBO's own Accounting section. Bank Transactions is
+      // items[0] -- the target when the category header itself is clicked
+      // (not hovered into) -- since it's the most-used day-to-day screen.
       { label: "Bank Transactions", href: "/all-apps/bank-transactions", icon: Banknote },
       { label: "Receipts", href: "/all-apps/receipts", icon: Receipt },
       { label: "Reconcile", href: "/all-apps/reconcile", icon: ScrollText },
+      { label: "Chart of Accounts", href: "/all-apps/chart-of-accounts", icon: Building2 },
       { label: "Bank Rules", href: "/all-apps/bank-rules", icon: Landmark }
     ]
   },

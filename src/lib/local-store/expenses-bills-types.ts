@@ -47,8 +47,10 @@ export type ReceiptRecord = {
   uploadedAt: string;
   linkedTransactionId?: string;
   vendorId?: string;
+  paymentAccountId?: string;
   categoryAccountId?: string;
   amount?: number;
+  taxAmount?: number;
   note?: string;
 };
 
