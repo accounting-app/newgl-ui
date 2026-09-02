@@ -44,14 +44,10 @@ export const ALL_APPS_CATEGORIES: AppCategory[] = [
       // already has its own top-level rail icon, so a Register-routing item
       // shouldn't be the category's default destination.
       { label: "Chart of Accounts", href: "/all-apps/chart-of-accounts", icon: Building2 },
+      { label: "Bank Transactions", href: "/all-apps/bank-transactions", icon: Banknote },
       { label: "Receipts", href: "/all-apps/receipts", icon: Receipt },
-      { label: "Bank Rules", href: "/all-apps/bank-rules", icon: Landmark },
-      // Bank transactions and Reconcile route straight to the existing
-      // Register (its own reconcile-status cell already handles cycling
-      // uncleared/cleared/reconciled) rather than duplicating that work --
-      // see newgl-specs/plans/qbo-free-features/QBO_FREE_FEATURES_PLAN.md.
-      { label: "Bank Transactions", href: "/register", icon: Banknote },
-      { label: "Reconcile", href: "/register", icon: ScrollText }
+      { label: "Reconcile", href: "/all-apps/reconcile", icon: ScrollText },
+      { label: "Bank Rules", href: "/all-apps/bank-rules", icon: Landmark }
     ]
   },
   {

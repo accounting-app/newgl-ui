@@ -48,10 +48,12 @@ export function ChartOfAccountsPage() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
+  const [showAddForm, setShowAddForm] = useState(false);
   const [newName, setNewName] = useState("");
   const [newCategory, setNewCategory] = useState<Account["category"]>("BANK");
   const [newOpeningBalance, setNewOpeningBalance] = useState("");
   const [creating, setCreating] = useState(false);
+  const [search, setSearch] = useState("");
 
   const [busyAccountId, setBusyAccountId] = useState<string | null>(null);
   const [collapsedNames, setCollapsedNames] = useState<Set<string>>(new Set());
@@ -87,7 +89,13 @@ export function ChartOfAccountsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const activeAccounts = useMemo(() => accounts.filter((a) => a.status !== "ARCHIVED"), [accounts]);
+  const activeAccounts = useMemo(
+    () =>
+      accounts.filter(
+        (a) => a.status !== "ARCHIVED" && (search.trim() === "" || a.name.toLowerCase().includes(search.trim().toLowerCase()))
+      ),
+    [accounts, search]
+  );
 
   // Real hierarchy tree (colon-segment parents roll up their children's
   // balances), not a flat per-category list -- reuses the same helper the
@@ -122,6 +130,7 @@ export function ChartOfAccountsPage() {
       });
       setNewName("");
       setNewOpeningBalance("");
+      setShowAddForm(false);
       await loadAccounts();
       toast({ variant: "success", title: "Account created", description: `"${newName.trim()}" was added to the chart of accounts.` });
     } catch (err) {
@@ -202,6 +211,12 @@ export function ChartOfAccountsPage() {
 
   return (
     <>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-xl font-semibold text-[var(--color-text-global)]">Chart of Accounts</h1>
+        <Button onClick={() => setShowAddForm((v) => !v)}>{showAddForm ? "Cancel" : "New account"}</Button>
+      </div>
+
+      {showAddForm ? (
       <Card title="Add an account" description="Give it a friendly name — it's grouped under the category you pick." className="mb-6">
         <form onSubmit={handleCreate} className="flex flex-wrap items-end gap-3">
           <div className="flex-1 min-w-[200px]">
@@ -263,8 +278,12 @@ export function ChartOfAccountsPage() {
           </form>
         ) : null}
       </Card>
+      ) : null}
 
-      <Card title="Chart of Accounts" description="Every active account, grouped by type. Click a balance to open its register.">
+      <Card description="Click a balance to open its register.">
+        <div className="mb-4 w-64">
+          <InputField placeholder="Filter by name" value={search} onChange={(e) => setSearch(e.target.value)} />
+        </div>
         {loading ? (
           <p className="text-sm text-[var(--color-text-primary)]">Loading…</p>
         ) : loadError ? (

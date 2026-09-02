@@ -7,6 +7,7 @@
 export type Vendor = {
   id: string;
   name: string;
+  companyName?: string;
   email?: string;
   phone?: string;
   defaultExpenseAccountId?: string;
@@ -45,6 +46,9 @@ export type ReceiptRecord = {
   fileSizeBytes: number;
   uploadedAt: string;
   linkedTransactionId?: string;
+  vendorId?: string;
+  categoryAccountId?: string;
+  amount?: number;
   note?: string;
 };
 

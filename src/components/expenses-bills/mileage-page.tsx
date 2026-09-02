@@ -62,6 +62,7 @@ export function MileagePage() {
 
   const totalDeduction = useMemo(() => entries.reduce((sum, e) => sum + e.miles * e.ratePerMile, 0), [entries]);
   const totalMiles = useMemo(() => entries.reduce((sum, e) => sum + e.miles, 0), [entries]);
+  const [showForm, setShowForm] = useState(entries.length === 0);
 
   if (!activeCompany) {
     return <p className="text-sm text-[var(--color-text-primary)]">Loading…</p>;
@@ -69,8 +70,25 @@ export function MileagePage() {
 
   return (
     <>
-      <Card title="Log a trip" description="Not backed by a server yet -- saved to this browser only." className="mb-6">
-        <form onSubmit={handleSubmit} className="flex flex-wrap items-end gap-3">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-xl font-semibold text-[var(--color-text-global)]">Mileage</h1>
+        <Button onClick={() => setShowForm((v) => !v)}>{showForm ? "Cancel" : "Add a trip"}</Button>
+      </div>
+
+      {entries.length === 0 && !showForm ? (
+        <Card className="mb-4">
+          <p className="text-lg font-semibold text-[var(--color-text-global)]">
+            Track business mileage at the standard {formatMoney(DEFAULT_MILEAGE_RATE)}/mile rate
+          </p>
+          <p className="mt-1 text-sm text-[var(--color-text-primary)]">
+            No automatic GPS tracking yet -- log trips manually below and we'll total up the deduction.
+          </p>
+        </Card>
+      ) : null}
+
+      {showForm ? (
+        <Card title="Log a trip" description="Not backed by a server yet -- saved to this browser only." className="mb-6">
+          <form onSubmit={handleSubmit} className="flex flex-wrap items-end gap-3">
           <div className="w-40">
             <InputField label="Date" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
           </div>
@@ -89,8 +107,9 @@ export function MileagePage() {
           <Button type="submit" disabled={miles.trim() === "" || rate.trim() === ""}>
             Log trip
           </Button>
-        </form>
-      </Card>
+          </form>
+        </Card>
+      ) : null}
 
       <Card
         title="Mileage log"

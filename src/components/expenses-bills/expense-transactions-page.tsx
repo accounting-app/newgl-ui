@@ -65,8 +65,17 @@ export function ExpenseTransactionsPage() {
     else addTagRow({ id: transactionId, vendorId });
   }
 
+  const [dateRange, setDateRange] = useState<"12m" | "ytd" | "all">("12m");
+  const rangeStart = useMemo(() => {
+    const now = new Date();
+    if (dateRange === "12m") return new Date(now.getFullYear(), now.getMonth() - 12, now.getDate()).toISOString().slice(0, 10);
+    if (dateRange === "ytd") return `${now.getFullYear()}-01-01`;
+    return "0000-01-01";
+  }, [dateRange]);
+
   const expenseTransactions = useMemo(() => {
     return transactions
+      .filter((txn) => txn.transactionDate >= rangeStart)
       .map((txn) => {
         const expenseAmount = txn.postings.reduce((sum, posting) => {
           const account = accountById.get(posting.accountId);
@@ -77,7 +86,7 @@ export function ExpenseTransactionsPage() {
       })
       .filter(({ expenseAmount }) => expenseAmount > 0)
       .sort((a, b) => b.txn.transactionDate.localeCompare(a.txn.transactionDate));
-  }, [transactions, accountById]);
+  }, [transactions, accountById, rangeStart]);
 
   const vendorOptions = useMemo(() => [{ value: "", label: "None" }, ...vendors.map((v) => ({ value: v.id, label: v.name }))], [vendors]);
 
@@ -86,17 +95,38 @@ export function ExpenseTransactionsPage() {
   }
 
   return (
-    <Card title="Expense transactions" description="Posted transactions with an expense-account posting. Tagging a vendor is local-only for now.">
+    <>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-xl font-semibold text-[var(--color-text-global)]">Expenses</h1>
+        <div className="w-40">
+          <Select
+            value={dateRange}
+            onChange={(v) => setDateRange(v as "12m" | "ytd" | "all")}
+            options={[
+              { value: "12m", label: "Last 12 months" },
+              { value: "ytd", label: "This year" },
+              { value: "all", label: "All time" }
+            ]}
+            placeholder="Dates"
+            allowCustomValue={false}
+            optionSize="sm"
+          />
+        </div>
+      </div>
+      <Card>
       {loading ? (
         <p className="text-sm text-[var(--color-text-primary)]">Loading…</p>
       ) : expenseTransactions.length === 0 ? (
-        <p className="text-sm text-[var(--color-text-disabled)]">
-          No expense transactions yet. Record one from the{" "}
-          <Link href="/register" className="text-[var(--color-link-action)] hover:underline">
-            Register
-          </Link>
-          .
-        </p>
+        <div className="py-8 text-center">
+          <p className="text-base font-semibold text-[var(--color-text-global)]">No expenses found</p>
+          <p className="mt-1 text-sm text-[var(--color-text-disabled)]">
+            Record one from the{" "}
+            <Link href="/register" className="text-[var(--color-link-action)] hover:underline">
+              Register
+            </Link>
+            .
+          </p>
+        </div>
       ) : (
         <Table.Root>
           <Table.Head>
@@ -132,6 +162,7 @@ export function ExpenseTransactionsPage() {
           </Table.Body>
         </Table.Root>
       )}
-    </Card>
+      </Card>
+    </>
   );
 }
