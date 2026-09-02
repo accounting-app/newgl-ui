@@ -12,7 +12,9 @@ import { useToast } from "@/components/ui/toast/toast-context";
 import { useCompany } from "@/lib/company/company-provider";
 import { companyScopedKey, localId, useLocalCollection } from "@/lib/local-store/use-local-collection";
 import type { PendingBankTxn, PendingTxnStatus } from "@/lib/local-store/accounting-types";
+import type { Vendor } from "@/lib/local-store/expenses-bills-types";
 import { getServiceContainer } from "@/lib/services/service-container-v2";
+import { ACCOUNT_CATEGORY_LABELS } from "@/constants/ui";
 import { DEBIT_NORMAL_CATEGORIES } from "@/modules/accounting/domain/accounting-reports";
 import { isRegisterAccountCategory } from "@/modules/accounting/presentation/transaction-type-policy";
 import type { Account, Transaction } from "@/modules/accounting/domain/models";
@@ -172,18 +174,21 @@ export function BankTransactionsPage() {
   const postedTotal = useMemo(() => selectedAccount?.currentBalance ?? 0, [selectedAccount]);
 
   const expenseAccountOptions = useMemo(
-    () => accounts.filter((a) => a.category === "EXPENSE" || a.category === "OTHER_EXPENSE" || a.category === "INCOME").map((a) => ({ value: a.id, label: a.name })),
+    () =>
+      accounts
+        .filter((a) => a.category === "EXPENSE" || a.category === "OTHER_EXPENSE" || a.category === "INCOME" || a.category === "OTHER_INCOME")
+        .map((a) => ({ value: a.id, label: a.name, rightLabel: ACCOUNT_CATEGORY_LABELS[a.category] })),
     [accounts]
   );
   const vendorsKey = activeCompany ? companyScopedKey(activeCompany.name, "vendors") : null;
-  const { items: vendors } = useLocalCollection<{ id: string; name: string }>(vendorsKey ?? "newgl:phase1:pending:vendors");
-  const vendorOptions = useMemo(() => vendors.map((v) => ({ value: v.id, label: v.name })), [vendors]);
+  const { items: vendors, add: addVendor } = useLocalCollection<Vendor>(vendorsKey ?? "newgl:phase1:pending:vendors");
+  const vendorOptions = useMemo(() => vendors.map((v) => ({ value: v.name, label: v.name, rightLabel: v.is1099Contractor ? "Vendor" : "Contact" })), [vendors]);
 
   const [showAddForm, setShowAddForm] = useState(false);
   const today = new Date().toISOString().slice(0, 10);
   const [date, setDate] = useState(today);
   const [description, setDescription] = useState("");
-  const [payeeId, setPayeeId] = useState("");
+  const [payeeName, setPayeeName] = useState("");
   const [direction, setDirection] = useState<"spent" | "received">("spent");
   const [amount, setAmount] = useState("");
   const addFormRef = useRef<HTMLDivElement>(null);
@@ -197,17 +202,39 @@ export function BankTransactionsPage() {
       accountId: selectedAccountId,
       date,
       description: description.trim(),
-      payee: vendorOptions.find((v) => v.value === payeeId)?.label,
+      payee: payeeName.trim() || undefined,
       spent: direction === "spent" ? parsed : undefined,
       received: direction === "received" ? parsed : undefined,
       status: "PENDING",
       createdAt: new Date().toISOString()
     });
     setDescription("");
-    setPayeeId("");
+    setPayeeName("");
     setAmount("");
     setShowAddForm(false);
     toast({ variant: "success", title: "Transaction added" });
+  }
+
+  function handleLoadSampleData() {
+    if (!selectedAccountId) return;
+    const expenseAccount = accounts.find((a) => a.category === "EXPENSE");
+    const incomeAccount = accounts.find((a) => a.category === "INCOME");
+    const now = new Date();
+    const isoDaysAgo = (days: number) => new Date(now.getTime() - days * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const samples: Omit<PendingBankTxn, "id" | "accountId" | "createdAt">[] = [
+      { date: isoDaysAgo(1), description: "Interest Earned", received: 12.44, status: "PENDING" },
+      { date: isoDaysAgo(4), description: "Printer Paper & Ink", spent: 63.15, payee: "Airtek", categoryAccountId: expenseAccount?.id, status: "PENDING" },
+      { date: isoDaysAgo(6), description: "Salary Deposit", received: 3200, status: "PENDING" },
+      { date: isoDaysAgo(9), description: "Customer Refund", spent: 45, status: "PENDING" },
+      { date: isoDaysAgo(12), description: "Business Trip Lodging", spent: 410.2, categoryAccountId: expenseAccount?.id, status: "POSTED" },
+      { date: isoDaysAgo(15), description: "Fees Billed", received: 675.5, categoryAccountId: incomeAccount?.id, status: "POSTED" },
+      { date: isoDaysAgo(18), description: "Duplicate Bank Fee", spent: 35, status: "EXCLUDED" },
+      { date: isoDaysAgo(20), description: "Personal Purchase", spent: 22.5, status: "EXCLUDED" }
+    ];
+    samples.forEach((sample) => {
+      add({ id: localId(), accountId: selectedAccountId, createdAt: new Date().toISOString(), ...sample });
+    });
+    toast({ variant: "success", title: "Sample transactions loaded", description: "Local-only, for trying out Pending/Posted/Excluded -- delete anytime." });
   }
 
   function handlePost(txn: DisplayRow) {
@@ -386,6 +413,11 @@ export function BankTransactionsPage() {
             <Plus className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
             {showAddForm ? "Cancel" : "Add transaction"}
           </Button>
+          {accountTxns.length === 0 ? (
+            <Button variant="secondary" size="sm" onClick={handleLoadSampleData} title="Local-only sample data, for trying out Pending/Posted/Excluded">
+              Load sample transactions
+            </Button>
+          ) : null}
         </div>
         <div className="flex items-center gap-3">
           <span className="text-sm text-[var(--color-text-primary)]">{filteredTxns.length ? `1-${filteredTxns.length} of ${filteredTxns.length}` : "0 of 0"}</span>
@@ -405,7 +437,7 @@ export function BankTransactionsPage() {
               <InputField label="Description" placeholder="e.g. Printer Paper & Ink" value={description} onChange={(e) => setDescription(e.target.value)} />
             </div>
             <div className="w-40">
-              <Select label="From/To" value={payeeId} onChange={setPayeeId} options={vendorOptions} placeholder="Select vendor" allowCustomValue={false} />
+              <Select label="From/To" value={payeeName} onChange={setPayeeName} options={vendorOptions} placeholder="Select vendor" allowCustomValue />
             </div>
             <div className="w-32">
               <Select value={direction} onChange={(v) => setDirection(v as "spent" | "received")} options={[{ value: "spent", label: "Spent" }, { value: "received", label: "Received" }]} placeholder="Type" allowCustomValue={false} />
@@ -470,9 +502,24 @@ export function BankTransactionsPage() {
                   <td className="px-2 py-2.5 text-center">
                     <MessageSquarePlus className="mx-auto h-3.5 w-3.5 text-[var(--color-icon-muted)]" aria-hidden="true" />
                   </td>
-                  <td className="w-40 px-3 py-2.5">
+                  <td className="w-44 px-3 py-2.5">
                     {tab === "PENDING" ? (
-                      <span className="text-[var(--color-text-disabled)]">{txn.payee || "Select vendor"}</span>
+                      <Select
+                        value={txn.payee ?? ""}
+                        onChange={(value) => update(txn.id, { payee: value || undefined })}
+                        options={vendorOptions}
+                        placeholder="Select vendor"
+                        allowCustomValue
+                        onAddNew={() => {
+                          const name = txn.payee?.trim();
+                          if (!name) return;
+                          if (vendors.some((v) => v.name.toLowerCase() === name.toLowerCase())) return;
+                          addVendor({ id: localId(), name, is1099Contractor: false, status: "ACTIVE", createdAt: new Date().toISOString() });
+                          toast({ variant: "success", title: `"${name}" added to Vendors` });
+                        }}
+                        addNewLabel="+ Add new"
+                        optionSize="sm"
+                      />
                     ) : (
                       <span className="text-[var(--color-text-primary)]">{txn.payee || "--"}</span>
                     )}
@@ -496,14 +543,11 @@ export function BankTransactionsPage() {
                   </td>
                   <td className="px-3 py-2.5 text-right">
                     {tab === "PENDING" ? (
-                      <div className="flex items-center justify-end gap-1">
-                        <button type="button" onClick={() => handlePost(txn)} className="text-sm font-medium text-[var(--color-link-action)] hover:underline">
-                          Post
-                        </button>
-                        <button type="button" onClick={() => handleExclude(txn)} aria-label="More actions" className="text-[var(--color-icon-secondary)]">
-                          <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
-                        </button>
-                      </div>
+                      <PendingRowActions
+                        txn={txn}
+                        onPost={() => handlePost(txn)}
+                        onExclude={() => handleExclude(txn)}
+                      />
                     ) : txn.isLocal ? (
                       <button type="button" onClick={() => remove(txn.id)} className="text-sm font-medium text-[var(--color-negative)] hover:underline">
                         Delete
@@ -519,5 +563,70 @@ export function BankTransactionsPage() {
         </table>
       </div>
     </>
+  );
+}
+
+// "Post" as a text link plus a chevron opening Split/Create rule/Exclude,
+// matching the reference. Split has no real implementation yet (this app
+// has no multi-category-per-posting UI) -- shown disabled rather than
+// silently doing nothing. Create rule links to the real Bank Rules
+// feature; Exclude is real (flips this row's local status).
+function PendingRowActions({ onPost, onExclude }: { txn: DisplayRow; onPost: () => void; onExclude: () => void }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    function handleClickOutside(event: MouseEvent) {
+      if (ref.current && !ref.current.contains(event.target as Node)) setOpen(false);
+    }
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") setOpen(false);
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [open]);
+
+  return (
+    <div className="relative inline-flex items-center justify-end gap-1" ref={ref}>
+      <button type="button" onClick={onPost} className="text-sm font-medium text-[var(--color-link-action)] hover:underline">
+        Post
+      </button>
+      <button type="button" onClick={() => setOpen((v) => !v)} aria-label="More actions" className="text-[var(--color-icon-secondary)]">
+        <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
+      </button>
+      {open ? (
+        <div className="absolute right-0 top-full z-10 mt-1 w-40 rounded-lg border border-[var(--color-divider-tertiary)] bg-[var(--color-container-background-primary)] py-1 text-left shadow-lg">
+          <button
+            type="button"
+            disabled
+            title="Splitting one transaction across multiple categories isn't available yet"
+            className="block w-full cursor-not-allowed px-3 py-1.5 text-left text-sm text-[var(--color-text-disabled)]"
+          >
+            Split
+          </button>
+          <Link
+            href="/all-apps/bank-rules"
+            onClick={() => setOpen(false)}
+            className="block w-full px-3 py-1.5 text-left text-sm text-[var(--color-text-global)] hover:bg-[var(--color-action-passive-subtle-hover)]"
+          >
+            Create rule
+          </Link>
+          <button
+            type="button"
+            onClick={() => {
+              onExclude();
+              setOpen(false);
+            }}
+            className="block w-full px-3 py-1.5 text-left text-sm text-[var(--color-text-global)] hover:bg-[var(--color-action-passive-subtle-hover)]"
+          >
+            Exclude
+          </button>
+        </div>
+      ) : null}
+    </div>
   );
 }
