@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ChevronDown, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Filter as FilterIcon, HelpCircle, MessageSquarePlus, SlidersHorizontal, Smartphone, Sparkles, Upload } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Filter as FilterIcon, HelpCircle, MessageSquarePlus, SlidersHorizontal, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { IconButton } from "@/components/ui/icon-button";
 import { NumberField } from "@/components/ui/number-field";
@@ -195,15 +195,11 @@ export function ReceiptsPage() {
         </div>
       </div>
 
-      {/* Email-in banner */}
-      <div className="mb-4 flex items-center gap-2 rounded-lg border border-[var(--color-info-border)] bg-[var(--color-container-background-accent)] px-4 py-3 text-sm text-[var(--color-text-global)]">
-        <Sparkles className="h-4 w-4 shrink-0 text-[var(--color-ui-primary)]" aria-hidden="true" />
-        <span>
-          Anyone can autofill multiple receipts or create bills and expenses by sending files to:{" "}
-          <span className="font-medium">{receiptsInboxAddress(activeCompany.name)}</span>
-        </span>
-        <Smartphone className="ml-1 h-4 w-4 shrink-0 text-[var(--color-icon-secondary)]" aria-hidden="true" />
-      </div>
+      {/* Email-in banner ("Anyone can autofill multiple receipts... by
+          sending files to: <address>") -- disabled for now, since there's
+          no real inbound-email pipeline behind it yet (Phase 1.5+ backend
+          feature). Re-enable once that exists; see receiptsInboxAddress
+          above for the address format this used. */}
 
       {/* Drop zone */}
       <div
