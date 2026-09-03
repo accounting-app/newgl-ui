@@ -17,7 +17,10 @@ import { createClient } from "@/lib/supabase/client";
 const NAV_PILLS: AppNavItem[] = [
   { label: "Register", href: "/register", icon: Wallet },
   { label: "Reports", href: "/reports", icon: BookOpen },
-  ...ALL_APPS_CATEGORIES.flatMap((category) => category.items),
+  // Locked items/categories (QBO features we don't have -- see apps.ts)
+  // are excluded here: these pills are plain links, with no room for the
+  // grayed-out/lock-badge treatment the All Apps menu gives them.
+  ...ALL_APPS_CATEGORIES.filter((category) => !category.locked).flatMap((category) => category.items.filter((item) => !item.locked)),
   ...SETTINGS_GROUPS.flatMap((group) => group.items)
 ];
 

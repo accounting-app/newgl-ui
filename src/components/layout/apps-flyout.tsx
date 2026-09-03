@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, Gem } from "lucide-react";
 import { ALL_APPS_CATEGORIES } from "@/constants/apps";
 
 type AppsFlyoutProps = {
@@ -11,11 +11,11 @@ type AppsFlyoutProps = {
 
 // Two-level hover flyout modeled directly after QuickBooks Online's "All
 // apps" menu (screenshots in UI_DESIGN_SYSTEM_PLAN.md Part 3): a category
-// list, each expandable to its own sub-items panel to the right. Every
-// category here is a real, working section -- no locked/"coming soon"
-// placeholders, per the confirmed decision. Register and Reports are
-// intentionally not in ALL_APPS_CATEGORIES -- both already have their own
-// top-level rail icon.
+// list, each expandable to its own sub-items panel to the right. Sourced
+// from the same ALL_APPS_CATEGORIES as the /all-apps accordion page, so a
+// category/item marked `locked` (a QBO feature we haven't built, or that's
+// paid-tier there) renders the same grayed-out, non-navigating treatment
+// in both places instead of drifting apart.
 export function AppsFlyout({ onNavigate }: AppsFlyoutProps) {
   const [hoveredId, setHoveredId] = useState<string | null>(ALL_APPS_CATEGORIES[0]?.id ?? null);
 
@@ -29,6 +29,25 @@ export function AppsFlyout({ onNavigate }: AppsFlyoutProps) {
           const Icon = category.icon;
           const hasItems = category.items.length > 0;
           const isHovered = hoveredId === category.id;
+
+          if (category.locked) {
+            return (
+              <div
+                key={category.id}
+                title="Not available on this plan"
+                role="menuitem"
+                aria-disabled="true"
+                className="flex cursor-not-allowed items-center justify-between gap-3 px-4 py-2.5 text-sm text-[var(--color-text-disabled)]"
+              >
+                <span className="flex items-center gap-3">
+                  <Icon className="h-4 w-4" aria-hidden="true" />
+                  {category.label}
+                </span>
+                <Gem className="h-4 w-4" aria-hidden="true" />
+              </div>
+            );
+          }
+
           return (
             <div
               key={category.id}
@@ -55,6 +74,23 @@ export function AppsFlyout({ onNavigate }: AppsFlyoutProps) {
                 <div className="absolute left-full top-0 z-50 ml-1 w-64 rounded-lg border border-[var(--color-divider-tertiary)] bg-[var(--color-container-background-primary)] py-2 shadow-lg">
                   {category.items.map((item) => {
                     const ItemIcon = item.icon;
+                    if (item.locked) {
+                      return (
+                        <div
+                          key={`${item.href}-${item.label}`}
+                          title="Not available on this plan"
+                          role="menuitem"
+                          aria-disabled="true"
+                          className="flex cursor-not-allowed items-center justify-between gap-3 px-4 py-2.5 text-sm text-[var(--color-text-disabled)]"
+                        >
+                          <span className="flex items-center gap-3">
+                            <ItemIcon className="h-4 w-4" aria-hidden="true" />
+                            {item.label}
+                          </span>
+                          <Gem className="h-4 w-4" aria-hidden="true" />
+                        </div>
+                      );
+                    }
                     return (
                       <Link
                         key={`${item.href}-${item.label}`}
