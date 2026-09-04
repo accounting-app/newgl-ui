@@ -1,4 +1,4 @@
-import { Banknote, Building2, Car, CreditCard, Database, FileStack, FileText, Handshake, Landmark, LayoutGrid, Package, Receipt, ScrollText, ShoppingCart, Sparkles, Users, Wallet } from "lucide-react";
+import { Banknote, Building2, Car, CreditCard, Database, FileStack, FileText, Handshake, Landmark, LayoutGrid, Package, Receipt, ScrollText, ShoppingCart, Sparkles, Users, UsersRound, Wallet } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 export type AppNavItem = {
@@ -84,6 +84,19 @@ export const ALL_APPS_CATEGORIES: AppCategory[] = [
       { label: "Overview", href: "/all-apps/customer-hub", icon: LayoutGrid },
       { label: "Customers", href: "/all-apps/customer-hub/customers", icon: Users },
       { label: "Estimates", href: "/all-apps/customer-hub/estimates", icon: Handshake }
+    ]
+  },
+  {
+    id: "team",
+    label: "Team",
+    icon: UsersRound,
+    items: [
+      // Same real screen as Expenses & Bills' own Contractors item, not a
+      // second copy -- QBO itself links to the identical Contractors
+      // screen from both categories (?jobId=expenses vs ?jobId=team just
+      // tags which nav path was used). Employees/Workers' comp are still
+      // an open scoping question -- see QBO_FREE_FEATURES_PLAN.md.
+      { label: "Contractors", href: "/all-apps/expenses-bills/contractors", icon: Users }
     ]
   }
 ];
