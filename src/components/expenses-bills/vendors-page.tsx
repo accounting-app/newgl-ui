@@ -142,11 +142,6 @@ export function VendorsPage() {
     resetForm();
   }
 
-  function handleMakeInactive(vendor: Vendor) {
-    update(vendor.id, { status: "ARCHIVED" });
-    toast({ variant: "success", title: "Vendor made inactive" });
-  }
-
   // -- Columns / include-inactive / page size (persisted per company) --
   const settingsKey = activeCompany ? companyScopedKey(activeCompany.name, "vendors-list-settings") : "newgl:phase1:pending:vendors-list-settings";
   const [listSettings, setListSettings] = usePersistedJSON(settingsKey, { columns: DEFAULT_COLUMNS, includeInactive: false, pageSize: 50 });
@@ -273,17 +268,17 @@ export function VendorsPage() {
             <span>Paid</span>
           </div>
           <div className="grid grid-cols-3 gap-px overflow-hidden rounded-lg">
-            <div className="bg-[var(--color-negative)] p-4 text-white">
-              <p className="text-2xl font-semibold">{formatMoney(overdueTotal)}</p>
-              <p className="text-xs uppercase tracking-wide">{overdueBills.length} overdue</p>
+            <div className="bg-[var(--color-negative-subtle-hover)] p-4">
+              <p className="text-2xl font-semibold text-[var(--color-negative)]">{formatMoney(overdueTotal)}</p>
+              <p className="text-xs uppercase tracking-wide text-[var(--color-negative)]">{overdueBills.length} overdue</p>
             </div>
             <div className="bg-[var(--color-container-background-accent)] p-4">
               <p className="text-2xl font-semibold text-[var(--color-text-global)]">{formatMoney(openTotal)}</p>
               <p className="text-xs uppercase tracking-wide text-[var(--color-icon-secondary)]">{openBills.length} open bills</p>
             </div>
-            <div className="bg-[var(--color-positive)] p-4 text-white">
-              <p className="text-2xl font-semibold">{formatMoney(paidTotal)}</p>
-              <p className="text-xs uppercase tracking-wide">{paidLast30Days.length} paid last 30 days</p>
+            <div className="bg-[var(--color-highlight-badge-background)] p-4">
+              <p className="text-2xl font-semibold text-[var(--color-highlight-badge-text)]">{formatMoney(paidTotal)}</p>
+              <p className="text-xs uppercase tracking-wide text-[var(--color-highlight-badge-text)]">{paidLast30Days.length} paid last 30 days</p>
             </div>
           </div>
         </div>
@@ -410,7 +405,7 @@ export function VendorsPage() {
               </tr>
             ) : (
               pageRows.map((vendor) => (
-                <tr key={vendor.id} className="group border-t border-[var(--color-divider-tertiary)] hover:bg-[var(--color-table-row-hover)]">
+                <tr key={vendor.id} className="border-t border-[var(--color-divider-tertiary)] hover:bg-[var(--color-table-row-hover)]">
                   <td className="p-2 align-top">
                     <input type="checkbox" disabled />
                   </td>
@@ -418,11 +413,6 @@ export function VendorsPage() {
                     <button type="button" onClick={() => startEdit(vendor)} className="font-medium text-[var(--color-text-global)] hover:underline">
                       {vendor.name}
                     </button>
-                    <span className="ml-2 hidden text-xs text-[var(--color-negative)] group-hover:inline">
-                      <button type="button" onClick={() => handleMakeInactive(vendor)} className="hover:underline">
-                        Make inactive
-                      </button>
-                    </span>
                   </td>
                   {listSettings.columns.includes("companyName") ? (
                     <td className="border-l border-l-dotted border-l-[var(--color-divider-tertiary)] p-2 align-top text-[13px] text-[var(--color-text-primary)]">{vendor.companyName || "--"}</td>
