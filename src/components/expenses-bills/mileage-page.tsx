@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, type FormEvent } from "react";
+import { Car, QrCode } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { InputField } from "@/components/ui/input-field";
@@ -9,11 +10,59 @@ import { Select } from "@/components/ui/select";
 import { Table } from "@/components/ui/table";
 import { useToast } from "@/components/ui/toast/toast-context";
 import { useCompany } from "@/lib/company/company-provider";
-import { companyScopedKey, localId, useLocalCollection } from "@/lib/local-store/use-local-collection";
+import { companyScopedKey, localId, useLocalCollection, usePersistedJSON } from "@/lib/local-store/use-local-collection";
 import { DEFAULT_MILEAGE_RATE, type MileageEntry, type Vendor } from "@/lib/local-store/expenses-bills-types";
 
 function formatMoney(value: number): string {
   return value.toLocaleString("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+// Matches the reference intro screen shown before the mileage log. There's
+// no companion mobile app to actually scan this QR code into (or GPS
+// auto-tracking behind it) -- kept honestly non-functional (the QR box is
+// decorative, not a real link) while "Add a trip manually" and "Skip for
+// now" are real, so nothing here overpromises a capability the app
+// doesn't have. Whether to keep this screen at all is still open -- for
+// now it only shows once per company (skipped automatically for
+// companies that already have trips logged).
+function MileageOnboarding({ onAddTripManually, onSkip }: { onAddTripManually: () => void; onSkip: () => void }) {
+  return (
+    <div className="flex flex-col gap-8 rounded-lg border border-[var(--color-divider-tertiary)] bg-[var(--color-container-background-accent)] p-10 sm:flex-row sm:items-center sm:justify-between">
+      <div className="max-w-xl">
+        <h2 className="text-3xl font-semibold leading-tight text-[var(--color-text-global)]">
+          Track mileage automatically and get <span className="text-[var(--color-positive)]">{formatMoney(DEFAULT_MILEAGE_RATE)} a mile</span>
+        </h2>
+        <p className="mt-4 text-base text-[var(--color-text-primary)]">
+          <span className="font-semibold text-[var(--color-text-global)]">Get the free mobile app.</span> Point your device&apos;s camera at the code and a link will pop up.
+        </p>
+
+        <div className="mt-6 flex flex-wrap items-start gap-6">
+          <div title="A companion mobile app isn't available yet" className="flex w-40 flex-col items-center gap-2 rounded-lg border border-[var(--color-divider-tertiary)] bg-[var(--color-container-background-primary)] p-4">
+            <QrCode className="h-20 w-20 text-[var(--color-icon-secondary)]" aria-hidden="true" />
+            <p className="text-center text-xs text-[var(--color-text-disabled)]">Point your camera at the QR code</p>
+          </div>
+
+          <div className="flex flex-col gap-3">
+            <div>
+              <p className="font-semibold text-[var(--color-text-global)]">Record trips manually</p>
+              <p className="mt-1 text-sm text-[var(--color-text-primary)]">Enter your mileage by hand each time you drive for work.</p>
+            </div>
+            <span className="text-sm font-semibold text-[var(--color-text-disabled)]">OR</span>
+            <button type="button" onClick={onAddTripManually} className="text-left text-sm font-medium text-[var(--color-link-action)] hover:underline">
+              Add a trip manually
+            </button>
+            <button type="button" onClick={onSkip} className="text-left text-sm font-medium text-[var(--color-link-action)] hover:underline">
+              Skip for now
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="hidden shrink-0 items-center justify-center sm:flex">
+        <Car className="h-32 w-32 text-[var(--color-positive)]" aria-hidden="true" />
+      </div>
+    </div>
+  );
 }
 
 // Phase 1: UI only, local-only data. Doesn't post to the ledger --
@@ -64,8 +113,27 @@ export function MileagePage() {
   const totalMiles = useMemo(() => entries.reduce((sum, e) => sum + e.miles, 0), [entries]);
   const [showForm, setShowForm] = useState(entries.length === 0);
 
+  const onboardingKey = activeCompany ? companyScopedKey(activeCompany.name, "mileage-onboarding-skipped") : "newgl:phase1:pending:mileage-onboarding-skipped";
+  const [onboardingSkipped, setOnboardingSkipped] = usePersistedJSON(onboardingKey, false);
+  const showOnboarding = hydrated && entries.length === 0 && !onboardingSkipped;
+
   if (!activeCompany) {
     return <p className="text-sm text-[var(--color-text-primary)]">Loading…</p>;
+  }
+
+  if (showOnboarding) {
+    return (
+      <>
+        <h1 className="mb-4 text-xl font-semibold text-[var(--color-text-global)]">Mileage</h1>
+        <MileageOnboarding
+          onAddTripManually={() => {
+            setOnboardingSkipped(true);
+            setShowForm(true);
+          }}
+          onSkip={() => setOnboardingSkipped(true)}
+        />
+      </>
+    );
   }
 
   return (
@@ -74,17 +142,6 @@ export function MileagePage() {
         <h1 className="text-xl font-semibold text-[var(--color-text-global)]">Mileage</h1>
         <Button onClick={() => setShowForm((v) => !v)}>{showForm ? "Cancel" : "Add a trip"}</Button>
       </div>
-
-      {entries.length === 0 && !showForm ? (
-        <Card className="mb-4">
-          <p className="text-lg font-semibold text-[var(--color-text-global)]">
-            Track business mileage at the standard {formatMoney(DEFAULT_MILEAGE_RATE)}/mile rate
-          </p>
-          <p className="mt-1 text-sm text-[var(--color-text-primary)]">
-            No automatic GPS tracking yet -- log trips manually below and we'll total up the deduction.
-          </p>
-        </Card>
-      ) : null}
 
       {showForm ? (
         <Card title="Log a trip" description="Not backed by a server yet -- saved to this browser only." className="mb-6">
