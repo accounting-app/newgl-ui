@@ -57,11 +57,11 @@ function EFileTab({ onGoToRecipients }: { onGoToRecipients: () => void }) {
   ];
 
   return (
-    <div className="flex flex-col gap-10">
-      <div className="flex flex-col gap-8 lg:flex-row lg:items-center lg:justify-between">
+    <div className="flex flex-col gap-16">
+      <div className="flex flex-col gap-8 lg:flex-row lg:items-start lg:justify-between">
         <div className="max-w-xl">
           <h2 className="text-4xl font-semibold leading-tight text-[var(--color-text-global)]">Fast track your 1099s with autofilled forms</h2>
-          <div className="mt-5 flex flex-col gap-2">
+          <div className="mt-6 flex flex-col gap-1.5">
             {["Save time and minimize errors with forms ready to review", "Makes updates as needed—so you're always in control", "Autofilled from the vendors you already track here"].map((item) => (
               <div key={item} className="flex items-start gap-2">
                 <Check className="mt-0.5 h-4 w-4 shrink-0 text-[var(--color-positive)]" aria-hidden="true" />
@@ -78,7 +78,7 @@ function EFileTab({ onGoToRecipients }: { onGoToRecipients: () => void }) {
           </div>
           <p className="mt-3 text-sm text-[var(--color-text-disabled)]">Online e-filing isn&apos;t available in this app yet -- see the FAQs below for printing and mailing instead.</p>
 
-          <div className="mt-8 flex gap-8 border-t border-[var(--color-divider-tertiary)] pt-6">
+          <div className="mt-10 flex gap-16">
             <div>
               <p className="font-semibold text-[var(--color-text-global)]">January 1 - May 7</p>
               <p className="text-sm text-[var(--color-text-primary)]">Typical IRS filing window</p>
@@ -100,7 +100,7 @@ function EFileTab({ onGoToRecipients }: { onGoToRecipients: () => void }) {
       </div>
 
       <div>
-        <p className="mb-4 text-center text-lg text-[var(--color-text-primary)]">Autofilled forms — simplified from start to finish</p>
+        <p className="mb-6 text-center text-lg text-[var(--color-text-primary)]">Autofilled forms — simplified from start to finish</p>
         <div className="grid gap-4 sm:grid-cols-3">
           {[
             { title: "1. Pull from your vendors", body: "Contractors you've already flagged for 1099 tracking are the starting list -- no separate entry." },
@@ -127,7 +127,7 @@ function EFileTab({ onGoToRecipients }: { onGoToRecipients: () => void }) {
       </div>
 
       <div>
-        <p className="mb-3 text-lg font-semibold text-[var(--color-text-global)]">FAQs</p>
+        <p className="mb-2 text-lg font-semibold text-[var(--color-text-global)]">FAQs</p>
         <div className="flex flex-col divide-y divide-[var(--color-divider-tertiary)] border-t border-[var(--color-divider-tertiary)]">
           {faqs.map(({ q, a }) => {
             const isOpen = openFaq === q;
@@ -136,7 +136,7 @@ function EFileTab({ onGoToRecipients }: { onGoToRecipients: () => void }) {
                 <button
                   type="button"
                   onClick={() => setOpenFaq(isOpen ? null : q)}
-                  className="flex w-full items-center justify-between gap-3 py-3 text-left text-sm font-medium text-[var(--color-text-global)] hover:bg-[var(--color-action-passive-subtle-hover)]"
+                  className="flex w-full items-center justify-between gap-3 py-4 text-left text-sm font-medium text-[var(--color-text-global)] hover:bg-[var(--color-action-passive-subtle-hover)]"
                 >
                   {q}
                   <span className="flex shrink-0 items-center gap-1 text-[var(--color-link-action)]">
@@ -184,7 +184,7 @@ function RecipientsTab({ vendors, hydrated, updateVendor }: { vendors: Vendor[];
         Vendors flagged for 1099 tracking on the Vendors screen show up here. Double-check each one has an address and taxpayer ID before you file.
       </p>
 
-      <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
+      <div className="mt-8 flex flex-wrap items-center justify-between gap-3">
         <button type="button" disabled title="Not available yet" className="flex cursor-not-allowed items-center gap-1.5 text-sm font-medium text-[var(--color-text-disabled)]">
           <Upload className="h-3.5 w-3.5" aria-hidden="true" />
           Missing W-9 info? Import W-9s
@@ -194,7 +194,7 @@ function RecipientsTab({ vendors, hydrated, updateVendor }: { vendors: Vendor[];
         </a>
       </div>
 
-      <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+      <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
           <div className="relative w-56">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--color-icon-secondary)]" aria-hidden="true" />
