@@ -66,6 +66,42 @@ export function useLocalCollection<T extends { id: string }>(storageKey: string)
   return { items, hydrated, add, update, remove };
 }
 
+/**
+ * Same Phase-1 localStorage-backed persistence as useLocalCollection, but
+ * for a single arbitrary JSON value instead of an `{id}`-keyed collection --
+ * e.g. a screen's saved widget layout or favorited-actions list. Returns
+ * `hydrated` so callers can avoid rendering a default before the real
+ * stored value (if any) has been read.
+ */
+export function usePersistedJSON<T>(storageKey: string, initialValue: T) {
+  const [value, setValue] = useState<T>(initialValue);
+  const [hydrated, setHydrated] = useState(false);
+
+  useEffect(() => {
+    setHydrated(false);
+    try {
+      const raw = window.localStorage.getItem(storageKey);
+      setValue(raw ? (JSON.parse(raw) as T) : initialValue);
+    } catch {
+      setValue(initialValue);
+    } finally {
+      setHydrated(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [storageKey]);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    try {
+      window.localStorage.setItem(storageKey, JSON.stringify(value));
+    } catch {
+      // Best-effort only -- private browsing, storage full, etc.
+    }
+  }, [value, storageKey, hydrated]);
+
+  return [value, setValue, hydrated] as const;
+}
+
 /** `localStorage` key scoped to one company's data, for a given domain (e.g. "vendors", "bills"). */
 export function companyScopedKey(companyName: string, domain: string): string {
   return `newgl:phase1:${companyName}:${domain}`;
