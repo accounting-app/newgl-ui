@@ -35,13 +35,17 @@ export type Bill = {
   createdAt: string;
 };
 
+export type MileageTripType = "BUSINESS" | "PERSONAL";
+
 export type MileageEntry = {
   id: string;
   date: string;
   miles: number;
   ratePerMile: number;
+  type: MileageTripType;
+  startAddress?: string;
+  endAddress?: string;
   purpose?: string;
-  vendorId?: string;
   createdAt: string;
 };
 
@@ -62,4 +66,4 @@ export type ReceiptRecord = {
 // IRS standard mileage rate is set yearly; this is just a sensible Phase-1
 // default the user can override per entry, not meant to track the real
 // published rate automatically.
-export const DEFAULT_MILEAGE_RATE = 0.7;
+export const DEFAULT_MILEAGE_RATE = 0.725;

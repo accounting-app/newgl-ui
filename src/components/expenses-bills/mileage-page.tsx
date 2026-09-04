@@ -1,20 +1,47 @@
 "use client";
 
-import { useMemo, useState, type FormEvent } from "react";
-import { Car, QrCode } from "lucide-react";
-import { Card } from "@/components/ui/card";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { BarChart3, Car, ChevronDown, Gauge, QrCode, Search, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { InputField } from "@/components/ui/input-field";
 import { NumberField } from "@/components/ui/number-field";
 import { Select } from "@/components/ui/select";
-import { Table } from "@/components/ui/table";
 import { useToast } from "@/components/ui/toast/toast-context";
 import { useCompany } from "@/lib/company/company-provider";
 import { companyScopedKey, localId, useLocalCollection, usePersistedJSON } from "@/lib/local-store/use-local-collection";
-import { DEFAULT_MILEAGE_RATE, type MileageEntry, type Vendor } from "@/lib/local-store/expenses-bills-types";
+import { DEFAULT_MILEAGE_RATE, type MileageEntry, type MileageTripType } from "@/lib/local-store/expenses-bills-types";
 
 function formatMoney(value: number): string {
   return value.toLocaleString("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+/** Whole-dollar amount, no cents -- matches the reference's "$0" (not "$0.00") deduction figures. */
+function formatWholeMoney(value: number): string {
+  return value.toLocaleString("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 0, maximumFractionDigits: 0 });
+}
+
+/** Per-mile rate needs 3 decimal places (the IRS rate itself is quoted that way, e.g. $0.725) -- formatMoney's 2-decimal currency formatter would round it. */
+function formatRate(value: number): string {
+  return `$${value.toFixed(3)}`;
+}
+
+const MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const TABS = [
+  { value: "unreviewed", label: "Unreviewed" },
+  { value: "business", label: "Business" },
+  { value: "personal", label: "Personal" },
+  { value: "all", label: "All" }
+] as const;
+type TabValue = (typeof TABS)[number]["value"];
+
+function yearOptions(): { value: string; label: string }[] {
+  const currentYear = new Date().getFullYear();
+  return [currentYear, currentYear - 1, currentYear - 2].map((year) => ({ value: String(year), label: String(year) }));
+}
+
+function locationLabel(entry: MileageEntry): string {
+  if (entry.startAddress && entry.endAddress) return `${entry.startAddress} → ${entry.endAddress}`;
+  return entry.startAddress || entry.endAddress || "--";
 }
 
 // Matches the reference intro screen shown before the mileage log. There's
@@ -30,7 +57,7 @@ function MileageOnboarding({ onAddTripManually, onSkip }: { onAddTripManually: (
     <div className="flex flex-col gap-8 rounded-lg border border-[var(--color-divider-tertiary)] bg-[var(--color-container-background-accent)] p-10 sm:flex-row sm:items-center sm:justify-between">
       <div className="max-w-xl">
         <h2 className="text-3xl font-semibold leading-tight text-[var(--color-text-global)]">
-          Track mileage automatically and get <span className="text-[var(--color-positive)]">{formatMoney(DEFAULT_MILEAGE_RATE)} a mile</span>
+          Track mileage automatically and get <span className="text-[var(--color-positive)]">{formatRate(DEFAULT_MILEAGE_RATE)} a mile</span>
         </h2>
         <p className="mt-4 text-base text-[var(--color-text-primary)]">
           <span className="font-semibold text-[var(--color-text-global)]">Get the free mobile app.</span> Point your device&apos;s camera at the code and a link will pop up.
@@ -65,57 +92,185 @@ function MileageOnboarding({ onAddTripManually, onSkip }: { onAddTripManually: (
   );
 }
 
-// Phase 1: UI only, local-only data. Doesn't post to the ledger --
-// mileage-as-a-reimbursable-expense is a Phase 1.5 question (see the plan
-// doc), this just gets the tracking workflow ready.
-export function MileagePage() {
-  const { activeCompany } = useCompany();
-  const { toast } = useToast();
-  const vendorsKey = activeCompany ? companyScopedKey(activeCompany.name, "vendors") : null;
-  const mileageKey = activeCompany ? companyScopedKey(activeCompany.name, "mileage") : null;
-  const { items: vendors } = useLocalCollection<Vendor>(vendorsKey ?? "newgl:phase1:pending:vendors");
-  const { items: entries, hydrated, add, remove } = useLocalCollection<MileageEntry>(mileageKey ?? "newgl:phase1:pending:mileage");
+const ADD_TRIP_MENU_ITEMS = ["Manage vehicles", "Import trips", "Download my trips", "Download company trips", "Manage favorite locations", "Manage mileage rules"];
 
-  const vendorOptions = useMemo(() => vendors.filter((v) => v.status === "ACTIVE").map((v) => ({ value: v.id, label: v.name })), [vendors]);
-  const vendorNameById = useMemo(() => new Map(vendors.map((v) => [v.id, v.name])), [vendors]);
-
+function AddTripDrawer({ onSave, onClose }: { onSave: (input: Omit<MileageEntry, "id" | "createdAt">, roundTrip: boolean) => void; onClose: () => void }) {
   const today = new Date().toISOString().slice(0, 10);
-  const [date, setDate] = useState(today);
-  const [miles, setMiles] = useState("");
-  const [rate, setRate] = useState(String(DEFAULT_MILEAGE_RATE));
+  const [tripDate, setTripDate] = useState(today);
+  const [distance, setDistance] = useState("");
+  const [startAddress, setStartAddress] = useState("");
+  const [endAddress, setEndAddress] = useState("");
+  const [tripType, setTripType] = useState<MileageTripType>("BUSINESS");
   const [purpose, setPurpose] = useState("");
-  const [vendorId, setVendorId] = useState("");
+  const [roundTrip, setRoundTrip] = useState(false);
+
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") onClose();
+    }
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const parsedMiles = Number(miles);
-    const parsedRate = Number(rate);
-    if (!Number.isFinite(parsedMiles) || parsedMiles <= 0 || !Number.isFinite(parsedRate) || parsedRate <= 0) return;
-    add({
-      id: localId(),
-      date,
-      miles: parsedMiles,
-      ratePerMile: parsedRate,
-      purpose: purpose.trim() || undefined,
-      vendorId: vendorId || undefined,
-      createdAt: new Date().toISOString()
-    });
-    toast({ variant: "success", title: "Mileage logged" });
-    setMiles("");
-    setPurpose("");
+    const parsedMiles = Number(distance);
+    if (!Number.isFinite(parsedMiles) || parsedMiles <= 0) return;
+    onSave(
+      {
+        date: tripDate,
+        miles: parsedMiles,
+        ratePerMile: DEFAULT_MILEAGE_RATE,
+        type: tripType,
+        startAddress: startAddress.trim() || undefined,
+        endAddress: endAddress.trim() || undefined,
+        purpose: purpose.trim() || undefined
+      },
+      roundTrip
+    );
   }
 
-  function handleDelete(entry: MileageEntry) {
-    remove(entry.id);
-  }
+  return (
+    <div className="fixed inset-0 z-40 flex justify-end">
+      <div className="absolute inset-0 bg-black/20" onClick={onClose} />
+      <div className="relative flex h-full w-[420px] max-w-full flex-col bg-[var(--color-container-background-primary)] shadow-xl">
+        <div className="flex items-center justify-between border-b border-[var(--color-divider-tertiary)] px-5 py-4">
+          <h2 className="text-lg font-semibold text-[var(--color-text-global)]">Add trip</h2>
+          <button type="button" onClick={onClose} aria-label="Close" className="text-[var(--color-icon-secondary)] hover:text-[var(--color-text-global)]">
+            <X className="h-5 w-5" aria-hidden="true" />
+          </button>
+        </div>
+        <form onSubmit={handleSubmit} className="flex flex-1 flex-col overflow-y-auto px-5 py-4">
+          <div className="flex flex-col gap-4">
+            <InputField label="Trip date *" type="date" value={tripDate} onChange={(e) => setTripDate(e.target.value)} required />
+            <NumberField label="Distance (mi) *" placeholder="Add distance" value={distance} onChange={(e) => setDistance(e.target.value)} required />
+            <InputField label="Start point" placeholder="Add Address" value={startAddress} onChange={(e) => setStartAddress(e.target.value)} />
+            <InputField label="End point" placeholder="Add Address" value={endAddress} onChange={(e) => setEndAddress(e.target.value)} />
 
-  const totalDeduction = useMemo(() => entries.reduce((sum, e) => sum + e.miles * e.ratePerMile, 0), [entries]);
-  const totalMiles = useMemo(() => entries.reduce((sum, e) => sum + e.miles, 0), [entries]);
-  const [showForm, setShowForm] = useState(entries.length === 0);
+            <div className="flex items-center gap-6">
+              <label className="flex items-center gap-2 text-sm text-[var(--color-text-global)]">
+                <input type="radio" name="trip-type" checked={tripType === "BUSINESS"} onChange={() => setTripType("BUSINESS")} />
+                Business
+              </label>
+              <label className="flex items-center gap-2 text-sm text-[var(--color-text-global)]">
+                <input type="radio" name="trip-type" checked={tripType === "PERSONAL"} onChange={() => setTripType("PERSONAL")} />
+                Personal
+              </label>
+            </div>
+
+            <InputField label="Business purpose *" placeholder="Add purpose" value={purpose} onChange={(e) => setPurpose(e.target.value)} required={tripType === "BUSINESS"} />
+
+            <div>
+              <p className="mb-1 text-xs text-[var(--color-icon-secondary)]">Vehicle</p>
+              {/* Single-vehicle system for now -- no fleet management, so
+                  this isn't a real picker (see the honestly-disabled
+                  "Manage vehicles" item in the Add trip menu). */}
+              <p className="flex h-9 items-center rounded border border-[var(--color-input-disabled-border)] bg-[var(--color-input-disabled-background)] px-3 text-sm text-[var(--color-input-disabled-text)]">My vehicle</p>
+            </div>
+
+            <div className="flex items-center justify-between border-t border-[var(--color-divider-tertiary)] pt-4">
+              <span className="text-sm font-medium text-[var(--color-text-global)]">Round Trip</span>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={roundTrip}
+                onClick={() => setRoundTrip((v) => !v)}
+                className={`relative h-6 w-11 rounded-full transition-colors ${roundTrip ? "bg-[var(--color-ui-primary)]" : "bg-[var(--color-container-background-accent)]"}`}
+              >
+                <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition-transform ${roundTrip ? "translate-x-5" : "translate-x-0.5"}`} />
+              </button>
+            </div>
+            <p className="text-xs text-[var(--color-icon-secondary)]">Enabling this option will create 2 trip entries. One going from start to end and another in the opposite direction.</p>
+          </div>
+
+          <div className="mt-auto flex justify-end pt-6">
+            <Button type="submit" disabled={distance.trim() === "" || (tripType === "BUSINESS" && purpose.trim() === "")}>
+              Save
+            </Button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// Phase 1: UI only, local-only data. Doesn't post to the ledger --
+// mileage-as-a-reimbursable-expense is a Phase 1.5 question (see the plan
+// doc), this just gets the tracking workflow ready. Matches the reference
+// dashboard (potential deduction, business/total miles, per-mile rate,
+// Unreviewed/Business/Personal/All tabs). "Unreviewed" is honestly always
+// empty -- there's no auto-tracked trip source to review, every entry
+// here was typed in by hand already.
+export function MileagePage() {
+  const { activeCompany } = useCompany();
+  const { toast } = useToast();
+  const mileageKey = activeCompany ? companyScopedKey(activeCompany.name, "mileage") : null;
+  const { items: entries, hydrated, add, remove } = useLocalCollection<MileageEntry>(mileageKey ?? "newgl:phase1:pending:mileage");
 
   const onboardingKey = activeCompany ? companyScopedKey(activeCompany.name, "mileage-onboarding-skipped") : "newgl:phase1:pending:mileage-onboarding-skipped";
   const [onboardingSkipped, setOnboardingSkipped] = usePersistedJSON(onboardingKey, false);
+  const [showAddTripDrawer, setShowAddTripDrawer] = useState(false);
   const showOnboarding = hydrated && entries.length === 0 && !onboardingSkipped;
+
+  const [taxYear, setTaxYear] = useState(String(new Date().getFullYear()));
+  const [tab, setTab] = useState<TabValue>("unreviewed");
+  const [search, setSearch] = useState("");
+  const [addTripMenuOpen, setAddTripMenuOpen] = useState(false);
+  const addTripMenuRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (addTripMenuRef.current && !addTripMenuRef.current.contains(event.target as Node)) setAddTripMenuOpen(false);
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const yearEntries = useMemo(() => entries.filter((e) => e.date.startsWith(taxYear)), [entries, taxYear]);
+  const businessEntries = useMemo(() => yearEntries.filter((e) => e.type === "BUSINESS"), [yearEntries]);
+  const personalEntries = useMemo(() => yearEntries.filter((e) => e.type === "PERSONAL"), [yearEntries]);
+  const totalBusinessMiles = useMemo(() => businessEntries.reduce((sum, e) => sum + e.miles, 0), [businessEntries]);
+  const totalMiles = useMemo(() => yearEntries.reduce((sum, e) => sum + e.miles, 0), [yearEntries]);
+  const potentialDeduction = useMemo(() => businessEntries.reduce((sum, e) => sum + e.miles * e.ratePerMile, 0), [businessEntries]);
+
+  const now = new Date();
+  const currentMonthName = now.toLocaleString("en-US", { month: "long" });
+  const businessTripsThisMonth = useMemo(
+    () => businessEntries.filter((e) => new Date(e.date).getMonth() === now.getMonth() && String(now.getFullYear()) === taxYear).length,
+    [businessEntries, now, taxYear]
+  );
+
+  const monthlyBusinessMiles = useMemo(() => {
+    const totals = new Array(12).fill(0);
+    businessEntries.forEach((e) => {
+      const month = Number(e.date.slice(5, 7)) - 1;
+      totals[month] += e.miles;
+    });
+    return totals;
+  }, [businessEntries]);
+  const maxMonthlyMiles = Math.max(...monthlyBusinessMiles, 1);
+
+  const tabRows = tab === "unreviewed" ? [] : tab === "business" ? businessEntries : tab === "personal" ? personalEntries : yearEntries;
+  const filteredRows = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    return tabRows
+      .filter((e) => query === "" || locationLabel(e).toLowerCase().includes(query) || (e.purpose ?? "").toLowerCase().includes(query))
+      .sort((a, b) => b.date.localeCompare(a.date));
+  }, [tabRows, search]);
+
+  function handleSaveTrip(input: Omit<MileageEntry, "id" | "createdAt">, roundTrip: boolean) {
+    add({ id: localId(), createdAt: new Date().toISOString(), ...input });
+    if (roundTrip) {
+      add({
+        id: localId(),
+        createdAt: new Date().toISOString(),
+        ...input,
+        startAddress: input.endAddress,
+        endAddress: input.startAddress
+      });
+    }
+    toast({ variant: "success", title: roundTrip ? "2 trips logged" : "Trip logged" });
+    setShowAddTripDrawer(false);
+  }
 
   if (!activeCompany) {
     return <p className="text-sm text-[var(--color-text-primary)]">Loading…</p>;
@@ -128,10 +283,11 @@ export function MileagePage() {
         <MileageOnboarding
           onAddTripManually={() => {
             setOnboardingSkipped(true);
-            setShowForm(true);
+            setShowAddTripDrawer(true);
           }}
           onSkip={() => setOnboardingSkipped(true)}
         />
+        {showAddTripDrawer ? <AddTripDrawer onSave={handleSaveTrip} onClose={() => setShowAddTripDrawer(false)} /> : null}
       </>
     );
   }
@@ -139,80 +295,203 @@ export function MileagePage() {
   return (
     <>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-xl font-semibold text-[var(--color-text-global)]">Mileage</h1>
-        <Button onClick={() => setShowForm((v) => !v)}>{showForm ? "Cancel" : "Add a trip"}</Button>
+        <h1 className="text-2xl font-semibold text-[var(--color-text-global)]">Mileage</h1>
+        <div className="relative" ref={addTripMenuRef}>
+          <div className="flex overflow-hidden rounded-full">
+            <Button className="rounded-r-none" onClick={() => setShowAddTripDrawer(true)}>
+              Add trip
+            </Button>
+            <Button className="rounded-l-none border-l border-l-white/20 px-2" aria-label="More add-trip options" onClick={() => setAddTripMenuOpen((v) => !v)}>
+              <ChevronDown className="h-4 w-4" aria-hidden="true" />
+            </Button>
+          </div>
+          {addTripMenuOpen ? (
+            <div className="absolute right-0 top-full z-20 mt-1 w-56 rounded-lg border border-[var(--color-divider-tertiary)] bg-[var(--color-container-background-primary)] py-1 shadow-lg">
+              {ADD_TRIP_MENU_ITEMS.map((label) => (
+                <button
+                  key={label}
+                  type="button"
+                  disabled
+                  title="Not available yet"
+                  className="block w-full cursor-not-allowed px-3 py-1.5 text-left text-sm text-[var(--color-text-disabled)]"
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          ) : null}
+        </div>
       </div>
 
-      {showForm ? (
-        <Card title="Log a trip" description="Not backed by a server yet -- saved to this browser only." className="mb-6">
-          <form onSubmit={handleSubmit} className="flex flex-wrap items-end gap-3">
-          <div className="w-40">
-            <InputField label="Date" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-          </div>
-          <div className="w-28">
-            <NumberField label="Miles" placeholder="0" value={miles} onChange={(e) => setMiles(e.target.value)} />
-          </div>
-          <div className="w-32">
-            <NumberField label="Rate / mile" currency placeholder="0.70" value={rate} onChange={(e) => setRate(e.target.value)} />
-          </div>
-          <div className="min-w-[180px] flex-1">
-            <InputField label="Purpose (optional)" placeholder="Client visit, supply run…" value={purpose} onChange={(e) => setPurpose(e.target.value)} />
-          </div>
-          <div className="w-48">
-            <Select label="Vendor (optional)" value={vendorId} onChange={setVendorId} options={vendorOptions} placeholder="None" allowCustomValue={false} />
-          </div>
-          <Button type="submit" disabled={miles.trim() === "" || rate.trim() === ""}>
-            Log trip
-          </Button>
-          </form>
-        </Card>
-      ) : null}
+      <div className="mb-4">
+        <p className="mb-1 text-sm text-[var(--color-text-primary)]">Tax Year:</p>
+        <div className="w-40">
+          <Select value={taxYear} onChange={setTaxYear} options={yearOptions()} placeholder="Year" allowCustomValue={false} />
+        </div>
+      </div>
 
-      <Card
-        title="Mileage log"
-        description={entries.length > 0 ? `${totalMiles.toLocaleString()} miles logged · ${formatMoney(totalDeduction)} total` : undefined}
-      >
-        {!hydrated ? (
-          <p className="text-sm text-[var(--color-text-primary)]">Loading…</p>
-        ) : entries.length === 0 ? (
-          <p className="text-sm text-[var(--color-text-disabled)]">No trips logged yet.</p>
-        ) : (
-          <Table.Root>
-            <Table.Head>
-              <Table.Row>
-                <Table.HeaderCell>Date</Table.HeaderCell>
-                <Table.HeaderCell>Purpose</Table.HeaderCell>
-                <Table.HeaderCell>Vendor</Table.HeaderCell>
-                <Table.HeaderCell align="right">Miles</Table.HeaderCell>
-                <Table.HeaderCell align="right">Amount</Table.HeaderCell>
-                <Table.HeaderCell />
-              </Table.Row>
-            </Table.Head>
-            <Table.Body>
-              {entries.map((entry) => (
-                <Table.Row key={entry.id}>
-                  <Table.Cell className="text-[var(--color-text-primary)]">{entry.date}</Table.Cell>
-                  <Table.Cell className="text-[var(--color-text-primary)]">{entry.purpose || "--"}</Table.Cell>
-                  <Table.Cell className="text-[var(--color-text-primary)]">
-                    {entry.vendorId ? vendorNameById.get(entry.vendorId) ?? "--" : "--"}
-                  </Table.Cell>
-                  <Table.Cell align="right" className="text-[var(--color-text-primary)]">
-                    {entry.miles.toLocaleString()}
-                  </Table.Cell>
-                  <Table.Cell align="right" className="text-[var(--color-text-global)]">
-                    {formatMoney(entry.miles * entry.ratePerMile)}
-                  </Table.Cell>
-                  <Table.Cell align="right">
-                    <Button variant="destructive" size="sm" onClick={() => handleDelete(entry)}>
+      <div className="mb-4 rounded-lg border border-[var(--color-divider-tertiary)]">
+        <div className="p-5">
+          <p className="text-base text-[var(--color-text-primary)]">Potential deduction for {taxYear}</p>
+          <p className="text-3xl font-semibold text-[var(--color-text-global)]">{formatWholeMoney(potentialDeduction)}</p>
+        </div>
+
+        <div className="flex flex-col gap-0 border-t border-[var(--color-divider-tertiary)] lg:flex-row">
+          <div className="flex-1 p-5">
+            <div className="flex items-center justify-between border-b border-[var(--color-divider-tertiary)] pb-4">
+              <div className="flex items-start gap-2">
+                <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-[var(--color-positive)]" aria-hidden="true" />
+                <div>
+                  <p className="font-medium text-[var(--color-text-global)]">Potential deduction</p>
+                  <p className="text-sm text-[var(--color-text-disabled)]">
+                    {businessTripsThisMonth} Business trip{businessTripsThisMonth === 1 ? "" : "s"} in {currentMonthName}
+                  </p>
+                </div>
+              </div>
+              <p className="font-medium text-[var(--color-text-global)]">{formatWholeMoney(potentialDeduction)}</p>
+            </div>
+            <div className="flex items-center justify-between pt-4">
+              <div className="flex items-start gap-2">
+                <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-[var(--color-container-border-primary,var(--color-divider-tertiary))]" aria-hidden="true" />
+                <div>
+                  <p className="font-medium text-[var(--color-text-global)]">0 Unreviewed</p>
+                  <p className="text-sm text-[var(--color-text-disabled)]">Keep reviewing to get more deductions</p>
+                </div>
+              </div>
+              <p className="font-medium text-[var(--color-text-global)]">$0</p>
+            </div>
+          </div>
+
+          <div className="flex flex-1 items-center justify-center bg-[var(--color-container-background-accent)] p-5">
+            {totalBusinessMiles > 0 ? (
+              <div className="flex h-32 w-full items-end gap-1.5">
+                {monthlyBusinessMiles.map((value, i) => (
+                  <div key={MONTH_LABELS[i]} className="flex flex-1 flex-col items-center gap-1">
+                    <div className="w-full rounded-t bg-[var(--color-positive)]" style={{ height: `${Math.max((value / maxMonthlyMiles) * 96, value > 0 ? 4 : 0)}px` }} title={`${value} mi`} />
+                    <span className="text-[9px] text-[var(--color-icon-secondary)]">{MONTH_LABELS[i]}</span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="flex flex-col items-center gap-2 text-center">
+                <BarChart3 className="h-8 w-8 text-[var(--color-icon-secondary)]" aria-hidden="true" />
+                <p className="font-medium text-[var(--color-text-global)]">No data to display</p>
+                <p className="text-sm text-[var(--color-text-disabled)]">Add trip to view data</p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-4 border-t border-[var(--color-divider-tertiary)] p-5 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-2 text-sm text-[var(--color-text-global)]">
+            <Gauge className="h-5 w-5 text-[var(--color-icon-secondary)]" aria-hidden="true" />
+            <div>
+              <p className="font-medium">{totalBusinessMiles.toFixed(2)}</p>
+              <p className="text-xs text-[var(--color-text-disabled)]">Total business miles</p>
+            </div>
+            <span className="mx-2 h-8 w-px bg-[var(--color-divider-tertiary)]" />
+            <div>
+              <p className="font-medium">{totalMiles}</p>
+              <p className="text-xs text-[var(--color-text-disabled)]">Total miles</p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 text-sm">
+            <Car className="h-5 w-5 text-[var(--color-icon-secondary)]" aria-hidden="true" />
+            <div>
+              <p className="font-medium text-[var(--color-text-global)]">My vehicle</p>
+              <p className="text-xs text-[var(--color-text-disabled)]">
+                Primary vehicle · <button type="button" disabled title="Not available yet" className="cursor-not-allowed text-[var(--color-link-action)]">Manage vehicles</button>
+              </p>
+            </div>
+          </div>
+
+          <div className="text-sm">
+            <p className="font-medium text-[var(--color-text-global)]">
+              {formatRate(DEFAULT_MILEAGE_RATE)} <span className="font-normal text-[var(--color-text-disabled)]">Per mile</span>
+            </p>
+            <p className="max-w-xs text-xs text-[var(--color-text-disabled)]">You&apos;re driving towards a sizable mileage allowance. Keep it up!</p>
+          </div>
+        </div>
+      </div>
+
+      <div className="mb-3 flex gap-6 border-b border-[var(--color-divider-tertiary)]">
+        {TABS.map(({ value, label }) => (
+          <button
+            key={value}
+            type="button"
+            onClick={() => setTab(value)}
+            className={`border-b-2 px-1 pb-2 text-sm font-medium transition-colors ${
+              tab === value ? "border-[var(--color-positive)] text-[var(--color-text-global)]" : "border-transparent text-[var(--color-text-primary)] hover:text-[var(--color-text-global)]"
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      <div className="relative mb-3 max-w-sm">
+        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--color-icon-secondary)]" aria-hidden="true" />
+        <InputField placeholder="Search…" value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
+      </div>
+
+      <div className="tw-override overflow-auto rounded-lg border border-[var(--color-divider-tertiary)]">
+        <table className="w-full min-w-[900px] border-collapse text-sm">
+          <thead className="header-table text-left uppercase tracking-wide">
+            <tr>
+              <th className="w-10 px-2 pb-[5px] pt-2 text-left align-middle">
+                <input type="checkbox" disabled />
+              </th>
+              <th className="border-l-custom px-2 pb-[5px] pt-2 text-left align-middle">Date</th>
+              <th className="border-l-custom px-2 pb-[5px] pt-2 text-left align-middle">Location</th>
+              <th className="border-l-custom px-2 pb-[5px] pt-2 text-right align-middle">Distance</th>
+              <th className="border-l-custom px-2 pb-[5px] pt-2 text-right align-middle">Potential deductions</th>
+              <th className="border-l-custom px-2 pb-[5px] pt-2 text-left align-middle">Vehicle</th>
+              <th className="border-l-custom px-2 pb-[5px] pt-2 text-left align-middle">Type</th>
+              <th className="border-l-custom px-2 pb-[5px] pt-2 text-right align-middle">Action</th>
+            </tr>
+          </thead>
+          <tbody className="content-table">
+            {!hydrated ? (
+              <tr>
+                <td colSpan={8} className="px-3 py-10 text-center text-sm text-[var(--color-text-primary)]">
+                  Loading…
+                </td>
+              </tr>
+            ) : filteredRows.length === 0 ? (
+              <tr>
+                <td colSpan={8} className="px-3 py-16 text-center">
+                  <p className="text-lg font-semibold text-[var(--color-text-global)]">No trips here - yet!</p>
+                  <p className="mt-1 text-sm text-[var(--color-text-disabled)]">Click the Add trip button to create one</p>
+                </td>
+              </tr>
+            ) : (
+              filteredRows.map((entry) => (
+                <tr key={entry.id} className="border-t border-[var(--color-divider-tertiary)] hover:bg-[var(--color-table-row-hover)]">
+                  <td className="p-2 align-top">
+                    <input type="checkbox" disabled />
+                  </td>
+                  <td className="border-l border-l-dotted border-l-[var(--color-divider-tertiary)] p-2 align-top text-[13px] text-[var(--color-text-primary)]">{entry.date}</td>
+                  <td className="border-l border-l-dotted border-l-[var(--color-divider-tertiary)] p-2 align-top text-[13px] text-[var(--color-text-primary)]">{locationLabel(entry)}</td>
+                  <td className="border-l border-l-dotted border-l-[var(--color-divider-tertiary)] p-2 align-top text-right text-[13px] text-[var(--color-text-global)]">{entry.miles.toLocaleString()} mi</td>
+                  <td className="border-l border-l-dotted border-l-[var(--color-divider-tertiary)] p-2 align-top text-right text-[13px] text-[var(--color-text-global)]">
+                    {entry.type === "BUSINESS" ? formatMoney(entry.miles * entry.ratePerMile) : "$0.00"}
+                  </td>
+                  <td className="border-l border-l-dotted border-l-[var(--color-divider-tertiary)] p-2 align-top text-[13px] text-[var(--color-text-primary)]">My vehicle</td>
+                  <td className="border-l border-l-dotted border-l-[var(--color-divider-tertiary)] p-2 align-top text-[13px] text-[var(--color-text-primary)]">{entry.type === "BUSINESS" ? "Business" : "Personal"}</td>
+                  <td className="border-l border-l-dotted border-l-[var(--color-divider-tertiary)] p-2 align-top text-right">
+                    <button type="button" onClick={() => remove(entry.id)} className="text-sm font-medium text-[var(--color-negative)] hover:underline">
                       Delete
-                    </Button>
-                  </Table.Cell>
-                </Table.Row>
-              ))}
-            </Table.Body>
-          </Table.Root>
-        )}
-      </Card>
+                    </button>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {showAddTripDrawer ? <AddTripDrawer onSave={handleSaveTrip} onClose={() => setShowAddTripDrawer(false)} /> : null}
     </>
   );
 }
