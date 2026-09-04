@@ -307,13 +307,15 @@ export function ChartOfAccountsPage() {
           <button type="button" disabled title="Not available yet" className="cursor-not-allowed rounded-full border border-[var(--color-button-border)] px-4 py-1.5 text-sm font-medium text-[var(--color-text-disabled)]">
             Run report
           </button>
-          <div className="relative flex overflow-hidden rounded-full" ref={newAccountMenuRef}>
-            <Button className="rounded-r-none" onClick={startAdd}>
-              New account
-            </Button>
-            <Button className="rounded-l-none border-l border-l-white/20 px-2" aria-label="More new-account options" onClick={() => setNewAccountMenuOpen((v) => !v)}>
-              <ChevronDown className="h-4 w-4" aria-hidden="true" />
-            </Button>
+          <div className="relative" ref={newAccountMenuRef}>
+            <div className="flex overflow-hidden rounded-full">
+              <Button className="rounded-r-none" onClick={startAdd}>
+                New account
+              </Button>
+              <Button className="rounded-l-none border-l border-l-white/20 px-2" aria-label="More new-account options" onClick={() => setNewAccountMenuOpen((v) => !v)}>
+                <ChevronDown className="h-4 w-4" aria-hidden="true" />
+              </Button>
+            </div>
             {newAccountMenuOpen ? (
               <div className="absolute right-0 top-full z-20 mt-1 w-40 rounded-lg border border-[var(--color-divider-tertiary)] bg-[var(--color-container-background-primary)] py-1 shadow-lg">
                 <button

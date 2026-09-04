@@ -37,6 +37,26 @@ const TRANSACTION_TYPE_LABELS: Record<TransactionType, string> = {
   JOURNAL_ENTRY: "Journal entry"
 };
 
+// Matches the reference's exact "All transactions" filter list, not a raw
+// dump of every TransactionType (which included Deposit/Sales receipt/
+// Transfer/Journal entry -- not things that belong in an *expense*
+// transactions filter -- and was missing Bill/Recently paid/Credit card
+// payment/Expense (Receipt reminder)). Values with no real TransactionType
+// behind them (Bill, Recently paid, Credit card payment, the receipt-
+// reminder variant of Expense) are honestly non-matching -- selecting one
+// filters to zero rows rather than mislabeling other data as that type,
+// since none of those concepts exist in this app yet.
+const TRANSACTION_TYPE_FILTER_OPTIONS: { value: string; label: string }[] = [
+  { value: "", label: "All transactions" },
+  { value: "EXPENSE", label: "Expense" },
+  { value: "BILL", label: "Bill" },
+  { value: "BILL_PAYMENT", label: "Bill payment" },
+  { value: "CHECK", label: "Check" },
+  { value: "RECENTLY_PAID", label: "Recently paid" },
+  { value: "CREDIT_CARD_PAYMENT", label: "Credit card payment" },
+  { value: "EXPENSE_RECEIPT_REMINDER", label: "Expense (Receipt reminder)" }
+];
+
 const NEW_TRANSACTION_ITEMS: { type: TxnFormType; label: string }[] = [
   { type: "BILL", label: "Bill" },
   { type: "EXPENSE", label: "Expense" },
@@ -109,7 +129,7 @@ export function ExpenseTransactionsPage() {
   const openBillCount = useMemo(() => bills.filter((b) => b.status === "OPEN").length, [bills]);
 
   // -- Toolbar: transaction-type filter, date range, real Filter panel --
-  const [typeFilter, setTypeFilter] = useState<TransactionType | "">("");
+  const [typeFilter, setTypeFilter] = useState("");
   const [dateRange, setDateRange] = useState<DateRange>("12m");
   const [categoryFilter, setCategoryFilter] = useState("");
   const [vendorFilter, setVendorFilter] = useState("");
@@ -248,13 +268,15 @@ export function ExpenseTransactionsPage() {
           >
             Purchase notifications
           </button>
-          <div className="relative flex overflow-hidden rounded-full" ref={printChecksMenuRef}>
-            <Button className="rounded-r-none" onClick={() => setShowPrintSetup(true)}>
-              Print Checks
-            </Button>
-            <Button className="rounded-l-none border-l border-l-white/20 px-2" aria-label="More print-checks options" onClick={() => setPrintChecksMenuOpen((v) => !v)}>
-              <ChevronDown className="h-4 w-4" aria-hidden="true" />
-            </Button>
+          <div className="relative" ref={printChecksMenuRef}>
+            <div className="flex overflow-hidden rounded-full">
+              <Button className="rounded-r-none" onClick={() => setShowPrintSetup(true)}>
+                Print Checks
+              </Button>
+              <Button className="rounded-l-none border-l border-l-white/20 px-2" aria-label="More print-checks options" onClick={() => setPrintChecksMenuOpen((v) => !v)}>
+                <ChevronDown className="h-4 w-4" aria-hidden="true" />
+              </Button>
+            </div>
             {printChecksMenuOpen ? (
               <div className="absolute right-0 top-full z-20 mt-1 w-40 rounded-lg border border-[var(--color-divider-tertiary)] bg-[var(--color-container-background-primary)] py-1 shadow-lg">
                 <button
@@ -273,13 +295,15 @@ export function ExpenseTransactionsPage() {
               </div>
             ) : null}
           </div>
-          <div className="relative flex overflow-hidden rounded-full" ref={newTxnMenuRef}>
-            <Button className="rounded-r-none" onClick={() => setNewTxnMenuOpen((v) => !v)}>
-              New transaction
-            </Button>
-            <Button className="rounded-l-none border-l border-l-white/20 px-2" aria-label="More new-transaction options" onClick={() => setNewTxnMenuOpen((v) => !v)}>
-              <ChevronDown className="h-4 w-4" aria-hidden="true" />
-            </Button>
+          <div className="relative" ref={newTxnMenuRef}>
+            <div className="flex overflow-hidden rounded-full">
+              <Button className="rounded-r-none" onClick={() => setNewTxnMenuOpen((v) => !v)}>
+                New transaction
+              </Button>
+              <Button className="rounded-l-none border-l border-l-white/20 px-2" aria-label="More new-transaction options" onClick={() => setNewTxnMenuOpen((v) => !v)}>
+                <ChevronDown className="h-4 w-4" aria-hidden="true" />
+              </Button>
+            </div>
             {newTxnMenuOpen ? (
               <div className="absolute right-0 top-full z-20 mt-1 w-48 rounded-lg border border-[var(--color-divider-tertiary)] bg-[var(--color-container-background-primary)] py-1 shadow-lg">
                 {NEW_TRANSACTION_ITEMS.map((item) => (
@@ -306,8 +330,8 @@ export function ExpenseTransactionsPage() {
           <div className="w-48">
             <Select
               value={typeFilter}
-              onChange={(v) => setTypeFilter(v as TransactionType | "")}
-              options={[{ value: "", label: "All transactions" }, ...Object.entries(TRANSACTION_TYPE_LABELS).map(([value, label]) => ({ value, label }))]}
+              onChange={setTypeFilter}
+              options={TRANSACTION_TYPE_FILTER_OPTIONS}
               placeholder="All transactions"
               allowCustomValue={false}
               optionSize="sm"

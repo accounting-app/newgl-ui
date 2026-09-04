@@ -11,8 +11,18 @@ type AllAppsLayoutProps = Readonly<{
   children: ReactNode;
 }>;
 
+// Exact match only -- plain startsWith wrongly marked BOTH "Overview"
+// (/all-apps/expenses-bills) and "Expense transactions"
+// (/all-apps/expenses-bills/expense-transactions) active while on the
+// latter, since its path starts with the former's href. None of these
+// nav items own further sub-routes beyond their own page, so an exact
+// match is the correct rule -- not just a workaround for this one pair.
+function isItemActive(href: string, pathname: string): boolean {
+  return pathname === href;
+}
+
 function categoryContainsPath(category: AppCategory, pathname: string): boolean {
-  return category.items.some((item) => !item.locked && pathname.startsWith(item.href));
+  return category.items.some((item) => !item.locked && isItemActive(item.href, pathname));
 }
 
 // Same accordion-sidebar pattern as Settings (src/app/(app)/settings/layout.tsx),
@@ -84,7 +94,7 @@ export default function AllAppsLayout({ children }: AllAppsLayoutProps) {
                           </div>
                         );
                       }
-                      const active = pathname.startsWith(item.href);
+                      const active = isItemActive(item.href, pathname);
                       return (
                         <Link
                           key={`${item.href}-${item.label}`}
