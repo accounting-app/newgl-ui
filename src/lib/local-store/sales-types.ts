@@ -12,7 +12,25 @@ export type Customer = {
   companyName?: string;
   email?: string;
   phone?: string;
+  address?: string;
   status: "ACTIVE" | "ARCHIVED";
+  createdAt: string;
+};
+
+export type EstimateStatus = "OPEN" | "ACCEPTED" | "DECLINED";
+
+export type Estimate = {
+  id: string;
+  customerId: string;
+  estimateNumber?: string;
+  estimateDate: string;
+  expirationDate?: string;
+  amount: number;
+  /** Single default item -- same one-category-per-record simplification
+   * used by Invoice.productServiceId and Bill.categoryAccountId. */
+  productServiceId?: string;
+  memo?: string;
+  status: EstimateStatus;
   createdAt: string;
 };
 

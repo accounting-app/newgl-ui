@@ -1,4 +1,4 @@
-import { Banknote, Building2, Car, CreditCard, Database, FileStack, FileText, Landmark, LayoutGrid, Package, Receipt, ScrollText, ShoppingCart, Sparkles, Users, Wallet } from "lucide-react";
+import { Banknote, Building2, Car, CreditCard, Database, FileStack, FileText, Handshake, Landmark, LayoutGrid, Package, Receipt, ScrollText, ShoppingCart, Sparkles, Users, Wallet } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 export type AppNavItem = {
@@ -74,6 +74,16 @@ export const ALL_APPS_CATEGORIES: AppCategory[] = [
       // "Find an Expert" standing in for "Intuit Experts").
       { label: "Payouts", href: "/all-apps/sales-get-paid/payouts", icon: Wallet },
       { label: "Products & Services", href: "/all-apps/sales-get-paid/products-services", icon: Package }
+    ]
+  },
+  {
+    id: "customer-hub",
+    label: "Customer Hub",
+    icon: Users,
+    items: [
+      { label: "Overview", href: "/all-apps/customer-hub", icon: LayoutGrid },
+      { label: "Customers", href: "/all-apps/customer-hub/customers", icon: Users },
+      { label: "Estimates", href: "/all-apps/customer-hub/estimates", icon: Handshake }
     ]
   }
 ];

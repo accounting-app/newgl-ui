@@ -7,38 +7,32 @@ import { InputField } from "@/components/ui/input-field";
 import { NumberField } from "@/components/ui/number-field";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import type { Customer, Invoice, ProductOrService } from "@/lib/local-store/sales-types";
+import type { Customer, Estimate, ProductOrService } from "@/lib/local-store/sales-types";
 
 const today = () => new Date().toISOString().slice(0, 10);
 
-// Real, local-only invoice creation -- the AR mirror of Bills' add form.
-// Collecting a real payment against it (QBO's own "QuickBooks Payments")
-// needs a payments processor integration this app doesn't have, so an
-// invoice here only ever reaches OPEN/PAID as a status label, same as a
-// Bill -- no money actually moves.
-export function InvoiceFormDrawer({
+// Real, local-only estimate creation -- mirrors InvoiceFormDrawer. There's
+// no e-signature/online-approval collection here (that needs a real
+// e-signature integration), so an estimate only ever moves between Open/
+// Accepted/Declined as a status you set yourself, not something a
+// customer confirms online.
+export function EstimateFormDrawer({
   customers,
   productsServices,
-  initialCustomerId,
   onAddCustomer,
   onSave,
   onClose
 }: {
   customers: Customer[];
   productsServices: ProductOrService[];
-  /** Pre-selects a customer -- e.g. opening this from that customer's own "Create invoice" row action. */
-  initialCustomerId?: string;
   onAddCustomer: (name: string) => string;
-  onSave: (input: Omit<Invoice, "id" | "createdAt" | "status">) => void;
+  onSave: (input: Omit<Estimate, "id" | "createdAt" | "status">) => void;
   onClose: () => void;
 }) {
-  // Doubles as both a selected customer id and (while allowCustomValue is
-  // typing a name that doesn't match any option) the raw typed text --
-  // same pattern as the Vendor "From/To" field on Bank Transactions.
-  const [customerId, setCustomerId] = useState(initialCustomerId ?? "");
-  const [invoiceNumber, setInvoiceNumber] = useState("");
-  const [invoiceDate, setInvoiceDate] = useState(today());
-  const [dueDate, setDueDate] = useState(today());
+  const [customerId, setCustomerId] = useState("");
+  const [estimateNumber, setEstimateNumber] = useState("");
+  const [estimateDate, setEstimateDate] = useState(today());
+  const [expirationDate, setExpirationDate] = useState("");
   const [productServiceId, setProductServiceId] = useState("");
   const [amount, setAmount] = useState("");
   const [memo, setMemo] = useState("");
@@ -60,9 +54,9 @@ export function InvoiceFormDrawer({
     if (!resolvedCustomerId || !Number.isFinite(parsedAmount) || parsedAmount <= 0) return;
     onSave({
       customerId: resolvedCustomerId,
-      invoiceNumber: invoiceNumber.trim() || undefined,
-      invoiceDate,
-      dueDate,
+      estimateNumber: estimateNumber.trim() || undefined,
+      estimateDate,
+      expirationDate: expirationDate || undefined,
       amount: parsedAmount,
       productServiceId: productServiceId || undefined,
       memo: memo.trim() || undefined
@@ -74,7 +68,7 @@ export function InvoiceFormDrawer({
       <div className="absolute inset-0 bg-black/20" onClick={onClose} />
       <div className="relative flex h-full w-[420px] max-w-full flex-col bg-[var(--color-container-background-primary)] shadow-xl">
         <div className="flex items-center justify-between border-b border-[var(--color-divider-tertiary)] px-5 py-4">
-          <h2 className="text-lg font-semibold text-[var(--color-text-global)]">Create invoice</h2>
+          <h2 className="text-lg font-semibold text-[var(--color-text-global)]">Create estimate</h2>
           <button type="button" onClick={onClose} aria-label="Close" className="text-[var(--color-icon-secondary)] hover:text-[var(--color-text-global)]">
             <X className="h-5 w-5" aria-hidden="true" />
           </button>
@@ -97,13 +91,13 @@ export function InvoiceFormDrawer({
 
           <div className="flex gap-3">
             <div className="flex-1">
-              <InputField label="Invoice date" type="date" value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} />
+              <InputField label="Estimate date" type="date" value={estimateDate} onChange={(e) => setEstimateDate(e.target.value)} />
             </div>
             <div className="flex-1">
-              <InputField label="Due date" type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+              <InputField label="Expiration date (optional)" type="date" value={expirationDate} onChange={(e) => setExpirationDate(e.target.value)} />
             </div>
           </div>
-          <InputField label="Invoice # (optional)" placeholder="INV-1001" value={invoiceNumber} onChange={(e) => setInvoiceNumber(e.target.value)} />
+          <InputField label="Estimate # (optional)" placeholder="EST-1001" value={estimateNumber} onChange={(e) => setEstimateNumber(e.target.value)} />
           <Select label="Product/Service (optional)" value={productServiceId} onChange={setProductServiceId} options={productOptions} placeholder="None" allowCustomValue={false} />
           <NumberField label="Amount" currency placeholder="0.00" value={amount} onChange={(e) => setAmount(e.target.value)} />
           <Textarea label="Memo (optional)" value={memo} onChange={(e) => setMemo(e.target.value)} rows={3} />
@@ -114,7 +108,7 @@ export function InvoiceFormDrawer({
             Cancel
           </Button>
           <Button onClick={handleSubmit} disabled={customerId.trim() === "" || amount.trim() === ""}>
-            Save invoice
+            Save estimate
           </Button>
         </div>
       </div>
