@@ -1,4 +1,4 @@
-import { Banknote, Building2, Car, CreditCard, Database, FileStack, FileText, Landmark, LayoutGrid, Receipt, ScrollText, Sparkles, Users } from "lucide-react";
+import { Banknote, Building2, Car, CreditCard, Database, FileStack, FileText, Landmark, LayoutGrid, Package, Receipt, ScrollText, ShoppingCart, Sparkles, Users, Wallet } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 export type AppNavItem = {
@@ -57,6 +57,23 @@ export const ALL_APPS_CATEGORIES: AppCategory[] = [
       { label: "Mileage", href: "/all-apps/expenses-bills/mileage", icon: Car },
       { label: "Contractors", href: "/all-apps/expenses-bills/contractors", icon: Users },
       { label: "1099s", href: "/all-apps/expenses-bills/1099s", icon: FileText }
+    ]
+  },
+  {
+    id: "sales-get-paid",
+    label: "Sales & Get Paid",
+    icon: ShoppingCart,
+    items: [
+      // Payment links and Sales channels stay out entirely (QBO's own
+      // premium items in this category) -- see QBO_FREE_FEATURES_PLAN.md.
+      { label: "Overview", href: "/all-apps/sales-get-paid", icon: LayoutGrid },
+      { label: "Sales Transactions", href: "/all-apps/sales-get-paid/sales-transactions", icon: Receipt },
+      { label: "Invoices", href: "/all-apps/sales-get-paid/invoices", icon: FileText },
+      // QBO calls this "QuickBooks payouts" -- their own named payments
+      // product, not something we can brand as ours (same reasoning as
+      // "Find an Expert" standing in for "Intuit Experts").
+      { label: "Payouts", href: "/all-apps/sales-get-paid/payouts", icon: Wallet },
+      { label: "Products & Services", href: "/all-apps/sales-get-paid/products-services", icon: Package }
     ]
   }
 ];
