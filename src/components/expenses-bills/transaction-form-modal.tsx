@@ -58,17 +58,34 @@ const today = () => new Date().toISOString().slice(0, 10);
 // a Check's check-number sequence, and a Credit's negative-postings
 // convention each map onto the real ledger -- exactly the "features"
 // the user asked to defer, not something to guess at here.
+export type BillSaveInput = {
+  vendorId: string;
+  billNumber: string;
+  billDate: string;
+  dueDate: string;
+  amount: number;
+  categoryAccountId: string;
+  memo: string;
+};
+
 export function TransactionFormModal({
   type,
   accounts,
   vendors,
   nextCheckNumber,
+  onSaveBill,
   onClose
 }: {
   type: TxnFormType;
   accounts: Account[];
   vendors: Vendor[];
   nextCheckNumber: number;
+  /** Only meaningful for type "BILL" -- Bills already has real local
+   * persistence (unlike Expense/Check/Vendor Credit/Credit Card Credit,
+   * which need a real ledger transaction posted, deferred for now), so
+   * when the caller passes this, Save actually creates a Bill instead
+   * of just showing the "UI preview only" toast. */
+  onSaveBill?: (input: BillSaveInput) => void;
   onClose: () => void;
 }) {
   const { toast } = useToast();
@@ -111,6 +128,24 @@ export function TransactionFormModal({
   }
 
   function handleSave(andClose: boolean) {
+    if (type === "BILL" && onSaveBill) {
+      if (!payeeId || total <= 0) {
+        toast({ variant: "error", title: "Choose a vendor and at least one line amount first" });
+        return;
+      }
+      onSaveBill({
+        vendorId: payeeId,
+        billNumber: billNo.trim(),
+        billDate,
+        dueDate,
+        amount: total,
+        categoryAccountId: lines.find((l) => l.categoryAccountId)?.categoryAccountId ?? "",
+        memo: memo.trim()
+      });
+      toast({ variant: "success", title: "Bill added" });
+      if (andClose) onClose();
+      return;
+    }
     toast({
       variant: "info",
       title: "UI preview only",

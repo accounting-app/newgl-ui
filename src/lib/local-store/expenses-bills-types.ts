@@ -25,6 +25,11 @@ export type Bill = {
   billDate: string;
   dueDate: string;
   amount: number;
+  /** Single default category -- QBO's own Bills support multiple line
+   * items each with their own category; this Phase-1 model doesn't, so
+   * a bill is one category for now, same simplification already used
+   * elsewhere (e.g. PendingBankTxn). */
+  categoryAccountId?: string;
   memo?: string;
   status: BillStatus;
   createdAt: string;
