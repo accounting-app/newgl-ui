@@ -10,6 +10,9 @@ export type Vendor = {
   companyName?: string;
   email?: string;
   phone?: string;
+  /** Needed to actually prepare a 1099 -- address and taxpayer ID (SSN/EIN). */
+  address?: string;
+  taxId?: string;
   defaultExpenseAccountId?: string;
   is1099Contractor: boolean;
   status: "ACTIVE" | "ARCHIVED";
