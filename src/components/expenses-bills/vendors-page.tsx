@@ -11,9 +11,9 @@ import { Select } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/components/ui/toast/toast-context";
 import { useCompany } from "@/lib/company/company-provider";
-import { companyScopedKey, useLocalCollection, usePersistedJSON } from "@/lib/local-store/use-local-collection";
-import type { Bill } from "@/lib/local-store/expenses-bills-types";
+import { companyScopedKey, usePersistedJSON } from "@/lib/local-store/use-local-collection";
 import { useVendors } from "@/lib/hooks/use-vendors";
+import { useBills } from "@/lib/hooks/use-bills";
 import type { Vendor } from "@/lib/services/vendors-service";
 import { getServiceContainer } from "@/lib/services/service-container-v2";
 import type { Account } from "@/modules/accounting/domain/models";
@@ -31,17 +31,15 @@ type SortDir = "asc" | "desc";
 
 const PAGE_SIZE_OPTIONS = [50, 75, 100, 150, 300];
 
-// Phase 1.5, Step 1: real persistence -- see
-// newgl-specs/plans/qbo-free-features/QBO_FREE_FEATURES_PLAN.md and
-// @/lib/hooks/use-vendors. Bills below is still the Phase-1 local-only
-// stand-in (its own step later).
+// Phase 1.5, Steps 1 + 3: real persistence for both Vendors and Bills --
+// see newgl-specs/plans/qbo-free-features/QBO_FREE_FEATURES_PLAN.md,
+// @/lib/hooks/use-vendors, and @/lib/hooks/use-bills.
 export function VendorsPage() {
   const { activeCompany } = useCompany();
   const { toast } = useToast();
   const services = useMemo(() => getServiceContainer(), []);
   const { items: vendors, hydrated, add, update } = useVendors();
-  const billsKey = activeCompany ? companyScopedKey(activeCompany.name, "bills") : null;
-  const { items: bills } = useLocalCollection<Bill>(billsKey ?? "newgl:phase1:pending:bills");
+  const { items: bills } = useBills();
 
   const [accounts, setAccounts] = useState<Account[]>([]);
   useEffect(() => {

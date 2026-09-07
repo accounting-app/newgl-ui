@@ -1,30 +1,10 @@
 // Phase-1 local-only shapes for the Expenses & Bills domain -- see
-// newgl-specs/plans/qbo-free-features/QBO_FREE_FEATURES_PLAN.md. These
-// mirror the Postgres table planned for Phase 1.5 (bills) closely on
-// purpose, so swapping the local store for real API calls later is a
-// contained change per screen. Vendor and MileageEntry are no longer here
-// -- both are real now (Phase 1.5, Steps 1-2), see
-// @/lib/services/vendors-service + @/lib/hooks/use-vendors and
-// @/lib/services/mileage-service + @/lib/hooks/use-mileage-entries.
-
-export type BillStatus = "DRAFT" | "OPEN" | "PAID";
-
-export type Bill = {
-  id: string;
-  vendorId: string;
-  billNumber?: string;
-  billDate: string;
-  dueDate: string;
-  amount: number;
-  /** Single default category -- QBO's own Bills support multiple line
-   * items each with their own category; this Phase-1 model doesn't, so
-   * a bill is one category for now, same simplification already used
-   * elsewhere (e.g. PendingBankTxn). */
-  categoryAccountId?: string;
-  memo?: string;
-  status: BillStatus;
-  createdAt: string;
-};
+// newgl-specs/plans/qbo-free-features/QBO_FREE_FEATURES_PLAN.md. Vendor,
+// MileageEntry, and Bill are no longer here -- all three are real now
+// (Phase 1.5, Steps 1-3), see @/lib/services/vendors-service +
+// @/lib/hooks/use-vendors, @/lib/services/mileage-service +
+// @/lib/hooks/use-mileage-entries, and @/lib/services/bills-service +
+// @/lib/hooks/use-bills.
 
 export type ReceiptRecord = {
   id: string;

@@ -7,7 +7,7 @@ import { IconButton } from "@/components/ui/icon-button";
 import { Select } from "@/components/ui/select";
 import { useCompany } from "@/lib/company/company-provider";
 import { companyScopedKey, useLocalCollection, usePersistedJSON } from "@/lib/local-store/use-local-collection";
-import type { Bill } from "@/lib/local-store/expenses-bills-types";
+import { useBills } from "@/lib/hooks/use-bills";
 import { useVendors } from "@/lib/hooks/use-vendors";
 import { getServiceContainer } from "@/lib/services/service-container-v2";
 import { DEBIT_NORMAL_CATEGORIES } from "@/modules/accounting/domain/accounting-reports";
@@ -124,8 +124,7 @@ export function ExpenseTransactionsPage() {
     else addTagRow({ id: transactionId, vendorId });
   }
 
-  const billsKey = activeCompany ? companyScopedKey(activeCompany.name, "bills") : null;
-  const { items: bills } = useLocalCollection<Bill>(billsKey ?? "newgl:phase1:pending:bills");
+  const { items: bills } = useBills();
   const openBillCount = useMemo(() => bills.filter((b) => b.status === "OPEN").length, [bills]);
 
   // -- Toolbar: transaction-type filter, date range, real Filter panel --
