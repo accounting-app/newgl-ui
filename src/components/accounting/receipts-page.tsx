@@ -8,9 +8,10 @@ import { NumberField } from "@/components/ui/number-field";
 import { Select } from "@/components/ui/select";
 import { useToast } from "@/components/ui/toast/toast-context";
 import { useCompany } from "@/lib/company/company-provider";
-import { companyScopedKey, localId, useLocalCollection } from "@/lib/local-store/use-local-collection";
-import type { ReceiptRecord } from "@/lib/local-store/expenses-bills-types";
 import { useVendors } from "@/lib/hooks/use-vendors";
+import { useReceipts } from "@/lib/hooks/use-receipts";
+import type { ReceiptRecord } from "@/lib/services/receipts-service";
+import { fetchReceiptFileUrl } from "@/lib/services/receipts-service";
 import { getServiceContainer } from "@/lib/services/service-container-v2";
 import { isRegisterAccountCategory } from "@/modules/accounting/presentation/transaction-type-policy";
 import type { Account } from "@/modules/accounting/domain/models";
@@ -41,10 +42,10 @@ function receiptsInboxAddress(companyName: string): string {
   return `${slug}+receipts@assist.newgl.app`;
 }
 
-// Phase 1: records that a receipt exists (filename, size, when) plus
-// review fields (vendor/payment account/category/amount) filled in
-// manually -- doesn't store the file itself yet, and there's no OCR
-// auto-fill (a real backend + AI feature, Phase 1.5+). See
+// Phase 1.5, Step 5: real persistence -- the file itself now lives in
+// Supabase Storage, reviewed manually (vendor/payment account/category/
+// amount); there's still no OCR auto-fill (a real AI feature, out of
+// scope for now). See @/lib/hooks/use-receipts and
 // newgl-specs/plans/qbo-free-features/QBO_FREE_FEATURES_PLAN.md.
 export function ReceiptsPage() {
   const { activeCompany } = useCompany();
@@ -68,8 +69,7 @@ export function ReceiptsPage() {
   const vendorOptions = useMemo(() => vendors.map((v) => ({ value: v.id, label: v.name })), [vendors]);
   const vendorNameById = useMemo(() => new Map(vendors.map((v) => [v.id, v.name])), [vendors]);
 
-  const storageKey = activeCompany ? companyScopedKey(activeCompany.name, "receipts") : null;
-  const { items: receipts, hydrated, add, update, remove } = useLocalCollection<ReceiptRecord>(storageKey ?? "newgl:phase1:pending:receipts");
+  const { items: receipts, hydrated, add, update, remove } = useReceipts();
   const inputRef = useRef<HTMLInputElement>(null);
   const [isDragOver, setIsDragOver] = useState(false);
   const [tab, setTab] = useState<"review" | "reviewed">("review");
@@ -113,14 +113,40 @@ export function ReceiptsPage() {
     setPage(1);
   }
 
-  function handleFileSelected(file: File) {
-    add({ id: localId(), fileName: file.name, fileSizeBytes: file.size, uploadedAt: new Date().toISOString() });
-    setPage(1);
-    toast({
-      variant: "success",
-      title: "Receipt added",
-      description: "File storage isn't connected yet -- fill in the details below to move it to Reviewed."
-    });
+  async function handleFileSelected(file: File) {
+    try {
+      await add(file);
+      setPage(1);
+      toast({ variant: "success", title: "Receipt added", description: "Fill in the details below to move it to Reviewed." });
+    } catch (err) {
+      toast({ variant: "error", title: "Could not upload this receipt", description: err instanceof Error ? err.message : undefined });
+    }
+  }
+
+  async function handleView(receipt: ReceiptRecord) {
+    try {
+      const url = await fetchReceiptFileUrl(receipt.id);
+      window.open(url, "_blank", "noopener,noreferrer");
+    } catch (err) {
+      toast({ variant: "error", title: "Could not open this receipt", description: err instanceof Error ? err.message : undefined });
+    }
+  }
+
+  async function handleUpdate(receiptId: string, patch: Parameters<typeof update>[1]) {
+    try {
+      await update(receiptId, patch);
+    } catch (err) {
+      toast({ variant: "error", title: "Could not save this receipt", description: err instanceof Error ? err.message : undefined });
+    }
+  }
+
+  async function handleDelete(receiptId: string) {
+    try {
+      await remove(receiptId);
+      toast({ variant: "success", title: "Receipt deleted" });
+    } catch (err) {
+      toast({ variant: "error", title: "Could not delete this receipt", description: err instanceof Error ? err.message : undefined });
+    }
   }
 
   if (!activeCompany) {
@@ -321,7 +347,9 @@ export function ReceiptsPage() {
                     <input type="checkbox" disabled />
                   </td>
                   <td className="border-l border-l-dotted border-l-[var(--color-divider-tertiary)] p-2 align-top text-[13px] text-[var(--color-text-global)]">
-                    {receipt.fileName}
+                    <button type="button" onClick={() => handleView(receipt)} className="text-left hover:underline">
+                      {receipt.fileName}
+                    </button>
                     <p className="text-xs text-[var(--color-icon-secondary)]">{formatBytes(receipt.fileSizeBytes)}</p>
                   </td>
                   <td className="border-l border-l-dotted border-l-[var(--color-divider-tertiary)] p-2 align-top text-[13px] text-[var(--color-text-primary)]">
@@ -331,7 +359,7 @@ export function ReceiptsPage() {
                     {tab === "review" ? (
                       <Select
                         value={receipt.vendorId ?? ""}
-                        onChange={(v) => update(receipt.id, { vendorId: v || undefined })}
+                        onChange={(v) => handleUpdate(receipt.id, { vendorId: v || null })}
                         options={vendorOptions}
                         placeholder="Select vendor"
                         allowCustomValue={false}
@@ -345,7 +373,7 @@ export function ReceiptsPage() {
                     {tab === "review" ? (
                       <Select
                         value={receipt.paymentAccountId ?? ""}
-                        onChange={(v) => update(receipt.id, { paymentAccountId: v || undefined })}
+                        onChange={(v) => handleUpdate(receipt.id, { paymentAccountId: v || null })}
                         options={paymentAccountOptions}
                         placeholder="Select account"
                         allowCustomValue={false}
@@ -361,7 +389,7 @@ export function ReceiptsPage() {
                         currency
                         placeholder="0.00"
                         value={receipt.amount != null ? String(receipt.amount) : ""}
-                        onChange={(e) => update(receipt.id, { amount: Number(e.target.value) || undefined })}
+                        onChange={(e) => handleUpdate(receipt.id, { amount: Number(e.target.value) || null })}
                         size="sm"
                       />
                     ) : (
@@ -372,7 +400,7 @@ export function ReceiptsPage() {
                     {tab === "review" ? (
                       <Select
                         value={receipt.categoryAccountId ?? ""}
-                        onChange={(v) => update(receipt.id, { categoryAccountId: v || undefined })}
+                        onChange={(v) => handleUpdate(receipt.id, { categoryAccountId: v || null })}
                         options={categoryOptions}
                         placeholder="Select category"
                         allowCustomValue={false}
@@ -383,7 +411,7 @@ export function ReceiptsPage() {
                     )}
                   </td>
                   <td className="border-l border-l-dotted border-l-[var(--color-divider-tertiary)] p-2 align-top text-right">
-                    <button type="button" onClick={() => remove(receipt.id)} className="text-sm font-medium text-[var(--color-negative)] hover:underline">
+                    <button type="button" onClick={() => handleDelete(receipt.id)} className="text-sm font-medium text-[var(--color-negative)] hover:underline">
                       Delete
                     </button>
                   </td>
