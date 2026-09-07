@@ -97,13 +97,17 @@ export const ALL_APPS_CATEGORIES: AppCategory[] = [
     label: "Team",
     icon: UsersRound,
     items: [
+      // A real roster/directory -- no Payroll behind it (out of scope),
+      // so no pay rate, no paychecks, just name/role/contact info.
+      { label: "Employees", href: "/all-apps/team/employees", icon: Users },
       // Same real screen and same underlying contractor list as Expenses &
       // Bills' own Contractors item -- QBO links to the identical
       // Contractors screen from both categories, distinguished only by
       // ?jobId=team vs ?jobId=expenses on the same base URL, not a second
-      // copy or a data-level split. Employees/Workers' comp are still an
-      // open scoping question -- see QBO_FREE_FEATURES_PLAN.md.
+      // copy or a data-level split.
       { label: "Contractors", href: "/all-apps/expenses-bills/contractors?jobId=team", icon: Users }
+      // Workers' comp stays out entirely -- a real insurance product,
+      // same reasoning as excluding Lending/Business Tax.
     ]
   }
 ];
