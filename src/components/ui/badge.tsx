@@ -15,9 +15,9 @@ type BadgeProps = HTMLAttributes<HTMLSpanElement> & {
 const VARIANT_CLASSES: Record<BadgeVariant, string> = {
   neutral: "bg-[var(--color-container-background-accent)] text-[var(--color-text-primary)]",
   success: "bg-[var(--color-highlight-badge-background)] text-[var(--color-highlight-badge-text)]",
-  warning: "bg-amber-500/15 text-amber-600",
-  danger: "bg-red-500/15 text-[var(--color-negative)]",
-  info: "bg-sky-500/15 text-sky-600"
+  warning: "bg-[var(--color-warning-bg)] text-[var(--color-warning-text)]",
+  danger: "bg-[var(--color-negative-subtle-hover)] text-[var(--color-negative)]",
+  info: "bg-[var(--color-info-border)] text-[var(--color-info)]"
 };
 
 const SIZE_CLASSES: Record<BadgeSize, string> = {
