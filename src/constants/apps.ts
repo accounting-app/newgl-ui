@@ -55,7 +55,13 @@ export const ALL_APPS_CATEGORIES: AppCategory[] = [
       { label: "Vendors", href: "/all-apps/expenses-bills/vendors", icon: Users },
       { label: "Bills", href: "/all-apps/expenses-bills/bills", icon: FileStack },
       { label: "Mileage", href: "/all-apps/expenses-bills/mileage", icon: Car },
-      { label: "Contractors", href: "/all-apps/expenses-bills/contractors", icon: Users },
+      // QBO reaches the same Contractors screen from both Expenses & Bills
+      // and Team via the same base URL with a distinguishing query param
+      // (?jobId=expenses vs ?jobId=team) -- same underlying data, but only
+      // one of the two nav entries is ever active at a time (never both
+      // simultaneously), matching that pattern instead of a bare shared
+      // href. See the Team category below.
+      { label: "Contractors", href: "/all-apps/expenses-bills/contractors?jobId=expenses", icon: Users },
       { label: "1099s", href: "/all-apps/expenses-bills/1099s", icon: FileText }
     ]
   },
@@ -91,12 +97,13 @@ export const ALL_APPS_CATEGORIES: AppCategory[] = [
     label: "Team",
     icon: UsersRound,
     items: [
-      // Same real screen as Expenses & Bills' own Contractors item, not a
-      // second copy -- QBO itself links to the identical Contractors
-      // screen from both categories (?jobId=expenses vs ?jobId=team just
-      // tags which nav path was used). Employees/Workers' comp are still
-      // an open scoping question -- see QBO_FREE_FEATURES_PLAN.md.
-      { label: "Contractors", href: "/all-apps/expenses-bills/contractors", icon: Users }
+      // Same real screen and same underlying contractor list as Expenses &
+      // Bills' own Contractors item -- QBO links to the identical
+      // Contractors screen from both categories, distinguished only by
+      // ?jobId=team vs ?jobId=expenses on the same base URL, not a second
+      // copy or a data-level split. Employees/Workers' comp are still an
+      // open scoping question -- see QBO_FREE_FEATURES_PLAN.md.
+      { label: "Contractors", href: "/all-apps/expenses-bills/contractors?jobId=team", icon: Users }
     ]
   }
 ];
