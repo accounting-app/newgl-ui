@@ -211,7 +211,7 @@ export function CustomerHubOverviewPage() {
       {showEstimateDrawer ? (
         <EstimateFormDrawer customers={customers} productsServices={productsServices} onAddCustomer={addCustomer} onSave={handleSaveEstimate} onClose={() => setShowEstimateDrawer(false)} />
       ) : null}
-      {showImportModal ? <ImportCustomersModal onClose={() => setShowImportModal(false)} /> : null}
+      {showImportModal ? <ImportCustomersModal onClose={() => setShowImportModal(false)} onCreateCustomer={addCustomerRecord} /> : null}
     </>
   );
 }

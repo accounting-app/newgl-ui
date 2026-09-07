@@ -381,7 +381,7 @@ export function CustomersPage() {
           onClose={() => setInvoiceDrawerFor(null)}
         />
       ) : null}
-      {showImportModal ? <ImportCustomersModal onClose={() => setShowImportModal(false)} /> : null}
+      {showImportModal ? <ImportCustomersModal onClose={() => setShowImportModal(false)} onCreateCustomer={addCustomerRecord} /> : null}
     </>
   );
 }

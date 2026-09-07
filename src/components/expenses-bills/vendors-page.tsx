@@ -471,7 +471,7 @@ export function VendorsPage() {
         <IconButton icon={ChevronRight} label="Next page" size="sm" disabled={currentPage >= totalPages} onClick={() => setPage((p) => Math.min(totalPages, p + 1))} />
       </div>
 
-      {showImportModal ? <ImportVendorsModal onClose={() => setShowImportModal(false)} /> : null}
+      {showImportModal ? <ImportVendorsModal onClose={() => setShowImportModal(false)} onCreateVendor={add} /> : null}
     </>
   );
 }
