@@ -68,12 +68,16 @@ export function CustomerHubOverviewPage() {
     toast({ variant: "success", title: "Estimate created" });
   }
 
-  function handleQuickAddCustomer() {
+  async function handleQuickAddCustomer() {
     if (!quickCustomerName.trim()) return;
-    addCustomerRecord({ name: quickCustomerName.trim() });
-    toast({ variant: "success", title: "Customer added" });
-    setQuickCustomerName("");
-    setShowQuickAddCustomer(false);
+    try {
+      await addCustomerRecord({ name: quickCustomerName.trim() });
+      toast({ variant: "success", title: "Customer added" });
+      setQuickCustomerName("");
+      setShowQuickAddCustomer(false);
+    } catch (err) {
+      toast({ variant: "error", title: "Could not add this customer", description: err instanceof Error ? err.message : undefined });
+    }
   }
 
   if (!activeCompany) {

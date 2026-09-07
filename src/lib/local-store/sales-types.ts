@@ -4,18 +4,11 @@
 // calls later is a contained change per screen. Real payment collection
 // (QBO's own "QuickBooks Payments") and payouts need a real payments
 // processor integration this app doesn't have, so those stay UI-only/
-// honestly disabled -- see each screen's own comment.
-
-export type Customer = {
-  id: string;
-  name: string;
-  companyName?: string;
-  email?: string;
-  phone?: string;
-  address?: string;
-  status: "ACTIVE" | "ARCHIVED";
-  createdAt: string;
-};
+// honestly disabled -- see each screen's own comment. Customer and
+// ProductOrService are no longer here -- both are real now (Phase 1.5,
+// Step 6), see @/lib/services/customers-service + @/lib/hooks/use-customers
+// and @/lib/services/products-services-service +
+// @/lib/hooks/use-products-services.
 
 export type EstimateStatus = "OPEN" | "ACCEPTED" | "DECLINED";
 
@@ -31,19 +24,6 @@ export type Estimate = {
   productServiceId?: string;
   memo?: string;
   status: EstimateStatus;
-  createdAt: string;
-};
-
-export type ProductServiceType = "SERVICE" | "PRODUCT";
-
-export type ProductOrService = {
-  id: string;
-  name: string;
-  type: ProductServiceType;
-  description?: string;
-  salesPrice?: number;
-  incomeAccountId?: string;
-  status: "ACTIVE" | "ARCHIVED";
   createdAt: string;
 };
 

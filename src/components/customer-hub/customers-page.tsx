@@ -31,9 +31,10 @@ const DEFAULT_COLUMNS: ColumnId[] = ["companyName", "phone"];
 
 type SortKey = "name" | "companyName" | "openBalance";
 
-// Phase 1: real local customers. "Check out the new view with filters"
-// and per-invoice/credit balance detail beyond a plain sum are honestly
-// disabled -- see each control's title.
+// Phase 1.5, Step 6: real customers (Invoices/Estimates below are still
+// local-only, their own steps later). "Check out the new view with
+// filters" and per-invoice/credit balance detail beyond a plain sum are
+// honestly disabled -- see each control's title.
 export function CustomersPage() {
   const { activeCompany } = useCompany();
   const { toast } = useToast();
@@ -143,7 +144,7 @@ export function CustomersPage() {
     setShowForm(true);
   }
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!name.trim()) return;
     const patch = {
@@ -153,14 +154,18 @@ export function CustomersPage() {
       phone: phone.trim() || undefined,
       address: address.trim() || undefined
     };
-    if (editingId) {
-      updateCustomer(editingId, patch);
-      toast({ variant: "success", title: "Customer updated" });
-    } else {
-      addCustomerRecord(patch);
-      toast({ variant: "success", title: "Customer added" });
+    try {
+      if (editingId) {
+        await updateCustomer(editingId, patch);
+        toast({ variant: "success", title: "Customer updated" });
+      } else {
+        await addCustomerRecord(patch);
+        toast({ variant: "success", title: "Customer added" });
+      }
+      resetForm();
+    } catch (err) {
+      toast({ variant: "error", title: editingId ? "Could not update this customer" : "Could not add this customer", description: err instanceof Error ? err.message : undefined });
     }
-    resetForm();
   }
 
   function handleSaveInvoice(input: Omit<Invoice, "id" | "createdAt" | "status">) {
@@ -229,7 +234,7 @@ export function CustomersPage() {
       </div>
 
       {showForm ? (
-        <Card title={editingId ? "Edit customer" : "Add a customer"} description="Not backed by a server yet -- saved to this browser only." className="mb-4">
+        <Card title={editingId ? "Edit customer" : "Add a customer"} className="mb-4">
           <form onSubmit={handleSubmit} className="flex flex-wrap items-end gap-3">
             <div className="min-w-[180px] flex-1">
               <InputField label="Customer name" placeholder="e.g. Jane Smith" value={name} onChange={(e) => setName(e.target.value)} />

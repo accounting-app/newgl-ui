@@ -7,7 +7,9 @@ import { InputField } from "@/components/ui/input-field";
 import { NumberField } from "@/components/ui/number-field";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import type { Customer, Invoice, ProductOrService } from "@/lib/local-store/sales-types";
+import type { Invoice } from "@/lib/local-store/sales-types";
+import type { Customer } from "@/lib/services/customers-service";
+import type { ProductOrService } from "@/lib/services/products-services-service";
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -28,7 +30,7 @@ export function InvoiceFormDrawer({
   productsServices: ProductOrService[];
   /** Pre-selects a customer -- e.g. opening this from that customer's own "Create invoice" row action. */
   initialCustomerId?: string;
-  onAddCustomer: (name: string) => string;
+  onAddCustomer: (name: string) => Promise<string>;
   onSave: (input: Omit<Invoice, "id" | "createdAt" | "status">) => void;
   onClose: () => void;
 }) {
@@ -46,7 +48,7 @@ export function InvoiceFormDrawer({
   const customerOptions = customers.map((c) => ({ value: c.id, label: c.name }));
   const productOptions = productsServices.map((p) => ({ value: p.id, label: p.name, rightLabel: p.type === "SERVICE" ? "Service" : "Product" }));
 
-  function resolveCustomerId(): string | null {
+  async function resolveCustomerId(): Promise<string | null> {
     if (customers.some((c) => c.id === customerId)) return customerId;
     const name = customerId.trim();
     if (!name) return null;
@@ -54,9 +56,9 @@ export function InvoiceFormDrawer({
     return existing ? existing.id : onAddCustomer(name);
   }
 
-  function handleSubmit() {
+  async function handleSubmit() {
     const parsedAmount = Number(amount);
-    const resolvedCustomerId = resolveCustomerId();
+    const resolvedCustomerId = await resolveCustomerId();
     if (!resolvedCustomerId || !Number.isFinite(parsedAmount) || parsedAmount <= 0) return;
     onSave({
       customerId: resolvedCustomerId,
@@ -88,8 +90,8 @@ export function InvoiceFormDrawer({
             options={customerOptions}
             placeholder="Choose a customer"
             allowCustomValue
-            onAddNew={() => {
-              const resolved = resolveCustomerId();
+            onAddNew={async () => {
+              const resolved = await resolveCustomerId();
               if (resolved) setCustomerId(resolved);
             }}
             addNewLabel="+ Add new customer"

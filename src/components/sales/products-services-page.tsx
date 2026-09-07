@@ -9,14 +9,14 @@ import { NumberField } from "@/components/ui/number-field";
 import { Select } from "@/components/ui/select";
 import { useToast } from "@/components/ui/toast/toast-context";
 import { useCompany } from "@/lib/company/company-provider";
-import type { ProductServiceType } from "@/lib/local-store/sales-types";
+import type { ProductServiceType } from "@/lib/services/products-services-service";
 import { useSalesData } from "@/components/sales/use-sales-data";
 
 function formatMoney(value: number): string {
   return value.toLocaleString("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-// Real local Products & Services list. "Import items" matches Vendors'
+// Phase 1.5, Step 6: real Products & Services list. "Import items" matches Vendors'
 // import wizard in spirit but isn't built out yet -- honestly disabled.
 export function ProductsServicesPage() {
   const { activeCompany } = useCompany();
@@ -37,18 +37,31 @@ export function ProductsServicesPage() {
     setShowForm(false);
   }
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!name.trim()) return;
     const parsedPrice = Number(salesPrice);
-    addProductOrService({
-      name: name.trim(),
-      type,
-      salesPrice: salesPrice.trim() && Number.isFinite(parsedPrice) ? parsedPrice : undefined,
-      description: description.trim() || undefined
-    });
-    toast({ variant: "success", title: "Item created" });
-    resetForm();
+    try {
+      await addProductOrService({
+        name: name.trim(),
+        type,
+        salesPrice: salesPrice.trim() && Number.isFinite(parsedPrice) ? parsedPrice : undefined,
+        description: description.trim() || undefined
+      });
+      toast({ variant: "success", title: "Item created" });
+      resetForm();
+    } catch (err) {
+      toast({ variant: "error", title: "Could not create this item", description: err instanceof Error ? err.message : undefined });
+    }
+  }
+
+  async function handleDelete(id: string) {
+    try {
+      await removeProduct(id);
+      toast({ variant: "success", title: "Item deleted" });
+    } catch (err) {
+      toast({ variant: "error", title: "Could not delete this item", description: err instanceof Error ? err.message : undefined });
+    }
   }
 
   if (!activeCompany) {
@@ -96,7 +109,7 @@ export function ProductsServicesPage() {
       </div>
 
       {showForm ? (
-        <Card title="Add a product or service" description="Not backed by a server yet -- saved to this browser only." className="mb-4">
+        <Card title="Add a product or service" className="mb-4">
           <form onSubmit={handleSubmit} className="flex flex-wrap items-end gap-3">
             <div className="min-w-[180px] flex-1">
               <InputField label="Name" placeholder="e.g. Consulting hour" value={name} onChange={(e) => setName(e.target.value)} />
@@ -153,7 +166,7 @@ export function ProductsServicesPage() {
                   <td className="border-l border-l-dotted border-l-[var(--color-divider-tertiary)] p-2 align-top text-[13px] text-[var(--color-text-primary)]">{item.description || "--"}</td>
                   <td className="border-l border-l-dotted border-l-[var(--color-divider-tertiary)] p-2 align-top text-right text-[13px] text-[var(--color-text-global)]">{item.salesPrice != null ? formatMoney(item.salesPrice) : "--"}</td>
                   <td className="border-l border-l-dotted border-l-[var(--color-divider-tertiary)] p-2 align-top text-right">
-                    <button type="button" onClick={() => removeProduct(item.id)} className="text-sm font-medium text-[var(--color-negative)] hover:underline">
+                    <button type="button" onClick={() => handleDelete(item.id)} className="text-sm font-medium text-[var(--color-negative)] hover:underline">
                       Delete
                     </button>
                   </td>
