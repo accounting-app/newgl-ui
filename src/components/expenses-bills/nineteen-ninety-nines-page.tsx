@@ -11,6 +11,18 @@ import { useToast } from "@/components/ui/toast/toast-context";
 import { useCompany } from "@/lib/company/company-provider";
 import { useVendors } from "@/lib/hooks/use-vendors";
 import type { UpdateVendorInput, Vendor } from "@/lib/services/vendors-service";
+import { useBills } from "@/lib/hooks/use-bills";
+import type { Bill } from "@/lib/services/bills-service";
+
+// The IRS 1099-NEC/MISC reporting threshold -- a contractor paid less than
+// this in the tax year doesn't need one filed, though tracking them here
+// is still fine (e.g. for next year). Matches QBO's own "reportable"
+// framing on this screen.
+const REPORTABLE_THRESHOLD = 600;
+
+function formatMoney(value: number): string {
+  return value.toLocaleString("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
 
 function yearOptions(): { value: string; label: string }[] {
   const currentYear = new Date().getFullYear();
@@ -155,24 +167,50 @@ function EFileTab({ onGoToRecipients }: { onGoToRecipients: () => void }) {
 }
 
 // -- Recipients & W-9s tab --------------------------------------------------
-function RecipientsTab({ vendors, hydrated, updateVendor }: { vendors: Vendor[]; hydrated: boolean; updateVendor: (id: string, patch: UpdateVendorInput) => Promise<Vendor> }) {
+function RecipientsTab({
+  vendors,
+  bills,
+  hydrated,
+  updateVendor
+}: {
+  vendors: Vendor[];
+  bills: Bill[];
+  hydrated: boolean;
+  updateVendor: (id: string, patch: UpdateVendorInput) => Promise<Vendor>;
+}) {
   const { toast } = useToast();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  const [taxYear, setTaxYear] = useState(String(new Date().getFullYear()));
   const contractors = useMemo(() => vendors.filter((v) => v.is1099Contractor), [vendors]);
   const filtered = useMemo(() => {
     const query = search.trim().toLowerCase();
     return contractors.filter((v) => (query === "" || v.name.toLowerCase().includes(query)) && (statusFilter === "" || v.status === statusFilter));
   }, [contractors, search, statusFilter]);
 
+  // What each recipient was actually paid in the selected tax year --
+  // paid bills only (a DRAFT/OPEN bill hasn't moved money yet), per the
+  // plan doc's "vendors + their paid-bill totals for the tax year".
+  const paidTotalByVendor = useMemo(() => {
+    const totals = new Map<string, number>();
+    bills
+      .filter((b) => b.status === "PAID" && b.billDate.startsWith(taxYear))
+      .forEach((b) => totals.set(b.vendorId, (totals.get(b.vendorId) ?? 0) + b.amount));
+    return totals;
+  }, [bills, taxYear]);
+
   function exportCsv() {
-    const header = "Recipient,Company Name,Full Name,Address,TIN/SSN\n";
-    const rows = filtered.map((v) => [v.name, v.companyName ?? "", v.name, v.address ?? "", v.taxId ?? ""].map((cell) => `"${cell.replace(/"/g, '""')}"`).join(","));
+    const header = `Recipient,Company Name,Full Name,Address,TIN/SSN,Total Paid (${taxYear})\n`;
+    const rows = filtered.map((v) =>
+      [v.name, v.companyName ?? "", v.name, v.address ?? "", v.taxId ?? "", (paidTotalByVendor.get(v.id) ?? 0).toFixed(2)]
+        .map((cell) => `"${String(cell).replace(/"/g, '""')}"`)
+        .join(",")
+    );
     const blob = new Blob([header + rows.join("\n")], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = "1099-recipients.csv";
+    link.download = `1099-recipients-${taxYear}.csv`;
     link.click();
     URL.revokeObjectURL(url);
   }
@@ -214,6 +252,9 @@ function RecipientsTab({ vendors, hydrated, updateVendor }: { vendors: Vendor[];
               optionSize="sm"
             />
           </div>
+          <div className="w-28">
+            <Select value={taxYear} onChange={setTaxYear} options={yearOptions()} placeholder="Year" allowCustomValue={false} optionSize="sm" />
+          </div>
         </div>
         <div className="flex items-center gap-2">
           <Button variant="secondary" size="sm" onClick={exportCsv}>
@@ -238,18 +279,19 @@ function RecipientsTab({ vendors, hydrated, updateVendor }: { vendors: Vendor[];
               <th className="border-l-custom px-2 pb-[5px] pt-2 text-left align-middle">1099 tracking</th>
               <th className="border-l-custom px-2 pb-[5px] pt-2 text-left align-middle">Address</th>
               <th className="border-l-custom px-2 pb-[5px] pt-2 text-left align-middle">TIN/SSN</th>
+              <th className="border-l-custom px-2 pb-[5px] pt-2 text-right align-middle">Total paid ({taxYear})</th>
             </tr>
           </thead>
           <tbody className="content-table">
             {!hydrated ? (
               <tr>
-                <td colSpan={5} className="px-3 py-10 text-center text-sm text-[var(--color-text-primary)]">
+                <td colSpan={6} className="px-3 py-10 text-center text-sm text-[var(--color-text-primary)]">
                   Loading…
                 </td>
               </tr>
             ) : filtered.length === 0 ? (
               <tr>
-                <td colSpan={5} className="px-3 py-16 text-center">
+                <td colSpan={6} className="px-3 py-16 text-center">
                   <Search className="mx-auto mb-3 h-8 w-8 text-[var(--color-icon-secondary)]" aria-hidden="true" />
                   <p className="text-lg font-semibold text-[var(--color-text-global)]">You&apos;re all caught up</p>
                   <p className="mt-1 text-sm text-[var(--color-text-disabled)]">
@@ -302,6 +344,16 @@ function RecipientsTab({ vendors, hydrated, updateVendor }: { vendors: Vendor[];
                         e.target.value = raw ? maskTaxId(raw) : "";
                       }}
                     />
+                  </td>
+                  <td className="border-l border-l-dotted border-l-[var(--color-divider-tertiary)] p-2 align-top text-right text-[13px]">
+                    <p className="text-[var(--color-text-global)]">{formatMoney(paidTotalByVendor.get(vendor.id) ?? 0)}</p>
+                    {(paidTotalByVendor.get(vendor.id) ?? 0) >= REPORTABLE_THRESHOLD ? (
+                      <Badge variant="warning" size="sm">
+                        Reportable
+                      </Badge>
+                    ) : (
+                      <span className="text-xs text-[var(--color-text-disabled)]">Below $600</span>
+                    )}
                   </td>
                 </tr>
               ))
@@ -384,7 +436,9 @@ function CompletedFormsTab() {
   );
 }
 
-// Phase 1: a read-only-ish summary over local-only Vendors data. Real
+// Phase 1.5, Step 4: a real report over real Vendors + paid Bills data --
+// each 1099 recipient's actual total paid for the selected tax year, per
+// the plan doc ("a report over vendors + their paid-bill totals"). Real
 // e-filing needs a licensed tax-prep provider integration -- explicitly
 // out of scope (see newgl-specs/plans/qbo-free-features/QBO_FREE_FEATURES_PLAN.md),
 // so the E-file and Completed forms tabs say so plainly instead of
@@ -396,6 +450,7 @@ function CompletedFormsTab() {
 export function NineteenNinetyNinesPage() {
   const { activeCompany } = useCompany();
   const { items: vendors, hydrated, update } = useVendors();
+  const { items: bills } = useBills();
 
   const [tab, setTab] = useState<TabValue>("efile");
 
@@ -429,7 +484,7 @@ export function NineteenNinetyNinesPage() {
       </div>
 
       {tab === "efile" ? <EFileTab onGoToRecipients={() => setTab("recipients")} /> : null}
-      {tab === "recipients" ? <RecipientsTab vendors={vendors} hydrated={hydrated} updateVendor={update} /> : null}
+      {tab === "recipients" ? <RecipientsTab vendors={vendors} bills={bills} hydrated={hydrated} updateVendor={update} /> : null}
       {tab === "completed" ? <CompletedFormsTab /> : null}
     </>
   );
