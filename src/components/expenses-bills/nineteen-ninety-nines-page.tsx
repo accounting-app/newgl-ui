@@ -9,8 +9,8 @@ import { Select } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/components/ui/toast/toast-context";
 import { useCompany } from "@/lib/company/company-provider";
-import { companyScopedKey, useLocalCollection } from "@/lib/local-store/use-local-collection";
-import type { Vendor } from "@/lib/local-store/expenses-bills-types";
+import { useVendors } from "@/lib/hooks/use-vendors";
+import type { UpdateVendorInput, Vendor } from "@/lib/services/vendors-service";
 
 function yearOptions(): { value: string; label: string }[] {
   const currentYear = new Date().getFullYear();
@@ -155,7 +155,7 @@ function EFileTab({ onGoToRecipients }: { onGoToRecipients: () => void }) {
 }
 
 // -- Recipients & W-9s tab --------------------------------------------------
-function RecipientsTab({ vendors, hydrated, updateVendor }: { vendors: Vendor[]; hydrated: boolean; updateVendor: (id: string, patch: Partial<Vendor>) => void }) {
+function RecipientsTab({ vendors, hydrated, updateVendor }: { vendors: Vendor[]; hydrated: boolean; updateVendor: (id: string, patch: UpdateVendorInput) => Promise<Vendor> }) {
   const { toast } = useToast();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
@@ -277,8 +277,9 @@ function RecipientsTab({ vendors, hydrated, updateVendor }: { vendors: Vendor[];
                       defaultValue={vendor.address ?? ""}
                       onBlur={(e) => {
                         if (e.target.value !== (vendor.address ?? "")) {
-                          updateVendor(vendor.id, { address: e.target.value.trim() || undefined });
-                          toast({ variant: "success", title: "Address saved" });
+                          updateVendor(vendor.id, { address: e.target.value.trim() || undefined })
+                            .then(() => toast({ variant: "success", title: "Address saved" }))
+                            .catch((err) => toast({ variant: "error", title: "Could not save address", description: err instanceof Error ? err.message : undefined }));
                         }
                       }}
                     />
@@ -294,8 +295,9 @@ function RecipientsTab({ vendors, hydrated, updateVendor }: { vendors: Vendor[];
                       onBlur={(e) => {
                         const raw = e.target.value.trim();
                         if (raw !== (vendor.taxId ?? "")) {
-                          updateVendor(vendor.id, { taxId: raw || undefined });
-                          toast({ variant: "success", title: "Taxpayer ID saved" });
+                          updateVendor(vendor.id, { taxId: raw || undefined })
+                            .then(() => toast({ variant: "success", title: "Taxpayer ID saved" }))
+                            .catch((err) => toast({ variant: "error", title: "Could not save taxpayer ID", description: err instanceof Error ? err.message : undefined }));
                         }
                         e.target.value = raw ? maskTaxId(raw) : "";
                       }}
@@ -393,8 +395,7 @@ function CompletedFormsTab() {
 // notice instead of invented prices.
 export function NineteenNinetyNinesPage() {
   const { activeCompany } = useCompany();
-  const vendorsKey = activeCompany ? companyScopedKey(activeCompany.name, "vendors") : null;
-  const { items: vendors, hydrated, update } = useLocalCollection<Vendor>(vendorsKey ?? "newgl:phase1:pending:vendors");
+  const { items: vendors, hydrated, update } = useVendors();
 
   const [tab, setTab] = useState<TabValue>("efile");
 

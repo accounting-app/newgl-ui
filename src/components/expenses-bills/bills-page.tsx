@@ -12,7 +12,8 @@ import { Select } from "@/components/ui/select";
 import { useToast } from "@/components/ui/toast/toast-context";
 import { useCompany } from "@/lib/company/company-provider";
 import { companyScopedKey, localId, useLocalCollection, usePersistedJSON } from "@/lib/local-store/use-local-collection";
-import type { Bill, BillStatus, Vendor } from "@/lib/local-store/expenses-bills-types";
+import type { Bill, BillStatus } from "@/lib/local-store/expenses-bills-types";
+import { useVendors } from "@/lib/hooks/use-vendors";
 import { getServiceContainer } from "@/lib/services/service-container-v2";
 import type { Account } from "@/modules/accounting/domain/models";
 import { TransactionFormModal } from "@/components/expenses-bills/transaction-form-modal";
@@ -69,9 +70,8 @@ export function BillsPage() {
   const { activeCompany } = useCompany();
   const { toast } = useToast();
   const services = useMemo(() => getServiceContainer(), []);
-  const vendorsKey = activeCompany ? companyScopedKey(activeCompany.name, "vendors") : null;
   const billsKey = activeCompany ? companyScopedKey(activeCompany.name, "bills") : null;
-  const { items: vendors } = useLocalCollection<Vendor>(vendorsKey ?? "newgl:phase1:pending:vendors");
+  const { items: vendors } = useVendors();
   const { items: bills, hydrated, add, update, remove } = useLocalCollection<Bill>(billsKey ?? "newgl:phase1:pending:bills");
 
   const [accounts, setAccounts] = useState<Account[]>([]);

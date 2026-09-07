@@ -1,23 +1,10 @@
 // Phase-1 local-only shapes for the Expenses & Bills domain -- see
 // newgl-specs/plans/qbo-free-features/QBO_FREE_FEATURES_PLAN.md. These
-// mirror the Postgres tables planned for Phase 1.5 (vendors, bills,
-// mileage_entries) closely on purpose, so swapping the local store for
-// real API calls later is a contained change per screen.
-
-export type Vendor = {
-  id: string;
-  name: string;
-  companyName?: string;
-  email?: string;
-  phone?: string;
-  /** Needed to actually prepare a 1099 -- address and taxpayer ID (SSN/EIN). */
-  address?: string;
-  taxId?: string;
-  defaultExpenseAccountId?: string;
-  is1099Contractor: boolean;
-  status: "ACTIVE" | "ARCHIVED";
-  createdAt: string;
-};
+// mirror the Postgres tables planned for Phase 1.5 (bills, mileage_entries)
+// closely on purpose, so swapping the local store for real API calls later
+// is a contained change per screen. Vendor itself is no longer here -- it's
+// real now (Phase 1.5, Step 1), see @/lib/services/vendors-service and
+// @/lib/hooks/use-vendors.
 
 export type BillStatus = "DRAFT" | "OPEN" | "PAID";
 

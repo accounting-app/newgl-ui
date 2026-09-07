@@ -11,7 +11,7 @@ import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/toast/toast-context";
 import { localId } from "@/lib/local-store/use-local-collection";
-import type { Vendor } from "@/lib/local-store/expenses-bills-types";
+import type { Vendor } from "@/lib/services/vendors-service";
 import type { Account } from "@/modules/accounting/domain/models";
 
 export type TxnFormType = "BILL" | "EXPENSE" | "CHECK" | "VENDOR_CREDIT" | "CREDIT_CARD_CREDIT";

@@ -11,8 +11,10 @@ import { Select } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/components/ui/toast/toast-context";
 import { useCompany } from "@/lib/company/company-provider";
-import { companyScopedKey, localId, useLocalCollection, usePersistedJSON } from "@/lib/local-store/use-local-collection";
-import type { Bill, Vendor } from "@/lib/local-store/expenses-bills-types";
+import { companyScopedKey, useLocalCollection, usePersistedJSON } from "@/lib/local-store/use-local-collection";
+import type { Bill } from "@/lib/local-store/expenses-bills-types";
+import { useVendors } from "@/lib/hooks/use-vendors";
+import type { Vendor } from "@/lib/services/vendors-service";
 import { getServiceContainer } from "@/lib/services/service-container-v2";
 import type { Account } from "@/modules/accounting/domain/models";
 import { ImportVendorsModal } from "@/components/expenses-bills/import-vendors-modal";
@@ -29,15 +31,15 @@ type SortDir = "asc" | "desc";
 
 const PAGE_SIZE_OPTIONS = [50, 75, 100, 150, 300];
 
-// Phase 1: UI only, local-only data -- see
-// newgl-specs/plans/qbo-free-features/QBO_FREE_FEATURES_PLAN.md. Real
-// persistence (a `vendors` table + API routes) is Phase 1.5.
+// Phase 1.5, Step 1: real persistence -- see
+// newgl-specs/plans/qbo-free-features/QBO_FREE_FEATURES_PLAN.md and
+// @/lib/hooks/use-vendors. Bills below is still the Phase-1 local-only
+// stand-in (its own step later).
 export function VendorsPage() {
   const { activeCompany } = useCompany();
   const { toast } = useToast();
   const services = useMemo(() => getServiceContainer(), []);
-  const storageKey = activeCompany ? companyScopedKey(activeCompany.name, "vendors") : null;
-  const { items: vendors, hydrated, add, update } = useLocalCollection<Vendor>(storageKey ?? "newgl:phase1:pending:vendors");
+  const { items: vendors, hydrated, add, update } = useVendors();
   const billsKey = activeCompany ? companyScopedKey(activeCompany.name, "bills") : null;
   const { items: bills } = useLocalCollection<Bill>(billsKey ?? "newgl:phase1:pending:bills");
 
@@ -121,7 +123,7 @@ export function VendorsPage() {
     setShowForm(true);
   }
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!name.trim()) return;
     const patch = {
@@ -132,14 +134,18 @@ export function VendorsPage() {
       defaultExpenseAccountId: defaultExpenseAccountId || undefined,
       is1099Contractor
     };
-    if (editingId) {
-      update(editingId, patch);
-      toast({ variant: "success", title: "Vendor updated" });
-    } else {
-      add({ id: localId(), status: "ACTIVE", createdAt: new Date().toISOString(), ...patch });
-      toast({ variant: "success", title: "Vendor added" });
+    try {
+      if (editingId) {
+        await update(editingId, patch);
+        toast({ variant: "success", title: "Vendor updated" });
+      } else {
+        await add(patch);
+        toast({ variant: "success", title: "Vendor added" });
+      }
+      resetForm();
+    } catch (err) {
+      toast({ variant: "error", title: editingId ? "Could not update this vendor" : "Could not add this vendor", description: err instanceof Error ? err.message : undefined });
     }
-    resetForm();
   }
 
   // -- Columns / include-inactive / page size (persisted per company) --
@@ -288,7 +294,7 @@ export function VendorsPage() {
       </div>
 
       {showForm ? (
-        <Card title={editingId ? "Edit vendor" : "Add a vendor"} description="Not backed by a server yet -- saved to this browser only." className="mb-4">
+        <Card title={editingId ? "Edit vendor" : "Add a vendor"} className="mb-4">
           <form onSubmit={handleSubmit} className="flex flex-wrap items-end gap-3">
             <div className="min-w-[180px] flex-1">
               <InputField label="Vendor name" placeholder="e.g. Acme Office Supply" value={name} onChange={(e) => setName(e.target.value)} />

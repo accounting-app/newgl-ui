@@ -7,7 +7,8 @@ import { IconButton } from "@/components/ui/icon-button";
 import { Select } from "@/components/ui/select";
 import { useCompany } from "@/lib/company/company-provider";
 import { companyScopedKey, useLocalCollection, usePersistedJSON } from "@/lib/local-store/use-local-collection";
-import type { Bill, Vendor } from "@/lib/local-store/expenses-bills-types";
+import type { Bill } from "@/lib/local-store/expenses-bills-types";
+import { useVendors } from "@/lib/hooks/use-vendors";
 import { getServiceContainer } from "@/lib/services/service-container-v2";
 import { DEBIT_NORMAL_CATEGORIES } from "@/modules/accounting/domain/accounting-reports";
 import type { Account, Transaction, TransactionType } from "@/modules/accounting/domain/models";
@@ -109,9 +110,8 @@ export function ExpenseTransactionsPage() {
 
   const accountById = useMemo(() => new Map(accounts.map((a) => [a.id, a])), [accounts]);
 
-  const vendorsKey = activeCompany ? companyScopedKey(activeCompany.name, "vendors") : null;
   const tagsKey = activeCompany ? companyScopedKey(activeCompany.name, "expense-transaction-vendor-tags") : null;
-  const { items: vendors } = useLocalCollection<Vendor>(vendorsKey ?? "newgl:phase1:pending:vendors");
+  const { items: vendors } = useVendors();
   const { items: tagRows, add: addTagRow, update: updateTagRow } = useLocalCollection<{ id: string; vendorId: string }>(
     tagsKey ?? "newgl:phase1:pending:tags"
   );

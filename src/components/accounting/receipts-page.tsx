@@ -9,7 +9,8 @@ import { Select } from "@/components/ui/select";
 import { useToast } from "@/components/ui/toast/toast-context";
 import { useCompany } from "@/lib/company/company-provider";
 import { companyScopedKey, localId, useLocalCollection } from "@/lib/local-store/use-local-collection";
-import type { ReceiptRecord, Vendor } from "@/lib/local-store/expenses-bills-types";
+import type { ReceiptRecord } from "@/lib/local-store/expenses-bills-types";
+import { useVendors } from "@/lib/hooks/use-vendors";
 import { getServiceContainer } from "@/lib/services/service-container-v2";
 import { isRegisterAccountCategory } from "@/modules/accounting/presentation/transaction-type-policy";
 import type { Account } from "@/modules/accounting/domain/models";
@@ -63,8 +64,7 @@ export function ReceiptsPage() {
   );
   const accountNameById = useMemo(() => new Map(accounts.map((a) => [a.id, a.name])), [accounts]);
 
-  const vendorsKey = activeCompany ? companyScopedKey(activeCompany.name, "vendors") : null;
-  const { items: vendors } = useLocalCollection<Vendor>(vendorsKey ?? "newgl:phase1:pending:vendors");
+  const { items: vendors } = useVendors();
   const vendorOptions = useMemo(() => vendors.map((v) => ({ value: v.id, label: v.name })), [vendors]);
   const vendorNameById = useMemo(() => new Map(vendors.map((v) => [v.id, v.name])), [vendors]);
 
