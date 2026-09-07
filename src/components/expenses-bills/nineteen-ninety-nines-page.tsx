@@ -7,6 +7,7 @@ import { IconButton } from "@/components/ui/icon-button";
 import { InputField } from "@/components/ui/input-field";
 import { Select } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/components/ui/toast/toast-context";
 import { useCompany } from "@/lib/company/company-provider";
 import { useVendors } from "@/lib/hooks/use-vendors";
@@ -200,9 +201,9 @@ function RecipientsTab({
   }, [bills, taxYear]);
 
   function exportCsv() {
-    const header = `Recipient,Company Name,Full Name,Address,TIN/SSN,Total Paid (${taxYear})\n`;
+    const header = `Recipient,Company Name,Full Name,Address,TIN/SSN,W-9 Status,Total Paid (${taxYear})\n`;
     const rows = filtered.map((v) =>
-      [v.name, v.companyName ?? "", v.name, v.address ?? "", v.taxId ?? "", (paidTotalByVendor.get(v.id) ?? 0).toFixed(2)]
+      [v.name, v.companyName ?? "", v.name, v.address ?? "", v.taxId ?? "", v.w9Received ? "Received" : "Missing", (paidTotalByVendor.get(v.id) ?? 0).toFixed(2)]
         .map((cell) => `"${String(cell).replace(/"/g, '""')}"`)
         .join(",")
     );
@@ -279,19 +280,20 @@ function RecipientsTab({
               <th className="border-l-custom px-2 pb-[5px] pt-2 text-left align-middle">1099 tracking</th>
               <th className="border-l-custom px-2 pb-[5px] pt-2 text-left align-middle">Address</th>
               <th className="border-l-custom px-2 pb-[5px] pt-2 text-left align-middle">TIN/SSN</th>
+              <th className="border-l-custom px-2 pb-[5px] pt-2 text-left align-middle">W-9 status</th>
               <th className="border-l-custom px-2 pb-[5px] pt-2 text-right align-middle">Total paid ({taxYear})</th>
             </tr>
           </thead>
           <tbody className="content-table">
             {!hydrated ? (
               <tr>
-                <td colSpan={6} className="px-3 py-10 text-center text-sm text-[var(--color-text-primary)]">
+                <td colSpan={7} className="px-3 py-10 text-center text-sm text-[var(--color-text-primary)]">
                   Loading…
                 </td>
               </tr>
             ) : filtered.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-3 py-16 text-center">
+                <td colSpan={7} className="px-3 py-16 text-center">
                   <Search className="mx-auto mb-3 h-8 w-8 text-[var(--color-icon-secondary)]" aria-hidden="true" />
                   <p className="text-lg font-semibold text-[var(--color-text-global)]">You&apos;re all caught up</p>
                   <p className="mt-1 text-sm text-[var(--color-text-disabled)]">
@@ -343,6 +345,17 @@ function RecipientsTab({
                         }
                         e.target.value = raw ? maskTaxId(raw) : "";
                       }}
+                    />
+                  </td>
+                  <td className="border-l border-l-dotted border-l-[var(--color-divider-tertiary)] p-2 align-top text-[13px]">
+                    <Checkbox
+                      label={vendor.w9Received ? "Received" : "Missing"}
+                      checked={vendor.w9Received}
+                      onChange={(e) =>
+                        updateVendor(vendor.id, { w9Received: e.target.checked })
+                          .then(() => toast({ variant: "success", title: e.target.checked ? "W-9 marked received" : "W-9 marked missing" }))
+                          .catch((err) => toast({ variant: "error", title: "Could not update W-9 status", description: err instanceof Error ? err.message : undefined }))
+                      }
                     />
                   </td>
                   <td className="border-l border-l-dotted border-l-[var(--color-divider-tertiary)] p-2 align-top text-right text-[13px]">

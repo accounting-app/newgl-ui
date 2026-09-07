@@ -15,6 +15,8 @@ export type Vendor = {
   taxId?: string;
   defaultExpenseAccountId?: string;
   is1099Contractor: boolean;
+  /** Whether this contractor's W-9 has actually been collected -- matches QBO's own "W-9 status" column on the 1099s screen. */
+  w9Received: boolean;
   status: "ACTIVE" | "ARCHIVED";
   createdAt: string;
 };
@@ -28,6 +30,7 @@ export type CreateVendorInput = {
   taxId?: string;
   defaultExpenseAccountId?: string;
   is1099Contractor?: boolean;
+  w9Received?: boolean;
 };
 
 export type UpdateVendorInput = Partial<CreateVendorInput> & { status?: "ACTIVE" | "ARCHIVED" };
