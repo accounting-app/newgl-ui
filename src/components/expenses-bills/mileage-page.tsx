@@ -8,8 +8,10 @@ import { NumberField } from "@/components/ui/number-field";
 import { Select } from "@/components/ui/select";
 import { useToast } from "@/components/ui/toast/toast-context";
 import { useCompany } from "@/lib/company/company-provider";
-import { companyScopedKey, localId, useLocalCollection, usePersistedJSON } from "@/lib/local-store/use-local-collection";
-import { DEFAULT_MILEAGE_RATE, type MileageEntry, type MileageTripType } from "@/lib/local-store/expenses-bills-types";
+import { companyScopedKey, usePersistedJSON } from "@/lib/local-store/use-local-collection";
+import { DEFAULT_MILEAGE_RATE } from "@/lib/local-store/expenses-bills-types";
+import { useMileageEntries } from "@/lib/hooks/use-mileage-entries";
+import type { CreateMileageEntryInput, MileageEntry, MileageTripType } from "@/lib/services/mileage-service";
 
 function formatMoney(value: number): string {
   return value.toLocaleString("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -94,7 +96,7 @@ function MileageOnboarding({ onAddTripManually, onSkip }: { onAddTripManually: (
 
 const ADD_TRIP_MENU_ITEMS = ["Manage vehicles", "Import trips", "Download my trips", "Download company trips", "Manage favorite locations", "Manage mileage rules"];
 
-function AddTripDrawer({ onSave, onClose }: { onSave: (input: Omit<MileageEntry, "id" | "createdAt">, roundTrip: boolean) => void; onClose: () => void }) {
+function AddTripDrawer({ onSave, onClose }: { onSave: (input: CreateMileageEntryInput, roundTrip: boolean) => void; onClose: () => void }) {
   const today = new Date().toISOString().slice(0, 10);
   const [tripDate, setTripDate] = useState(today);
   const [distance, setDistance] = useState("");
@@ -194,7 +196,9 @@ function AddTripDrawer({ onSave, onClose }: { onSave: (input: Omit<MileageEntry,
   );
 }
 
-// Phase 1: UI only, local-only data. Doesn't post to the ledger --
+// Phase 1.5, Step 2: real persistence -- see
+// newgl-specs/plans/qbo-free-features/QBO_FREE_FEATURES_PLAN.md and
+// @/lib/hooks/use-mileage-entries. Still doesn't post to the ledger --
 // mileage-as-a-reimbursable-expense is a Phase 1.5 question (see the plan
 // doc), this just gets the tracking workflow ready. Matches the reference
 // dashboard (potential deduction, business/total miles, per-mile rate,
@@ -204,8 +208,7 @@ function AddTripDrawer({ onSave, onClose }: { onSave: (input: Omit<MileageEntry,
 export function MileagePage() {
   const { activeCompany } = useCompany();
   const { toast } = useToast();
-  const mileageKey = activeCompany ? companyScopedKey(activeCompany.name, "mileage") : null;
-  const { items: entries, hydrated, add, remove } = useLocalCollection<MileageEntry>(mileageKey ?? "newgl:phase1:pending:mileage");
+  const { items: entries, hydrated, add, remove } = useMileageEntries();
 
   const onboardingKey = activeCompany ? companyScopedKey(activeCompany.name, "mileage-onboarding-skipped") : "newgl:phase1:pending:mileage-onboarding-skipped";
   const [onboardingSkipped, setOnboardingSkipped] = usePersistedJSON(onboardingKey, false);
@@ -257,19 +260,17 @@ export function MileagePage() {
       .sort((a, b) => b.date.localeCompare(a.date));
   }, [tabRows, search]);
 
-  function handleSaveTrip(input: Omit<MileageEntry, "id" | "createdAt">, roundTrip: boolean) {
-    add({ id: localId(), createdAt: new Date().toISOString(), ...input });
-    if (roundTrip) {
-      add({
-        id: localId(),
-        createdAt: new Date().toISOString(),
-        ...input,
-        startAddress: input.endAddress,
-        endAddress: input.startAddress
-      });
+  async function handleSaveTrip(input: CreateMileageEntryInput, roundTrip: boolean) {
+    try {
+      await add(input);
+      if (roundTrip) {
+        await add({ ...input, startAddress: input.endAddress, endAddress: input.startAddress });
+      }
+      toast({ variant: "success", title: roundTrip ? "2 trips logged" : "Trip logged" });
+      setShowAddTripDrawer(false);
+    } catch (err) {
+      toast({ variant: "error", title: "Could not log this trip", description: err instanceof Error ? err.message : undefined });
     }
-    toast({ variant: "success", title: roundTrip ? "2 trips logged" : "Trip logged" });
-    setShowAddTripDrawer(false);
   }
 
   if (!activeCompany) {
