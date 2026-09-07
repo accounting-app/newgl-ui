@@ -14,7 +14,7 @@ import { createClient } from "@/lib/supabase/client";
 // items so aren't in either constants list, added here explicitly; the
 // rest comes straight from ALL_APPS_CATEGORIES + SETTINGS_GROUPS
 // (UI_DESIGN_SYSTEM_PLAN.md Part 3) rather than a separately-maintained copy.
-const NAV_PILLS: AppNavItem[] = [
+const RAW_NAV_PILLS: AppNavItem[] = [
   { label: "Register", href: "/register", icon: Wallet },
   { label: "Reports", href: "/reports", icon: BookOpen },
   // Locked items/categories (QBO features we don't have -- see apps.ts)
@@ -23,6 +23,19 @@ const NAV_PILLS: AppNavItem[] = [
   ...ALL_APPS_CATEGORIES.filter((category) => !category.locked).flatMap((category) => category.items.filter((item) => !item.locked)),
   ...SETTINGS_GROUPS.flatMap((group) => group.items)
 ];
+
+// A destination can be linked from more than one category now (e.g.
+// Contractors under both Expenses & Bills and Team, same as QBO itself
+// does) -- that's fine for the "All apps" menu, which shows it once per
+// category, but this flat pill row shouldn't show the same destination
+// twice (and it produced a literal duplicate React key when it did).
+// Dedupe by href, keeping the first occurrence's label/icon.
+const seenHrefs = new Set<string>();
+const NAV_PILLS: AppNavItem[] = RAW_NAV_PILLS.filter((item) => {
+  if (seenHrefs.has(item.href)) return false;
+  seenHrefs.add(item.href);
+  return true;
+});
 
 type CreateActionItem = {
   label: string;
