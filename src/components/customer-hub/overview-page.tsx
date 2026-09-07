@@ -12,7 +12,7 @@ import { useSalesData } from "@/components/sales/use-sales-data";
 import { InvoiceFormDrawer } from "@/components/sales/invoice-form-drawer";
 import { EstimateFormDrawer } from "@/components/customer-hub/estimate-form-drawer";
 import { ImportCustomersModal } from "@/components/customer-hub/import-customers-modal";
-import type { Estimate } from "@/lib/local-store/sales-types";
+import type { Estimate } from "@/lib/services/estimates-service";
 import type { Invoice } from "@/lib/services/invoices-service";
 
 function formatMoney(value: number): string {
@@ -67,10 +67,14 @@ export function CustomerHubOverviewPage() {
     }
   }
 
-  function handleSaveEstimate(input: Omit<Estimate, "id" | "createdAt" | "status">) {
-    addEstimate(input);
-    setShowEstimateDrawer(false);
-    toast({ variant: "success", title: "Estimate created" });
+  async function handleSaveEstimate(input: Omit<Estimate, "id" | "createdAt" | "status">) {
+    try {
+      await addEstimate(input);
+      setShowEstimateDrawer(false);
+      toast({ variant: "success", title: "Estimate created" });
+    } catch (err) {
+      toast({ variant: "error", title: "Could not create this estimate", description: err instanceof Error ? err.message : undefined });
+    }
   }
 
   async function handleQuickAddCustomer() {

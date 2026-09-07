@@ -7,7 +7,7 @@ import { InputField } from "@/components/ui/input-field";
 import { NumberField } from "@/components/ui/number-field";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import type { Estimate } from "@/lib/local-store/sales-types";
+import type { Estimate } from "@/lib/services/estimates-service";
 import type { Customer } from "@/lib/services/customers-service";
 import type { ProductOrService } from "@/lib/services/products-services-service";
 

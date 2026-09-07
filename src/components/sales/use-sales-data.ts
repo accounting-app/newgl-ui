@@ -1,13 +1,12 @@
 "use client";
 
-import { useCompany } from "@/lib/company/company-provider";
-import { companyScopedKey, localId, useLocalCollection } from "@/lib/local-store/use-local-collection";
-import type { Estimate } from "@/lib/local-store/sales-types";
 import { useCustomers } from "@/lib/hooks/use-customers";
 import { useProductsServices } from "@/lib/hooks/use-products-services";
 import { useInvoices } from "@/lib/hooks/use-invoices";
+import { useEstimates } from "@/lib/hooks/use-estimates";
 import type { Customer } from "@/lib/services/customers-service";
 import type { CreateInvoiceInput } from "@/lib/services/invoices-service";
+import type { CreateEstimateInput } from "@/lib/services/estimates-service";
 
 /**
  * Shared data for every Sales & Get Paid / Customer Hub screen --
@@ -18,22 +17,16 @@ import type { CreateInvoiceInput } from "@/lib/services/invoices-service";
  * Bills). Customers is the shared entity between the two categories, per
  * QBO_FREE_FEATURES_PLAN.md.
  *
- * Phase 1.5, Steps 6-7: Customers, Products & Services, and Invoices are
- * real now -- Estimates stays local-only until its own step (8), so
- * addEstimate is still a synchronous local write while
- * addCustomer/addCustomerRecord/addProductOrService/addInvoice are real
- * network calls (async).
+ * Phase 1.5, Steps 6-8: every entity here is real now -- Customers,
+ * Products & Services, Invoices, and Estimates all go through their own
+ * API-backed hook, so every add/update/remove below is a real network
+ * call (async).
  */
 export function useSalesData() {
-  const { activeCompany } = useCompany();
-  const estimatesKey = activeCompany ? companyScopedKey(activeCompany.name, "estimates") : null;
-
   const { items: customers, hydrated: customersHydrated, add: addCustomerRaw, update: updateCustomer, remove: removeCustomer } = useCustomers();
   const { items: productsServices, hydrated: productsHydrated, add: addProductRaw, update: updateProduct, remove: removeProduct } = useProductsServices();
   const { items: invoices, hydrated: invoicesHydrated, add: addInvoiceRaw, update: updateInvoice, pay: payInvoice, remove: removeInvoice } = useInvoices();
-  const { items: estimates, hydrated: estimatesHydrated, add: addEstimateRaw, update: updateEstimate, remove: removeEstimate } = useLocalCollection<Estimate>(
-    estimatesKey ?? "newgl:phase1:pending:estimates"
-  );
+  const { items: estimates, hydrated: estimatesHydrated, add: addEstimateRaw, update: updateEstimate, remove: removeEstimate } = useEstimates();
 
   /** Full customer record -- the "New customer" form on the Customers screen. */
   async function addCustomerRecord(input: Omit<Customer, "id" | "createdAt" | "status">): Promise<Customer> {
@@ -54,8 +47,8 @@ export function useSalesData() {
     await addProductRaw(input);
   }
 
-  function addEstimate(input: Omit<Estimate, "id" | "createdAt" | "status">) {
-    addEstimateRaw({ id: localId(), createdAt: new Date().toISOString(), status: "OPEN", ...input });
+  async function addEstimate(input: CreateEstimateInput) {
+    return addEstimateRaw(input);
   }
 
   return {
