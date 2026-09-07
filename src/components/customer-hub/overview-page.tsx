@@ -12,7 +12,8 @@ import { useSalesData } from "@/components/sales/use-sales-data";
 import { InvoiceFormDrawer } from "@/components/sales/invoice-form-drawer";
 import { EstimateFormDrawer } from "@/components/customer-hub/estimate-form-drawer";
 import { ImportCustomersModal } from "@/components/customer-hub/import-customers-modal";
-import type { Estimate, Invoice } from "@/lib/local-store/sales-types";
+import type { Estimate } from "@/lib/local-store/sales-types";
+import type { Invoice } from "@/lib/services/invoices-service";
 
 function formatMoney(value: number): string {
   return value.toLocaleString("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -56,10 +57,14 @@ export function CustomerHubOverviewPage() {
   const overdueTotal = useMemo(() => overdueInvoices.reduce((sum, i) => sum + i.amount, 0), [overdueInvoices]);
   const unpaidInvoices = useMemo(() => invoices.filter((i) => i.status === "OPEN"), [invoices]);
 
-  function handleSaveInvoice(input: Omit<Invoice, "id" | "createdAt" | "status">) {
-    addInvoice(input);
-    setShowInvoiceDrawer(false);
-    toast({ variant: "success", title: "Invoice created" });
+  async function handleSaveInvoice(input: Omit<Invoice, "id" | "createdAt" | "status">) {
+    try {
+      await addInvoice(input);
+      setShowInvoiceDrawer(false);
+      toast({ variant: "success", title: "Invoice created" });
+    } catch (err) {
+      toast({ variant: "error", title: "Could not create this invoice", description: err instanceof Error ? err.message : undefined });
+    }
   }
 
   function handleSaveEstimate(input: Omit<Estimate, "id" | "createdAt" | "status">) {

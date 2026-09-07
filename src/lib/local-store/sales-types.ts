@@ -4,11 +4,13 @@
 // calls later is a contained change per screen. Real payment collection
 // (QBO's own "QuickBooks Payments") and payouts need a real payments
 // processor integration this app doesn't have, so those stay UI-only/
-// honestly disabled -- see each screen's own comment. Customer and
-// ProductOrService are no longer here -- both are real now (Phase 1.5,
-// Step 6), see @/lib/services/customers-service + @/lib/hooks/use-customers
-// and @/lib/services/products-services-service +
-// @/lib/hooks/use-products-services.
+// honestly disabled -- see each screen's own comment. Customer,
+// ProductOrService, and Invoice are no longer here -- all three are real
+// now (Phase 1.5, Steps 6-7), see @/lib/services/customers-service +
+// @/lib/hooks/use-customers, @/lib/services/products-services-service +
+// @/lib/hooks/use-products-services, and @/lib/services/invoices-service +
+// @/lib/hooks/use-invoices. Estimate stays local-only, its own step
+// later.
 
 export type EstimateStatus = "OPEN" | "ACCEPTED" | "DECLINED";
 
@@ -24,22 +26,5 @@ export type Estimate = {
   productServiceId?: string;
   memo?: string;
   status: EstimateStatus;
-  createdAt: string;
-};
-
-export type InvoiceStatus = "DRAFT" | "OPEN" | "PAID";
-
-export type Invoice = {
-  id: string;
-  customerId: string;
-  invoiceNumber?: string;
-  invoiceDate: string;
-  dueDate: string;
-  amount: number;
-  /** Single default item/category -- same one-category-per-record
-   * simplification as Bill.categoryAccountId. */
-  productServiceId?: string;
-  memo?: string;
-  status: InvoiceStatus;
   createdAt: string;
 };

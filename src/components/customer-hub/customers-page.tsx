@@ -13,7 +13,7 @@ import { companyScopedKey, usePersistedJSON } from "@/lib/local-store/use-local-
 import { InvoiceFormDrawer } from "@/components/sales/invoice-form-drawer";
 import { useSalesData } from "@/components/sales/use-sales-data";
 import { ImportCustomersModal } from "@/components/customer-hub/import-customers-modal";
-import type { Invoice } from "@/lib/local-store/sales-types";
+import type { Invoice } from "@/lib/services/invoices-service";
 
 function formatMoney(value: number): string {
   return value.toLocaleString("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -168,10 +168,14 @@ export function CustomersPage() {
     }
   }
 
-  function handleSaveInvoice(input: Omit<Invoice, "id" | "createdAt" | "status">) {
-    addInvoice(input);
-    setInvoiceDrawerFor(null);
-    toast({ variant: "success", title: "Invoice created" });
+  async function handleSaveInvoice(input: Omit<Invoice, "id" | "createdAt" | "status">) {
+    try {
+      await addInvoice(input);
+      setInvoiceDrawerFor(null);
+      toast({ variant: "success", title: "Invoice created" });
+    } catch (err) {
+      toast({ variant: "error", title: "Could not create this invoice", description: err instanceof Error ? err.message : undefined });
+    }
   }
 
   if (!activeCompany) {

@@ -5,7 +5,7 @@ import { FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toast/toast-context";
 import { useCompany } from "@/lib/company/company-provider";
-import type { Invoice } from "@/lib/local-store/sales-types";
+import type { Invoice } from "@/lib/services/invoices-service";
 import { InvoiceFormDrawer } from "@/components/sales/invoice-form-drawer";
 import { useSalesData } from "@/components/sales/use-sales-data";
 
@@ -28,10 +28,14 @@ export function SalesTransactionsPage() {
   const customerNameById = useMemo(() => new Map(customers.map((c) => [c.id, c.name])), [customers]);
   const sorted = useMemo(() => [...invoices].sort((a, b) => b.invoiceDate.localeCompare(a.invoiceDate)), [invoices]);
 
-  function handleSaveInvoice(input: Omit<Invoice, "id" | "createdAt" | "status">) {
-    addInvoice(input);
-    setShowInvoiceDrawer(false);
-    toast({ variant: "success", title: "Invoice created" });
+  async function handleSaveInvoice(input: Omit<Invoice, "id" | "createdAt" | "status">) {
+    try {
+      await addInvoice(input);
+      setShowInvoiceDrawer(false);
+      toast({ variant: "success", title: "Invoice created" });
+    } catch (err) {
+      toast({ variant: "error", title: "Could not create this invoice", description: err instanceof Error ? err.message : undefined });
+    }
   }
 
   if (!activeCompany) {

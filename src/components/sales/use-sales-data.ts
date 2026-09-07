@@ -2,10 +2,12 @@
 
 import { useCompany } from "@/lib/company/company-provider";
 import { companyScopedKey, localId, useLocalCollection } from "@/lib/local-store/use-local-collection";
-import type { Estimate, Invoice } from "@/lib/local-store/sales-types";
+import type { Estimate } from "@/lib/local-store/sales-types";
 import { useCustomers } from "@/lib/hooks/use-customers";
 import { useProductsServices } from "@/lib/hooks/use-products-services";
+import { useInvoices } from "@/lib/hooks/use-invoices";
 import type { Customer } from "@/lib/services/customers-service";
+import type { CreateInvoiceInput } from "@/lib/services/invoices-service";
 
 /**
  * Shared data for every Sales & Get Paid / Customer Hub screen --
@@ -16,23 +18,19 @@ import type { Customer } from "@/lib/services/customers-service";
  * Bills). Customers is the shared entity between the two categories, per
  * QBO_FREE_FEATURES_PLAN.md.
  *
- * Phase 1.5, Step 6: Customers and Products & Services are real now (see
- * @/lib/hooks/use-customers and @/lib/hooks/use-products-services) --
- * Invoices and Estimates stay local-only until their own steps (7-8), so
- * addCustomer/addCustomerRecord/addProductOrService are real network
- * calls (async) while addInvoice/addEstimate are still synchronous local
- * writes.
+ * Phase 1.5, Steps 6-7: Customers, Products & Services, and Invoices are
+ * real now -- Estimates stays local-only until its own step (8), so
+ * addEstimate is still a synchronous local write while
+ * addCustomer/addCustomerRecord/addProductOrService/addInvoice are real
+ * network calls (async).
  */
 export function useSalesData() {
   const { activeCompany } = useCompany();
-  const invoicesKey = activeCompany ? companyScopedKey(activeCompany.name, "invoices") : null;
   const estimatesKey = activeCompany ? companyScopedKey(activeCompany.name, "estimates") : null;
 
   const { items: customers, hydrated: customersHydrated, add: addCustomerRaw, update: updateCustomer, remove: removeCustomer } = useCustomers();
   const { items: productsServices, hydrated: productsHydrated, add: addProductRaw, update: updateProduct, remove: removeProduct } = useProductsServices();
-  const { items: invoices, hydrated: invoicesHydrated, add: addInvoiceRaw, update: updateInvoice, remove: removeInvoice } = useLocalCollection<Invoice>(
-    invoicesKey ?? "newgl:phase1:pending:invoices"
-  );
+  const { items: invoices, hydrated: invoicesHydrated, add: addInvoiceRaw, update: updateInvoice, pay: payInvoice, remove: removeInvoice } = useInvoices();
   const { items: estimates, hydrated: estimatesHydrated, add: addEstimateRaw, update: updateEstimate, remove: removeEstimate } = useLocalCollection<Estimate>(
     estimatesKey ?? "newgl:phase1:pending:estimates"
   );
@@ -48,8 +46,8 @@ export function useSalesData() {
     return created.id;
   }
 
-  function addInvoice(input: Omit<Invoice, "id" | "createdAt" | "status">) {
-    addInvoiceRaw({ id: localId(), createdAt: new Date().toISOString(), status: "OPEN", ...input });
+  async function addInvoice(input: CreateInvoiceInput) {
+    return addInvoiceRaw(input);
   }
 
   async function addProductOrService(input: Parameters<typeof addProductRaw>[0]) {
@@ -72,6 +70,7 @@ export function useSalesData() {
     removeCustomer,
     addInvoice,
     updateInvoice,
+    payInvoice,
     removeInvoice,
     addProductOrService,
     updateProduct,
