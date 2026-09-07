@@ -7,19 +7,19 @@ import { Card } from "@/components/ui/card";
 import { InputField } from "@/components/ui/input-field";
 import { useToast } from "@/components/ui/toast/toast-context";
 import { useCompany } from "@/lib/company/company-provider";
-import { companyScopedKey, localId, useLocalCollection } from "@/lib/local-store/use-local-collection";
-import type { Employee } from "@/lib/local-store/team-types";
+import { useEmployees } from "@/lib/hooks/use-employees";
+import type { Employee } from "@/lib/services/employees-service";
 
-// Phase 1: a real local employee roster/directory -- name, role, contact
-// info, hire date. No pay rate, no paychecks, nothing payroll-shaped,
-// since there's no Payroll behind this (out of scope, see
+// Phase 1.5, Step 9 (final step): a real employee roster/directory --
+// name, role, contact info, hire date. No pay rate, no paychecks,
+// nothing payroll-shaped, since there's no Payroll behind this (out of
+// scope, see @/lib/hooks/use-employees and
 // QBO_FREE_FEATURES_PLAN.md). Matches the reference's "Tell us about your
 // team" first-run screen until at least one employee exists.
 export function EmployeesPage() {
   const { activeCompany } = useCompany();
   const { toast } = useToast();
-  const employeesKey = activeCompany ? companyScopedKey(activeCompany.name, "employees") : null;
-  const { items: employees, hydrated, add, update } = useLocalCollection<Employee>(employeesKey ?? "newgl:phase1:pending:employees");
+  const { items: employees, hydrated, add, update } = useEmployees();
 
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -51,7 +51,7 @@ export function EmployeesPage() {
     setShowForm(true);
   }
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!name.trim()) return;
     const patch = {
@@ -61,19 +61,27 @@ export function EmployeesPage() {
       phone: phone.trim() || undefined,
       hireDate: hireDate || undefined
     };
-    if (editingId) {
-      update(editingId, patch);
-      toast({ variant: "success", title: "Employee updated" });
-    } else {
-      add({ id: localId(), status: "ACTIVE", createdAt: new Date().toISOString(), ...patch });
-      toast({ variant: "success", title: "Employee added" });
+    try {
+      if (editingId) {
+        await update(editingId, patch);
+        toast({ variant: "success", title: "Employee updated" });
+      } else {
+        await add(patch);
+        toast({ variant: "success", title: "Employee added" });
+      }
+      resetForm();
+    } catch (err) {
+      toast({ variant: "error", title: editingId ? "Could not update this employee" : "Could not add this employee", description: err instanceof Error ? err.message : undefined });
     }
-    resetForm();
   }
 
-  function handleMakeInactive(employee: Employee) {
-    update(employee.id, { status: "ARCHIVED" });
-    toast({ variant: "success", title: "Employee made inactive" });
+  async function handleMakeInactive(employee: Employee) {
+    try {
+      await update(employee.id, { status: "ARCHIVED" });
+      toast({ variant: "success", title: "Employee made inactive" });
+    } catch (err) {
+      toast({ variant: "error", title: "Could not update this employee", description: err instanceof Error ? err.message : undefined });
+    }
   }
 
   if (!activeCompany) {
@@ -104,7 +112,7 @@ export function EmployeesPage() {
       </div>
 
       {showForm ? (
-        <Card title={editingId ? "Edit employee" : "Add an employee"} description="Not backed by a server yet -- saved to this browser only." className="mb-4">
+        <Card title={editingId ? "Edit employee" : "Add an employee"} className="mb-4">
           <form onSubmit={handleSubmit} className="flex flex-wrap items-end gap-3">
             <div className="min-w-[180px] flex-1">
               <InputField label="Name" placeholder="e.g. Jordan Lee" value={name} onChange={(e) => setName(e.target.value)} />
