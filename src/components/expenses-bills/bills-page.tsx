@@ -89,7 +89,7 @@ export function BillsPage() {
 
   const [tab, setTab] = useState<BillStatus>("DRAFT");
   const tabCounts = useMemo(() => Object.fromEntries(TABS.map((s) => [s, bills.filter((b) => b.status === s).length])), [bills]);
-  const openBillCount = tabCounts.OPEN ?? 0;
+  const openBills = useMemo(() => bills.filter((b) => b.status === "OPEN"), [bills]);
 
   const [filterOpen, setFilterOpen] = useState(false);
   const filterRef = useRef<HTMLDivElement>(null);
@@ -649,8 +649,10 @@ export function BillsPage() {
 
       {showPayBills ? (
         <PayBillsModal
+          bills={openBills}
+          vendorNameById={vendorNameById}
           accounts={accounts}
-          openBillCount={openBillCount}
+          onPay={pay}
           onEnterNewBill={() => {
             setShowPayBills(false);
             setShowNewBillModal(true);

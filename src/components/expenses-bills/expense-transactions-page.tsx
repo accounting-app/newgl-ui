@@ -124,8 +124,9 @@ export function ExpenseTransactionsPage() {
     else addTagRow({ id: transactionId, vendorId });
   }
 
-  const { items: bills } = useBills();
-  const openBillCount = useMemo(() => bills.filter((b) => b.status === "OPEN").length, [bills]);
+  const { items: bills, pay: payBill } = useBills();
+  const openBills = useMemo(() => bills.filter((b) => b.status === "OPEN"), [bills]);
+  const vendorNameById = useMemo(() => new Map(vendors.map((v) => [v.id, v.name])), [vendors]);
 
   // -- Toolbar: transaction-type filter, date range, real Filter panel --
   const [typeFilter, setTypeFilter] = useState("");
@@ -483,8 +484,10 @@ export function ExpenseTransactionsPage() {
       ) : null}
       {showPayBills ? (
         <PayBillsModal
+          bills={openBills}
+          vendorNameById={vendorNameById}
           accounts={accounts}
-          openBillCount={openBillCount}
+          onPay={payBill}
           onEnterNewBill={() => {
             setShowPayBills(false);
             setActiveFormType("BILL");
