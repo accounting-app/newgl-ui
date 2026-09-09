@@ -92,7 +92,8 @@ export function InvoicesPage() {
               <li className="flex items-start gap-2">
                 <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--color-positive)]" />
                 <span>
-                  <span className="font-medium text-[var(--color-text-global)]">Create invoices in seconds</span> from customers and items you&apos;ve already saved
+                  <span className="font-medium text-[var(--color-text-global)]">Create invoices in seconds</span>{" "}
+                  from customers and items you&apos;ve already saved
                 </span>
               </li>
               <li className="flex items-start gap-2">
@@ -104,7 +105,8 @@ export function InvoicesPage() {
               <li className="flex items-start gap-2">
                 <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--color-positive)]" />
                 <span>
-                  <span className="font-medium text-[var(--color-text-global)]">Mark invoices paid</span> once the money&apos;s in hand
+                  <span className="font-medium text-[var(--color-text-global)]">Mark invoices paid</span>{" "}
+                  once the money&apos;s in hand
                 </span>
               </li>
             </ul>

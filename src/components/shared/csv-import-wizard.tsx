@@ -176,7 +176,8 @@ export function CsvImportWizard<TCreated>({
               <li>The top row of your file must contain a header title for each column of information</li>
               {requiredField ? (
                 <li>
-                  <span className="font-semibold">{requiredField.label}</span> is the only required field
+                  <span className="font-semibold">{requiredField.label}</span>{" "}
+                  is the only required field
                 </li>
               ) : null}
             </ul>
@@ -248,7 +249,7 @@ export function CsvImportWizard<TCreated>({
                 <CheckCircle2 className="h-7 w-7" aria-hidden="true" />
               </span>
               <p className="text-lg font-semibold text-[var(--color-text-global)]">
-                {succeededCount} {entityNamePlural} imported{failedCount > 0 ? `, ${failedCount} skipped` : ""}
+                {succeededCount} {succeededCount === 1 ? entityNamePlural.replace(/s$/, "") : entityNamePlural} imported{failedCount > 0 ? `, ${failedCount} skipped` : ""}
               </p>
               {failedCount > 0 ? (
                 <div className="w-full rounded-lg border border-[var(--color-divider-tertiary)] text-left">

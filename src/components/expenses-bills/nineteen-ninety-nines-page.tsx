@@ -351,11 +351,17 @@ function RecipientsTab({
                     <Checkbox
                       label={vendor.w9Received ? "Received" : "Missing"}
                       checked={vendor.w9Received}
-                      onChange={(e) =>
-                        updateVendor(vendor.id, { w9Received: e.target.checked })
-                          .then(() => toast({ variant: "success", title: e.target.checked ? "W-9 marked received" : "W-9 marked missing" }))
-                          .catch((err) => toast({ variant: "error", title: "Could not update W-9 status", description: err instanceof Error ? err.message : undefined }))
-                      }
+                      onChange={(e) => {
+                        // Capture the target value now -- by the time the PATCH
+                        // resolves, React has already reverted this controlled
+                        // checkbox's DOM `checked` back to the pre-click prop
+                        // value, so re-reading e.target.checked inside .then()
+                        // reports the opposite of what was actually just sent.
+                        const nextReceived = e.target.checked;
+                        updateVendor(vendor.id, { w9Received: nextReceived })
+                          .then(() => toast({ variant: "success", title: nextReceived ? "W-9 marked received" : "W-9 marked missing" }))
+                          .catch((err) => toast({ variant: "error", title: "Could not update W-9 status", description: err instanceof Error ? err.message : undefined }));
+                      }}
                     />
                   </td>
                   <td className="border-l border-l-dotted border-l-[var(--color-divider-tertiary)] p-2 align-top text-right text-[13px]">

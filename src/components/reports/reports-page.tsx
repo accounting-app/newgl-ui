@@ -320,7 +320,11 @@ function computeProfitAndLoss(
 type BSTotals = {
   bankAccounts: { name: string; amount: number }[];
   totalBankAccounts: number;
+  otherCurrentAssets: { name: string; amount: number }[];
+  totalOtherCurrentAssets: number;
   totalCurrentAssets: number;
+  fixedAssets: { name: string; amount: number }[];
+  totalFixedAssets: number;
   totalAssets: number;
   liabilities: { name: string; amount: number }[];
   totalLiabilities: number;
@@ -356,13 +360,27 @@ function computeBalanceSheet(
       .sort((a, b) => a.name.localeCompare(b.name));
 
   const bankAccounts = byCategory(new Set(["BANK"]));
+  // Accounts Receivable and Other Current Assets shown as their own rows --
+  // otherwise their balance is silently folded into "Total for Current
+  // Assets" with no line item to explain it (e.g. once Invoices/Bills post
+  // real AR/AP, as of Phase 1.5 Steps 3 & 7).
+  const otherCurrentAssets = byCategory(new Set(["ACCOUNTS_RECEIVABLE", "OTHER_CURRENT_ASSET"]));
   const currentAssets = byCategory(new Set(["BANK", "ACCOUNTS_RECEIVABLE", "OTHER_CURRENT_ASSET"]));
-  const liabilities = byCategory(new Set(["CREDIT_CARD", "LONG_TERM_LIABILITY", "OTHER_CURRENT_LIABILITY"]));
+  // FIXED_ASSET is a distinct top-level section (Equipment, Vehicles, ...),
+  // not part of Current Assets -- also previously missing entirely, same
+  // "silently drop a whole category" bug as Accounts Payable below.
+  const fixedAssets = byCategory(new Set(["FIXED_ASSET"]));
+  // ACCOUNTS_PAYABLE must be included here -- without it, a company with any
+  // unpaid bill has a Balance Sheet where Assets != Liabilities + Equity,
+  // which should never happen in double-entry accounting.
+  const liabilities = byCategory(new Set(["ACCOUNTS_PAYABLE", "CREDIT_CARD", "LONG_TERM_LIABILITY", "OTHER_CURRENT_LIABILITY"]));
   const equityRows = byCategory(new Set(["EQUITY"]));
 
   const totalBankAccounts = bankAccounts.reduce((s, r) => s + r.amount, 0);
+  const totalOtherCurrentAssets = otherCurrentAssets.reduce((s, r) => s + r.amount, 0);
   const totalCurrentAssets = currentAssets.reduce((s, r) => s + r.amount, 0);
-  const totalAssets = totalCurrentAssets;
+  const totalFixedAssets = fixedAssets.reduce((s, r) => s + r.amount, 0);
+  const totalAssets = totalCurrentAssets + totalFixedAssets;
   const totalLiabilities = liabilities.reduce((s, r) => s + r.amount, 0);
   const totalEquityWithoutNetIncome = equityRows.reduce((s, r) => s + r.amount, 0);
   const netIncome = computeNetIncome(postings, accountById, netIncomeFrom, resolvedAsOf);
@@ -372,7 +390,11 @@ function computeBalanceSheet(
   return {
     bankAccounts,
     totalBankAccounts,
+    otherCurrentAssets,
+    totalOtherCurrentAssets,
     totalCurrentAssets,
+    fixedAssets,
+    totalFixedAssets,
     totalAssets,
     liabilities,
     totalLiabilities,
@@ -738,10 +760,14 @@ function ReportsPageInner({ reportType }: ReportsPageProps) {
         columns,
         columnLabels,
         bankAccounts: buildHierarchyRowsMulti(bsColumnarPeriods.map((p) => p.data.bankAccounts)),
+        otherCurrentAssets: buildHierarchyRowsMulti(bsColumnarPeriods.map((p) => p.data.otherCurrentAssets)),
+        fixedAssets: buildHierarchyRowsMulti(bsColumnarPeriods.map((p) => p.data.fixedAssets)),
         liabilities: buildHierarchyRowsMulti(bsColumnarPeriods.map((p) => p.data.liabilities)),
         equityRows: buildHierarchyRowsMulti(bsColumnarPeriods.map((p) => p.data.equityRows)),
         totalBankAccounts: bsColumnarPeriods.map((p) => p.data.totalBankAccounts),
+        totalOtherCurrentAssets: bsColumnarPeriods.map((p) => p.data.totalOtherCurrentAssets),
         totalCurrentAssets: bsColumnarPeriods.map((p) => p.data.totalCurrentAssets),
+        totalFixedAssets: bsColumnarPeriods.map((p) => p.data.totalFixedAssets),
         totalAssets: bsColumnarPeriods.map((p) => p.data.totalAssets),
         totalLiabilities: bsColumnarPeriods.map((p) => p.data.totalLiabilities),
         totalEquity: bsColumnarPeriods.map((p) => p.data.totalEquity),
@@ -764,10 +790,16 @@ function ReportsPageInner({ reportType }: ReportsPageProps) {
         columns,
         columnLabels,
         bankAccounts: rowsWithChange(buildHierarchyRowsMulti([balanceSheetData.bankAccounts, bsCompareData.bankAccounts])),
+        otherCurrentAssets: rowsWithChange(
+          buildHierarchyRowsMulti([balanceSheetData.otherCurrentAssets, bsCompareData.otherCurrentAssets])
+        ),
+        fixedAssets: rowsWithChange(buildHierarchyRowsMulti([balanceSheetData.fixedAssets, bsCompareData.fixedAssets])),
         liabilities: rowsWithChange(buildHierarchyRowsMulti([balanceSheetData.liabilities, bsCompareData.liabilities])),
         equityRows: rowsWithChange(buildHierarchyRowsMulti([balanceSheetData.equityRows, bsCompareData.equityRows])),
         totalBankAccounts: withChange(balanceSheetData.totalBankAccounts, bsCompareData.totalBankAccounts),
+        totalOtherCurrentAssets: withChange(balanceSheetData.totalOtherCurrentAssets, bsCompareData.totalOtherCurrentAssets),
         totalCurrentAssets: withChange(balanceSheetData.totalCurrentAssets, bsCompareData.totalCurrentAssets),
+        totalFixedAssets: withChange(balanceSheetData.totalFixedAssets, bsCompareData.totalFixedAssets),
         totalAssets: withChange(balanceSheetData.totalAssets, bsCompareData.totalAssets),
         totalLiabilities: withChange(balanceSheetData.totalLiabilities, bsCompareData.totalLiabilities),
         totalEquity: withChange(balanceSheetData.totalEquity, bsCompareData.totalEquity),
@@ -783,10 +815,14 @@ function ReportsPageInner({ reportType }: ReportsPageProps) {
       columns,
       columnLabels: ["Total"],
       bankAccounts: buildHierarchyRowsMulti([balanceSheetData.bankAccounts]),
+      otherCurrentAssets: buildHierarchyRowsMulti([balanceSheetData.otherCurrentAssets]),
+      fixedAssets: buildHierarchyRowsMulti([balanceSheetData.fixedAssets]),
       liabilities: buildHierarchyRowsMulti([balanceSheetData.liabilities]),
       equityRows: buildHierarchyRowsMulti([balanceSheetData.equityRows]),
       totalBankAccounts: [balanceSheetData.totalBankAccounts],
+      totalOtherCurrentAssets: [balanceSheetData.totalOtherCurrentAssets],
       totalCurrentAssets: [balanceSheetData.totalCurrentAssets],
+      totalFixedAssets: [balanceSheetData.totalFixedAssets],
       totalAssets: [balanceSheetData.totalAssets],
       totalLiabilities: [balanceSheetData.totalLiabilities],
       totalEquity: [balanceSheetData.totalEquity],
@@ -1136,10 +1172,50 @@ function ReportsPageInner({ reportType }: ReportsPageProps) {
                   <td className="px-6 py-1 font-semibold text-[var(--color-text-primary)]">Total for Bank Accounts</td>
                   <ReportValueCells values={bsReport.totalBankAccounts} columns={bsReport.columns} />
                 </tr>
+                <ReportAccountRows
+                  rows={bsReport.otherCurrentAssets}
+                  columns={bsReport.columns}
+                  collapsedNames={collapsedAccounts}
+                  rowKeyPrefix="other-current-asset"
+                  baseIndentRem={2}
+                  onToggleCollapse={toggleAccountCollapse}
+                  onDrillAmount={() => setDrillSection({
+                    label: "Other Current Assets",
+                    reportLabel,
+                    rows: balanceSheetData.otherCurrentAssets,
+                    total: balanceSheetData.totalOtherCurrentAssets,
+                  })}
+                />
                 <tr className="border-b border-[var(--color-container-background-secondary)]">
                   <td className="px-4 py-1 font-semibold text-[var(--color-text-primary)]">Total for Current Assets</td>
                   <ReportValueCells values={bsReport.totalCurrentAssets} columns={bsReport.columns} />
                 </tr>
+                {bsReport.fixedAssets.length > 0 ? (
+                  <>
+                    <tr className="border-b border-[var(--color-container-background-secondary)]">
+                      <td className="px-4 py-1 font-medium text-[var(--color-text-primary)]">Fixed Assets</td>
+                      <td colSpan={bsReport.columns.length} />
+                    </tr>
+                    <ReportAccountRows
+                      rows={bsReport.fixedAssets}
+                      columns={bsReport.columns}
+                      collapsedNames={collapsedAccounts}
+                      rowKeyPrefix="fixed-asset"
+                      baseIndentRem={2}
+                      onToggleCollapse={toggleAccountCollapse}
+                      onDrillAmount={() => setDrillSection({
+                        label: "Fixed Assets",
+                        reportLabel,
+                        rows: balanceSheetData.fixedAssets,
+                        total: balanceSheetData.totalFixedAssets,
+                      })}
+                    />
+                    <tr className="border-b border-[var(--color-container-background-secondary)]">
+                      <td className="px-4 py-1 font-semibold text-[var(--color-text-primary)]">Total for Fixed Assets</td>
+                      <ReportValueCells values={bsReport.totalFixedAssets} columns={bsReport.columns} />
+                    </tr>
+                  </>
+                ) : null}
                 <tr className="border-b border-[var(--color-divider-tertiary)]">
                   <td className="px-3 py-1 font-semibold text-[var(--color-text-primary)]">Total for Assets</td>
                   <ReportValueCells values={bsReport.totalAssets} columns={bsReport.columns} />

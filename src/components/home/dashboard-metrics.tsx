@@ -329,14 +329,14 @@ export function DashboardMetrics() {
           <div className="flex flex-wrap items-center gap-x-8 gap-y-2">
             {overdueAR > 0.005 ? (
               <p className="text-sm text-[var(--color-text-primary)]">
-                <span className="font-semibold text-[var(--color-text-global)]">{formatMoney(overdueAR)}</span> in
-                overdue receivables
+                <span className="font-semibold text-[var(--color-text-global)]">{formatMoney(overdueAR)}</span>{" "}
+                in overdue receivables
               </p>
             ) : null}
             {overdueAP > 0.005 ? (
               <p className="text-sm text-[var(--color-text-primary)]">
-                <span className="font-semibold text-[var(--color-text-global)]">{formatMoney(overdueAP)}</span> in
-                overdue payables
+                <span className="font-semibold text-[var(--color-text-global)]">{formatMoney(overdueAP)}</span>{" "}
+                in overdue payables
               </p>
             ) : null}
             <Link href="/reports/aging" className="ml-auto text-xs text-[var(--color-link-action)] hover:underline">
