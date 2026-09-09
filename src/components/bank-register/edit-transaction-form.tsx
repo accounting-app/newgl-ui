@@ -21,6 +21,7 @@ type EditTransactionFormProps = {
   onEditorChange: (field: keyof InlineEntryEditorInput, value: string) => void;
   onReconcileCycle: () => void;
   onOpenPayeeModal: () => void;
+  onOpenAccountModal: () => void;
   onDelete: () => void;
   onCancel: () => void;
   onSave: () => void;
@@ -39,6 +40,7 @@ export function EditTransactionForm({
   onEditorChange,
   onReconcileCycle,
   onOpenPayeeModal,
+  onOpenAccountModal,
   onDelete,
   onCancel,
   onSave
@@ -84,6 +86,7 @@ export function EditTransactionForm({
                   onChange={(value) => onEditorChange("accountTypeId", value)}
                   allowCustomValue={false}
                   disabled={locked}
+                  onAddNew={locked ? undefined : onOpenAccountModal}
                 />
               </td>
               <td className="form-control">

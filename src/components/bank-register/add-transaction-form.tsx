@@ -27,6 +27,7 @@ type AddTransactionFormProps = {
   onDraftCancel: () => void;
   onReconcileCycle: () => void;
   onOpenPayeeModal: () => void;
+  onOpenAccountModal: () => void;
   isSplitMode: boolean;
   draftSplits: DraftSplitLine[];
   onToggleSplitMode: () => void;
@@ -49,6 +50,7 @@ export function AddTransactionForm({
   onDraftCancel,
   onReconcileCycle,
   onOpenPayeeModal,
+  onOpenAccountModal,
   isSplitMode,
   draftSplits,
   onToggleSplitMode,
@@ -106,6 +108,7 @@ export function AddTransactionForm({
                     onChange={(value) => onDraftFieldChange("accountTypeId", value)}
                     disabled={isDraftAccountFieldDisabled}
                     allowCustomValue={false}
+                    onAddNew={isDraftAccountFieldDisabled ? undefined : onOpenAccountModal}
                   />
                 )}
                 {canSplit ? (

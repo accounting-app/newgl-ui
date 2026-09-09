@@ -15,6 +15,7 @@ import { ACCOUNT_ROOT_GROUPS } from "@/modules/accounting/domain/accounting-repo
 import { getServiceContainer } from "@/lib/services/service-container-v2";
 import { buildRollupHierarchyRows, filterCollapsed } from "@/lib/accounting/account-hierarchy";
 import type { HierarchyRow } from "@/lib/accounting/account-hierarchy";
+import { nextAccountCode } from "@/lib/accounting/next-account-code";
 import type { Account } from "@/modules/accounting/domain/models";
 import { AccountRegisterView } from "@/components/settings/account-register-view";
 
@@ -30,15 +31,6 @@ function formatMoney(value: number): string {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2
   });
-}
-
-/** Next code in the shared incrementing sequence every seeded account already uses (1000, 1010, 1020, ...). */
-function nextAccountCode(accounts: Account[]): string {
-  const highest = accounts.reduce((max, account) => {
-    const numeric = Number(account.code);
-    return Number.isFinite(numeric) && numeric > max ? numeric : max;
-  }, 990);
-  return String(highest + 10);
 }
 
 export function ChartOfAccountsPage() {
