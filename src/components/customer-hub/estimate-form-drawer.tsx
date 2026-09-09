@@ -42,6 +42,15 @@ export function EstimateFormDrawer({
   const customerOptions = customers.map((c) => ({ value: c.id, label: c.name }));
   const productOptions = productsServices.map((p) => ({ value: p.id, label: p.name, rightLabel: p.type === "SERVICE" ? "Service" : "Product" }));
 
+  /** Picking a saved item fills in its sales price -- same as InvoiceFormDrawer; Amount stays editable after. */
+  function handleProductServiceChange(nextProductServiceId: string) {
+    setProductServiceId(nextProductServiceId);
+    const selected = productsServices.find((p) => p.id === nextProductServiceId);
+    if (selected?.salesPrice != null) {
+      setAmount(String(selected.salesPrice));
+    }
+  }
+
   async function resolveCustomerId(): Promise<string | null> {
     if (customers.some((c) => c.id === customerId)) return customerId;
     const name = customerId.trim();
@@ -100,7 +109,7 @@ export function EstimateFormDrawer({
             </div>
           </div>
           <InputField label="Estimate # (optional)" placeholder="EST-1001" value={estimateNumber} onChange={(e) => setEstimateNumber(e.target.value)} />
-          <Select label="Product/Service (optional)" value={productServiceId} onChange={setProductServiceId} options={productOptions} placeholder="None" allowCustomValue={false} />
+          <Select label="Product/Service (optional)" value={productServiceId} onChange={handleProductServiceChange} options={productOptions} placeholder="None" allowCustomValue={false} />
           <NumberField label="Amount" currency placeholder="0.00" value={amount} onChange={(e) => setAmount(e.target.value)} />
           <Textarea label="Memo (optional)" value={memo} onChange={(e) => setMemo(e.target.value)} rows={3} />
         </div>

@@ -11,19 +11,22 @@ import { useToast } from "@/components/ui/toast/toast-context";
 import { useCompany } from "@/lib/company/company-provider";
 import type { ProductServiceType } from "@/lib/services/products-services-service";
 import { useSalesData } from "@/components/sales/use-sales-data";
+import { ImportProductsServicesModal } from "@/components/sales/import-products-services-modal";
 
 function formatMoney(value: number): string {
   return value.toLocaleString("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-// Phase 1.5, Step 6: real Products & Services list. "Import items" matches Vendors'
-// import wizard in spirit but isn't built out yet -- honestly disabled.
+// Phase 1.5, Step 6: real Products & Services list, plus a real "Import
+// items" CSV wizard (thin config of the shared CsvImportWizard, same as
+// Vendors'/Customers').
 export function ProductsServicesPage() {
   const { activeCompany } = useCompany();
   const { toast } = useToast();
   const { productsServices, addProductOrService, removeProduct } = useSalesData();
 
   const [showForm, setShowForm] = useState(false);
+  const [showImport, setShowImport] = useState(false);
   const [name, setName] = useState("");
   const [type, setType] = useState<ProductServiceType>("SERVICE");
   const [salesPrice, setSalesPrice] = useState("");
@@ -86,12 +89,15 @@ export function ProductsServicesPage() {
           </ul>
           <div className="mt-6 flex gap-3">
             <Button onClick={() => setShowForm(true)}>Create items</Button>
-            <button type="button" disabled title="Not available yet" className="cursor-not-allowed rounded-full border border-[var(--color-button-border)] px-5 py-2 text-sm font-medium text-[var(--color-text-disabled)]">
+            <Button variant="secondary" onClick={() => setShowImport(true)}>
               Import items
-            </button>
+            </Button>
           </div>
         </div>
         <Package className="hidden h-28 w-28 shrink-0 text-[var(--color-positive)] lg:block" aria-hidden="true" />
+        {showImport ? (
+          <ImportProductsServicesModal onClose={() => setShowImport(false)} onCreateProduct={addProductOrService} />
+        ) : null}
       </div>
     );
   }
@@ -102,11 +108,12 @@ export function ProductsServicesPage() {
         <h1 className="text-2xl font-semibold text-[var(--color-text-global)]">Products &amp; Services</h1>
         <div className="flex items-center gap-2">
           <Button onClick={() => setShowForm((v) => !v)}>{showForm ? "Cancel" : "Create items"}</Button>
-          <button type="button" disabled title="Not available yet" className="cursor-not-allowed rounded-full border border-[var(--color-button-border)] px-4 py-1.5 text-sm font-medium text-[var(--color-text-disabled)]">
+          <Button variant="secondary" onClick={() => setShowImport(true)}>
             Import items
-          </button>
+          </Button>
         </div>
       </div>
+      {showImport ? <ImportProductsServicesModal onClose={() => setShowImport(false)} onCreateProduct={addProductOrService} /> : null}
 
       {showForm ? (
         <Card title="Add a product or service" className="mb-4">

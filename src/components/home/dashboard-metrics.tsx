@@ -138,7 +138,7 @@ function ChangeBadge({ percent }: ChangeBadgeProps) {
 
 export function DashboardMetrics() {
   const services = useMemo(() => getServiceContainer(), []);
-  const { tenant } = useTenant();
+  const { tenant, loading: tenantLoading } = useTenant();
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [accountsLoading, setAccountsLoading] = useState(true);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -157,6 +157,13 @@ export function DashboardMetrics() {
   // resolves, without waiting on the (typically larger, slower)
   // transactions list the other cards need.
   useEffect(() => {
+    // Wait for TenantProvider's bootstrap to finish, same guard
+    // CompanyProvider uses -- otherwise this fires alongside bootstrap
+    // itself on a brand-new login, and loses the race: the request goes
+    // out before the tenant membership it depends on exists yet, so the
+    // API 403s and the promise rejects unhandled (harmless once bootstrap
+    // catches up on the next load, but a real bug on the very first one).
+    if (tenantLoading || !tenant) return;
     let cancelled = false;
     services.accountService
       .listAccounts()
@@ -169,9 +176,10 @@ export function DashboardMetrics() {
     return () => {
       cancelled = true;
     };
-  }, [services]);
+  }, [services, tenantLoading, tenant]);
 
   useEffect(() => {
+    if (tenantLoading || !tenant) return;
     let cancelled = false;
     services.transactionService
       .listTransactions({ status: "POSTED" })
@@ -184,9 +192,10 @@ export function DashboardMetrics() {
     return () => {
       cancelled = true;
     };
-  }, [services]);
+  }, [services, tenantLoading, tenant]);
 
   useEffect(() => {
+    if (tenantLoading || !tenant) return;
     let cancelled = false;
     request<UsageSummary>(BASE_API_URL, "/ai/usage")
       .catch(() => null)
@@ -199,7 +208,7 @@ export function DashboardMetrics() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [tenantLoading, tenant]);
 
   // Everything except Bank accounts needs both accounts (for
   // categorization) and transactions (for amounts) together, so it waits

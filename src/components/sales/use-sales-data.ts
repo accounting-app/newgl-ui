@@ -44,7 +44,7 @@ export function useSalesData() {
   }
 
   async function addProductOrService(input: Parameters<typeof addProductRaw>[0]) {
-    await addProductRaw(input);
+    return addProductRaw(input);
   }
 
   async function addEstimate(input: CreateEstimateInput) {

@@ -48,6 +48,15 @@ export function InvoiceFormDrawer({
   const customerOptions = customers.map((c) => ({ value: c.id, label: c.name }));
   const productOptions = productsServices.map((p) => ({ value: p.id, label: p.name, rightLabel: p.type === "SERVICE" ? "Service" : "Product" }));
 
+  /** Picking a saved item fills in its sales price -- the whole point of "Reuse saved item details on your next invoice" (still just a starting point: Amount stays editable after). */
+  function handleProductServiceChange(nextProductServiceId: string) {
+    setProductServiceId(nextProductServiceId);
+    const selected = productsServices.find((p) => p.id === nextProductServiceId);
+    if (selected?.salesPrice != null) {
+      setAmount(String(selected.salesPrice));
+    }
+  }
+
   async function resolveCustomerId(): Promise<string | null> {
     if (customers.some((c) => c.id === customerId)) return customerId;
     const name = customerId.trim();
@@ -106,7 +115,7 @@ export function InvoiceFormDrawer({
             </div>
           </div>
           <InputField label="Invoice # (optional)" placeholder="INV-1001" value={invoiceNumber} onChange={(e) => setInvoiceNumber(e.target.value)} />
-          <Select label="Product/Service (optional)" value={productServiceId} onChange={setProductServiceId} options={productOptions} placeholder="None" allowCustomValue={false} />
+          <Select label="Product/Service (optional)" value={productServiceId} onChange={handleProductServiceChange} options={productOptions} placeholder="None" allowCustomValue={false} />
           <NumberField label="Amount" currency placeholder="0.00" value={amount} onChange={(e) => setAmount(e.target.value)} />
           <Textarea label="Memo (optional)" value={memo} onChange={(e) => setMemo(e.target.value)} rows={3} />
         </div>
