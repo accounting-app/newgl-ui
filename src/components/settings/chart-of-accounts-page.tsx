@@ -11,6 +11,8 @@ import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/toast/toast-context";
 import { ACCOUNT_CATEGORY_LABELS } from "@/constants/ui";
+import { ACCOUNT_TYPE_GROUPS, DETAIL_TYPES_BY_CATEGORY } from "@/constants/account-detail-types";
+import type { SelectOption } from "@/components/ui/select";
 import { ACCOUNT_ROOT_GROUPS } from "@/modules/accounting/domain/accounting-reports";
 import { getServiceContainer } from "@/lib/services/service-container-v2";
 import { buildRollupHierarchyRows, filterCollapsed } from "@/lib/accounting/account-hierarchy";
@@ -23,6 +25,14 @@ const CATEGORY_OPTIONS = ACCOUNT_ROOT_GROUPS.flatMap((group) =>
   [...group.categories].map((category) => ({ value: category, label: ACCOUNT_CATEGORY_LABELS[category] }))
 );
 const TYPE_FILTER_OPTIONS = [{ value: "", label: "All" }, ...CATEGORY_OPTIONS];
+
+// Same Account type / Detail type picker as the Register's own "+ Add
+// new" account modal (see add-account-modal.tsx + account-detail-types.ts)
+// -- one account-creation form, not two different pickers for the same
+// action depending on which screen you started from.
+const ACCOUNT_TYPE_SELECT_OPTIONS: SelectOption[] = ACCOUNT_TYPE_GROUPS.flatMap((group) =>
+  group.options.map((option) => ({ value: option.category, label: option.label, group: group.groupLabel }))
+);
 
 function formatMoney(value: number): string {
   return value.toLocaleString("en-US", {
@@ -50,6 +60,7 @@ export function ChartOfAccountsPage() {
   const [editingAccount, setEditingAccount] = useState<Account | null>(null);
   const [newName, setNewName] = useState("");
   const [newCategory, setNewCategory] = useState<Account["category"]>("BANK");
+  const [newSubtype, setNewSubtype] = useState("");
   const [newOpeningBalance, setNewOpeningBalance] = useState("");
   const [creating, setCreating] = useState(false);
   const [search, setSearch] = useState("");
@@ -137,6 +148,7 @@ export function ChartOfAccountsPage() {
     setEditingAccount(null);
     setNewName("");
     setNewCategory("BANK");
+    setNewSubtype("");
     setNewOpeningBalance("");
     setShowAddForm(true);
     setNewAccountMenuOpen(false);
@@ -146,6 +158,7 @@ export function ChartOfAccountsPage() {
     setEditingAccount(account);
     setNewName(account.name);
     setNewCategory(account.category);
+    setNewSubtype(account.subtype ?? "");
     setNewOpeningBalance("");
     setShowAddForm(true);
   }
@@ -154,13 +167,22 @@ export function ChartOfAccountsPage() {
     setEditingAccount(null);
     setNewName(`${parent.name}:`);
     setNewCategory(parent.category);
+    setNewSubtype(parent.subtype ?? "");
     setNewOpeningBalance("");
     setShowAddForm(true);
+  }
+
+  function handleNewCategoryChange(value: string) {
+    setNewCategory(value as Account["category"]);
+    // A Detail type from the previous Account type would no longer be one
+    // of this one's options -- same reset QBO's own form does.
+    setNewSubtype("");
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!newName.trim()) return;
+    if (!editingAccount && !newSubtype) return;
     setCreating(true);
     try {
       if (editingAccount) {
@@ -172,12 +194,14 @@ export function ChartOfAccountsPage() {
           code: nextAccountCode(accounts),
           name: newName.trim(),
           category: newCategory,
+          subtype: newSubtype || undefined,
           currency: "USD",
           openingBalance: newOpeningBalance.trim() && Number.isFinite(openingBalance) ? openingBalance : undefined
         });
         toast({ variant: "success", title: "Account created", description: `"${newName.trim()}" was added to the chart of accounts.` });
       }
       setNewName("");
+      setNewSubtype("");
       setNewOpeningBalance("");
       setEditingAccount(null);
       setShowAddForm(false);
@@ -330,7 +354,7 @@ export function ChartOfAccountsPage() {
       {showAddForm ? (
         <Card
           title={editingAccount ? "Edit account" : "Add an account"}
-          description={editingAccount ? "Only the name can be changed here." : "Give it a friendly name -- it's grouped under the category you pick."}
+          description={editingAccount ? "Only the name can be changed here." : "Give it a friendly name -- it's grouped under the account type and detail type you pick."}
           className="mb-6"
         >
           <form onSubmit={handleSubmit} className="flex flex-wrap items-end gap-3">
@@ -339,13 +363,23 @@ export function ChartOfAccountsPage() {
             </div>
             {!editingAccount ? (
               <>
-                <div className="w-56">
+                <div className="w-48">
                   <Select
-                    label="Category"
+                    label="Account type"
                     value={newCategory}
-                    onChange={(value) => setNewCategory(value as Account["category"])}
-                    options={CATEGORY_OPTIONS}
-                    placeholder="Category"
+                    onChange={handleNewCategoryChange}
+                    options={ACCOUNT_TYPE_SELECT_OPTIONS}
+                    placeholder="Account type"
+                    allowCustomValue={false}
+                  />
+                </div>
+                <div className="w-48">
+                  <Select
+                    label="Detail type"
+                    value={newSubtype}
+                    onChange={setNewSubtype}
+                    options={DETAIL_TYPES_BY_CATEGORY[newCategory].map((detailType) => ({ value: detailType, label: detailType }))}
+                    placeholder="Detail type"
                     allowCustomValue={false}
                   />
                 </div>
@@ -360,7 +394,7 @@ export function ChartOfAccountsPage() {
                 </div>
               </>
             ) : null}
-            <Button type="submit" disabled={creating || newName.trim() === ""}>
+            <Button type="submit" disabled={creating || newName.trim() === "" || (!editingAccount && !newSubtype)}>
               {creating ? "Saving…" : editingAccount ? "Save changes" : "Add account"}
             </Button>
             <Button

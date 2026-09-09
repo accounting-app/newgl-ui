@@ -9,6 +9,8 @@ export type SelectOption = {
   label: string;
   rightLabel?: string;
   keywords?: string[];
+  /** Renders a bold, non-clickable section header above this option whenever it differs from the previous option's group (e.g. QBO's own ASSET/LIABILITY/... headers on the Account type picker). Options must already be sorted by group -- this doesn't re-group them. */
+  group?: string;
 };
 
 type SelectProps = {
@@ -176,27 +178,34 @@ export function Select({
           ) : null}
 
           {filteredOptions.length > 0 ? (
-            filteredOptions.map((option) => {
+            filteredOptions.map((option, index) => {
               const isSelected = option.value === value;
+              const showGroupHeader = option.group && option.group !== filteredOptions[index - 1]?.group;
               return (
-                <button
-                  key={option.value}
-                  type="button"
-                  onMouseDown={(event) => event.preventDefault()}
-                  onClick={() => handleSelectOption(option)}
-                  className={`grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-4 px-4 py-2 text-left ${optionTextClassName} ${
-                    isSelected
-                      ? "bg-[var(--color-action-passive-subtle-active)] hover:bg-[var(--color-action-passive-subtle-hover)] focus-visible:bg-[var(--color-action-passive-subtle-focus)] active:bg-[var(--color-action-passive-subtle-active)]"
-                      : "hover:bg-[var(--color-action-passive-subtle-hover)]"
-                  }`}
-                >
-                  <span className={`whitespace-nowrap ${optionLabelClassName} ${isSelected ? "font-bold" : ""}`}>
-                    {option.label}
-                  </span>
-                  {option.rightLabel ? (
-                    <span className={`shrink-0 ${optionRightLabelClassName}`}>{option.rightLabel}</span>
+                <div key={option.value}>
+                  {showGroupHeader ? (
+                    <p className="px-4 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-[var(--color-icon-secondary)]">
+                      {option.group}
+                    </p>
                   ) : null}
-                </button>
+                  <button
+                    type="button"
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => handleSelectOption(option)}
+                    className={`grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-4 px-4 py-2 text-left ${optionTextClassName} ${
+                      isSelected
+                        ? "bg-[var(--color-action-passive-subtle-active)] hover:bg-[var(--color-action-passive-subtle-hover)] focus-visible:bg-[var(--color-action-passive-subtle-focus)] active:bg-[var(--color-action-passive-subtle-active)]"
+                        : "hover:bg-[var(--color-action-passive-subtle-hover)]"
+                    }`}
+                  >
+                    <span className={`whitespace-nowrap ${optionLabelClassName} ${isSelected ? "font-bold" : ""}`}>
+                      {option.label}
+                    </span>
+                    {option.rightLabel ? (
+                      <span className={`shrink-0 ${optionRightLabelClassName}`}>{option.rightLabel}</span>
+                    ) : null}
+                  </button>
+                </div>
               );
             })
           ) : (

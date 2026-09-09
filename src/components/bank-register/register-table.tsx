@@ -62,7 +62,7 @@ type RegisterTableProps = {
   onDeleteEntry: (entryId: string) => Promise<void>;
   onCycleReconcileStatus: (entryId: string) => void;
   accountOptions: SelectFieldOption[];
-  onCreateAccount: (input: { name: string; category: Account["category"]; openingBalance?: number }) => Promise<Account>;
+  onCreateAccount: (input: { name: string; category: Account["category"]; subtype?: string; openingBalance?: number }) => Promise<Account>;
   availableTransactionTypes: BankRegisterTransactionTypeOption[];
   selectedTransactionType: BankRegisterTransactionTypeId;
   onAddSelectedTransaction: () => void;

@@ -537,11 +537,12 @@ export function useBankRegister() {
    * "New account" form uses, rather than a client-side-only stand-in).
    */
   const createAccount = useCallback(
-    async (input: { name: string; category: Account["category"]; openingBalance?: number }): Promise<Account> => {
+    async (input: { name: string; category: Account["category"]; subtype?: string; openingBalance?: number }): Promise<Account> => {
       const created = await services.accountService.createAccount({
         code: nextAccountCode(accounts),
         name: input.name,
         category: input.category,
+        subtype: input.subtype,
         currency: "USD",
         openingBalance: input.openingBalance
       });
