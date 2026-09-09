@@ -7,7 +7,9 @@ import { InputField } from "@/components/ui/input-field";
 import { NumberField } from "@/components/ui/number-field";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import type { Customer, Estimate, ProductOrService } from "@/lib/local-store/sales-types";
+import type { Estimate } from "@/lib/services/estimates-service";
+import type { Customer } from "@/lib/services/customers-service";
+import type { ProductOrService } from "@/lib/services/products-services-service";
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -25,7 +27,7 @@ export function EstimateFormDrawer({
 }: {
   customers: Customer[];
   productsServices: ProductOrService[];
-  onAddCustomer: (name: string) => string;
+  onAddCustomer: (name: string) => Promise<string>;
   onSave: (input: Omit<Estimate, "id" | "createdAt" | "status">) => void;
   onClose: () => void;
 }) {
@@ -40,7 +42,16 @@ export function EstimateFormDrawer({
   const customerOptions = customers.map((c) => ({ value: c.id, label: c.name }));
   const productOptions = productsServices.map((p) => ({ value: p.id, label: p.name, rightLabel: p.type === "SERVICE" ? "Service" : "Product" }));
 
-  function resolveCustomerId(): string | null {
+  /** Picking a saved item fills in its sales price -- same as InvoiceFormDrawer; Amount stays editable after. */
+  function handleProductServiceChange(nextProductServiceId: string) {
+    setProductServiceId(nextProductServiceId);
+    const selected = productsServices.find((p) => p.id === nextProductServiceId);
+    if (selected?.salesPrice != null) {
+      setAmount(String(selected.salesPrice));
+    }
+  }
+
+  async function resolveCustomerId(): Promise<string | null> {
     if (customers.some((c) => c.id === customerId)) return customerId;
     const name = customerId.trim();
     if (!name) return null;
@@ -48,9 +59,9 @@ export function EstimateFormDrawer({
     return existing ? existing.id : onAddCustomer(name);
   }
 
-  function handleSubmit() {
+  async function handleSubmit() {
     const parsedAmount = Number(amount);
-    const resolvedCustomerId = resolveCustomerId();
+    const resolvedCustomerId = await resolveCustomerId();
     if (!resolvedCustomerId || !Number.isFinite(parsedAmount) || parsedAmount <= 0) return;
     onSave({
       customerId: resolvedCustomerId,
@@ -82,8 +93,8 @@ export function EstimateFormDrawer({
             options={customerOptions}
             placeholder="Choose a customer"
             allowCustomValue
-            onAddNew={() => {
-              const resolved = resolveCustomerId();
+            onAddNew={async () => {
+              const resolved = await resolveCustomerId();
               if (resolved) setCustomerId(resolved);
             }}
             addNewLabel="+ Add new customer"
@@ -98,7 +109,7 @@ export function EstimateFormDrawer({
             </div>
           </div>
           <InputField label="Estimate # (optional)" placeholder="EST-1001" value={estimateNumber} onChange={(e) => setEstimateNumber(e.target.value)} />
-          <Select label="Product/Service (optional)" value={productServiceId} onChange={setProductServiceId} options={productOptions} placeholder="None" allowCustomValue={false} />
+          <Select label="Product/Service (optional)" value={productServiceId} onChange={handleProductServiceChange} options={productOptions} placeholder="None" allowCustomValue={false} />
           <NumberField label="Amount" currency placeholder="0.00" value={amount} onChange={(e) => setAmount(e.target.value)} />
           <Textarea label="Memo (optional)" value={memo} onChange={(e) => setMemo(e.target.value)} rows={3} />
         </div>

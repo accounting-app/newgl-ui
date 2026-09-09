@@ -9,21 +9,24 @@ import { NumberField } from "@/components/ui/number-field";
 import { Select } from "@/components/ui/select";
 import { useToast } from "@/components/ui/toast/toast-context";
 import { useCompany } from "@/lib/company/company-provider";
-import type { ProductServiceType } from "@/lib/local-store/sales-types";
+import type { ProductServiceType } from "@/lib/services/products-services-service";
 import { useSalesData } from "@/components/sales/use-sales-data";
+import { ImportProductsServicesModal } from "@/components/sales/import-products-services-modal";
 
 function formatMoney(value: number): string {
   return value.toLocaleString("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-// Real local Products & Services list. "Import items" matches Vendors'
-// import wizard in spirit but isn't built out yet -- honestly disabled.
+// Phase 1.5, Step 6: real Products & Services list, plus a real "Import
+// items" CSV wizard (thin config of the shared CsvImportWizard, same as
+// Vendors'/Customers').
 export function ProductsServicesPage() {
   const { activeCompany } = useCompany();
   const { toast } = useToast();
   const { productsServices, addProductOrService, removeProduct } = useSalesData();
 
   const [showForm, setShowForm] = useState(false);
+  const [showImport, setShowImport] = useState(false);
   const [name, setName] = useState("");
   const [type, setType] = useState<ProductServiceType>("SERVICE");
   const [salesPrice, setSalesPrice] = useState("");
@@ -37,18 +40,31 @@ export function ProductsServicesPage() {
     setShowForm(false);
   }
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!name.trim()) return;
     const parsedPrice = Number(salesPrice);
-    addProductOrService({
-      name: name.trim(),
-      type,
-      salesPrice: salesPrice.trim() && Number.isFinite(parsedPrice) ? parsedPrice : undefined,
-      description: description.trim() || undefined
-    });
-    toast({ variant: "success", title: "Item created" });
-    resetForm();
+    try {
+      await addProductOrService({
+        name: name.trim(),
+        type,
+        salesPrice: salesPrice.trim() && Number.isFinite(parsedPrice) ? parsedPrice : undefined,
+        description: description.trim() || undefined
+      });
+      toast({ variant: "success", title: "Item created" });
+      resetForm();
+    } catch (err) {
+      toast({ variant: "error", title: "Could not create this item", description: err instanceof Error ? err.message : undefined });
+    }
+  }
+
+  async function handleDelete(id: string) {
+    try {
+      await removeProduct(id);
+      toast({ variant: "success", title: "Item deleted" });
+    } catch (err) {
+      toast({ variant: "error", title: "Could not delete this item", description: err instanceof Error ? err.message : undefined });
+    }
   }
 
   if (!activeCompany) {
@@ -73,12 +89,15 @@ export function ProductsServicesPage() {
           </ul>
           <div className="mt-6 flex gap-3">
             <Button onClick={() => setShowForm(true)}>Create items</Button>
-            <button type="button" disabled title="Not available yet" className="cursor-not-allowed rounded-full border border-[var(--color-button-border)] px-5 py-2 text-sm font-medium text-[var(--color-text-disabled)]">
+            <Button variant="secondary" onClick={() => setShowImport(true)}>
               Import items
-            </button>
+            </Button>
           </div>
         </div>
         <Package className="hidden h-28 w-28 shrink-0 text-[var(--color-positive)] lg:block" aria-hidden="true" />
+        {showImport ? (
+          <ImportProductsServicesModal onClose={() => setShowImport(false)} onCreateProduct={addProductOrService} />
+        ) : null}
       </div>
     );
   }
@@ -89,14 +108,15 @@ export function ProductsServicesPage() {
         <h1 className="text-2xl font-semibold text-[var(--color-text-global)]">Products &amp; Services</h1>
         <div className="flex items-center gap-2">
           <Button onClick={() => setShowForm((v) => !v)}>{showForm ? "Cancel" : "Create items"}</Button>
-          <button type="button" disabled title="Not available yet" className="cursor-not-allowed rounded-full border border-[var(--color-button-border)] px-4 py-1.5 text-sm font-medium text-[var(--color-text-disabled)]">
+          <Button variant="secondary" onClick={() => setShowImport(true)}>
             Import items
-          </button>
+          </Button>
         </div>
       </div>
+      {showImport ? <ImportProductsServicesModal onClose={() => setShowImport(false)} onCreateProduct={addProductOrService} /> : null}
 
       {showForm ? (
-        <Card title="Add a product or service" description="Not backed by a server yet -- saved to this browser only." className="mb-4">
+        <Card title="Add a product or service" className="mb-4">
           <form onSubmit={handleSubmit} className="flex flex-wrap items-end gap-3">
             <div className="min-w-[180px] flex-1">
               <InputField label="Name" placeholder="e.g. Consulting hour" value={name} onChange={(e) => setName(e.target.value)} />
@@ -153,7 +173,7 @@ export function ProductsServicesPage() {
                   <td className="border-l border-l-dotted border-l-[var(--color-divider-tertiary)] p-2 align-top text-[13px] text-[var(--color-text-primary)]">{item.description || "--"}</td>
                   <td className="border-l border-l-dotted border-l-[var(--color-divider-tertiary)] p-2 align-top text-right text-[13px] text-[var(--color-text-global)]">{item.salesPrice != null ? formatMoney(item.salesPrice) : "--"}</td>
                   <td className="border-l border-l-dotted border-l-[var(--color-divider-tertiary)] p-2 align-top text-right">
-                    <button type="button" onClick={() => removeProduct(item.id)} className="text-sm font-medium text-[var(--color-negative)] hover:underline">
+                    <button type="button" onClick={() => handleDelete(item.id)} className="text-sm font-medium text-[var(--color-negative)] hover:underline">
                       Delete
                     </button>
                   </td>

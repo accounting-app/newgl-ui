@@ -5,37 +5,27 @@ import Link from "next/link";
 import type { ComponentType } from "react";
 import { BookOpen, Building2, FilePlus2, PlusCircle, Upload, Wallet } from "lucide-react";
 import { DashboardMetrics } from "@/components/home/dashboard-metrics";
-import { ALL_APPS_CATEGORIES, SETTINGS_GROUPS } from "@/constants/apps";
+import { ALL_APPS_CATEGORIES } from "@/constants/apps";
 import type { AppNavItem } from "@/constants/apps";
 import { createClient } from "@/lib/supabase/client";
 
 // Modeled after QuickBooks Online's dashboard top nav (a horizontal row of
 // product-area pills) -- Register and Reports are their own top-level rail
-// items so aren't in either constants list, added here explicitly; the
-// rest comes straight from ALL_APPS_CATEGORIES + SETTINGS_GROUPS
-// (UI_DESIGN_SYSTEM_PLAN.md Part 3) rather than a separately-maintained copy.
-const RAW_NAV_PILLS: AppNavItem[] = [
+// items, added here explicitly since they aren't part of the All apps menu
+// at all. Everything else is one pill per All apps CATEGORY (Accounting,
+// Expenses & Bills, ...), not one per individual sub-page -- exploding
+// every category's items out flat made this row a dozen-plus pills long
+// and impossible to scan. Each category pill goes to its first item, same
+// destination clicking the category heading itself in All apps goes to.
+const NAV_PILLS: AppNavItem[] = [
   { label: "Register", href: "/register", icon: Wallet },
   { label: "Reports", href: "/reports", icon: BookOpen },
-  // Locked items/categories (QBO features we don't have -- see apps.ts)
-  // are excluded here: these pills are plain links, with no room for the
-  // grayed-out/lock-badge treatment the All Apps menu gives them.
-  ...ALL_APPS_CATEGORIES.filter((category) => !category.locked).flatMap((category) => category.items.filter((item) => !item.locked)),
-  ...SETTINGS_GROUPS.flatMap((group) => group.items)
+  ...ALL_APPS_CATEGORIES.filter((category) => !category.locked && category.items.length > 0).map((category) => ({
+    label: category.label,
+    href: category.items[0].href,
+    icon: category.icon
+  }))
 ];
-
-// A destination can be linked from more than one category now (e.g.
-// Contractors under both Expenses & Bills and Team, same as QBO itself
-// does) -- that's fine for the "All apps" menu, which shows it once per
-// category, but this flat pill row shouldn't show the same destination
-// twice (and it produced a literal duplicate React key when it did).
-// Dedupe by href, keeping the first occurrence's label/icon.
-const seenHrefs = new Set<string>();
-const NAV_PILLS: AppNavItem[] = RAW_NAV_PILLS.filter((item) => {
-  if (seenHrefs.has(item.href)) return false;
-  seenHrefs.add(item.href);
-  return true;
-});
 
 type CreateActionItem = {
   label: string;

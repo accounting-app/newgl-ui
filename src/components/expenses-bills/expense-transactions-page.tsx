@@ -7,7 +7,8 @@ import { IconButton } from "@/components/ui/icon-button";
 import { Select } from "@/components/ui/select";
 import { useCompany } from "@/lib/company/company-provider";
 import { companyScopedKey, useLocalCollection, usePersistedJSON } from "@/lib/local-store/use-local-collection";
-import type { Bill, Vendor } from "@/lib/local-store/expenses-bills-types";
+import { useBills } from "@/lib/hooks/use-bills";
+import { useVendors } from "@/lib/hooks/use-vendors";
 import { getServiceContainer } from "@/lib/services/service-container-v2";
 import { DEBIT_NORMAL_CATEGORIES } from "@/modules/accounting/domain/accounting-reports";
 import type { Account, Transaction, TransactionType } from "@/modules/accounting/domain/models";
@@ -109,9 +110,8 @@ export function ExpenseTransactionsPage() {
 
   const accountById = useMemo(() => new Map(accounts.map((a) => [a.id, a])), [accounts]);
 
-  const vendorsKey = activeCompany ? companyScopedKey(activeCompany.name, "vendors") : null;
   const tagsKey = activeCompany ? companyScopedKey(activeCompany.name, "expense-transaction-vendor-tags") : null;
-  const { items: vendors } = useLocalCollection<Vendor>(vendorsKey ?? "newgl:phase1:pending:vendors");
+  const { items: vendors } = useVendors();
   const { items: tagRows, add: addTagRow, update: updateTagRow } = useLocalCollection<{ id: string; vendorId: string }>(
     tagsKey ?? "newgl:phase1:pending:tags"
   );
@@ -124,9 +124,9 @@ export function ExpenseTransactionsPage() {
     else addTagRow({ id: transactionId, vendorId });
   }
 
-  const billsKey = activeCompany ? companyScopedKey(activeCompany.name, "bills") : null;
-  const { items: bills } = useLocalCollection<Bill>(billsKey ?? "newgl:phase1:pending:bills");
-  const openBillCount = useMemo(() => bills.filter((b) => b.status === "OPEN").length, [bills]);
+  const { items: bills, pay: payBill } = useBills();
+  const openBills = useMemo(() => bills.filter((b) => b.status === "OPEN"), [bills]);
+  const vendorNameById = useMemo(() => new Map(vendors.map((v) => [v.id, v.name])), [vendors]);
 
   // -- Toolbar: transaction-type filter, date range, real Filter panel --
   const [typeFilter, setTypeFilter] = useState("");
@@ -484,8 +484,10 @@ export function ExpenseTransactionsPage() {
       ) : null}
       {showPayBills ? (
         <PayBillsModal
+          bills={openBills}
+          vendorNameById={vendorNameById}
           accounts={accounts}
-          openBillCount={openBillCount}
+          onPay={payBill}
           onEnterNewBill={() => {
             setShowPayBills(false);
             setActiveFormType("BILL");

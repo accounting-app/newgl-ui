@@ -11,8 +11,10 @@ import { NumberField } from "@/components/ui/number-field";
 import { Select } from "@/components/ui/select";
 import { useToast } from "@/components/ui/toast/toast-context";
 import { useCompany } from "@/lib/company/company-provider";
-import { companyScopedKey, localId, useLocalCollection, usePersistedJSON } from "@/lib/local-store/use-local-collection";
-import type { Bill, BillStatus, Vendor } from "@/lib/local-store/expenses-bills-types";
+import { companyScopedKey, usePersistedJSON } from "@/lib/local-store/use-local-collection";
+import { useVendors } from "@/lib/hooks/use-vendors";
+import { useBills } from "@/lib/hooks/use-bills";
+import type { Bill, BillStatus } from "@/lib/services/bills-service";
 import { getServiceContainer } from "@/lib/services/service-container-v2";
 import type { Account } from "@/modules/accounting/domain/models";
 import { TransactionFormModal } from "@/components/expenses-bills/transaction-form-modal";
@@ -58,9 +60,9 @@ const DEFAULT_LIST_SETTINGS: ListSettings = {
   alternateRowColor: false
 };
 
-// Phase 1: UI only, local-only data. Paying a bill for real (posting a
-// beancount transaction) is Phase 1.5 -- "Paid" here is just a status
-// label. See newgl-specs/plans/qbo-free-features/QBO_FREE_FEATURES_PLAN.md.
+// Phase 1.5, Step 3: real persistence, and paying/entering a bill now
+// posts a real beancount transaction (see @/lib/hooks/use-bills and
+// newgl-specs/plans/qbo-free-features/QBO_FREE_FEATURES_PLAN.md).
 // The email-in banner other Accounting screens show ("Anyone can autofill
 // receipts... by sending files to <address>") is intentionally left off
 // here too, same as Receipts -- there's no real inbound-email pipeline
@@ -69,10 +71,8 @@ export function BillsPage() {
   const { activeCompany } = useCompany();
   const { toast } = useToast();
   const services = useMemo(() => getServiceContainer(), []);
-  const vendorsKey = activeCompany ? companyScopedKey(activeCompany.name, "vendors") : null;
-  const billsKey = activeCompany ? companyScopedKey(activeCompany.name, "bills") : null;
-  const { items: vendors } = useLocalCollection<Vendor>(vendorsKey ?? "newgl:phase1:pending:vendors");
-  const { items: bills, hydrated, add, update, remove } = useLocalCollection<Bill>(billsKey ?? "newgl:phase1:pending:bills");
+  const { items: vendors } = useVendors();
+  const { items: bills, hydrated, add, update, pay, remove } = useBills();
 
   const [accounts, setAccounts] = useState<Account[]>([]);
   useEffect(() => {
@@ -89,7 +89,7 @@ export function BillsPage() {
 
   const [tab, setTab] = useState<BillStatus>("DRAFT");
   const tabCounts = useMemo(() => Object.fromEntries(TABS.map((s) => [s, bills.filter((b) => b.status === s).length])), [bills]);
-  const openBillCount = tabCounts.OPEN ?? 0;
+  const openBills = useMemo(() => bills.filter((b) => b.status === "OPEN"), [bills]);
 
   const [filterOpen, setFilterOpen] = useState(false);
   const filterRef = useRef<HTMLDivElement>(null);
@@ -139,30 +139,51 @@ export function BillsPage() {
     setShowEditForm(true);
   }
 
-  function handleEditSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleEditSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const parsedAmount = Number(amount);
     if (!vendorId || !editingId || !Number.isFinite(parsedAmount) || parsedAmount <= 0) return;
-    update(editingId, {
-      vendorId,
-      billNumber: billNumber.trim() || undefined,
-      billDate,
-      dueDate,
-      amount: parsedAmount,
-      categoryAccountId: categoryAccountId || undefined,
-      memo: memo.trim() || undefined
-    });
-    toast({ variant: "success", title: "Bill updated" });
-    resetEditForm();
+    try {
+      await update(editingId, {
+        vendorId,
+        billNumber: billNumber.trim() || undefined,
+        billDate,
+        dueDate,
+        amount: parsedAmount,
+        categoryAccountId: categoryAccountId || undefined,
+        memo: memo.trim() || undefined
+      });
+      toast({ variant: "success", title: "Bill updated" });
+      resetEditForm();
+    } catch (err) {
+      toast({ variant: "error", title: "Could not update this bill", description: err instanceof Error ? err.message : undefined });
+    }
   }
 
-  function setStatus(bill: Bill, status: BillStatus) {
-    update(bill.id, { status });
+  // -- Mark paid: needs a payment account, so it opens a small dialog
+  // rather than flipping status directly -- paying a bill posts a real
+  // Dr Accounts Payable / Cr Cash-or-Bank transaction now (Phase 1.5,
+  // Step 3), which requires knowing which bank/credit account to credit.
+  const [payingBill, setPayingBill] = useState<Bill | null>(null);
+
+  async function handleConfirmPay(paymentAccountId: string, paymentDate: string) {
+    if (!payingBill) return;
+    try {
+      await pay(payingBill.id, { paymentAccountId, paymentDate });
+      toast({ variant: "success", title: "Bill marked paid" });
+      setPayingBill(null);
+    } catch (err) {
+      toast({ variant: "error", title: "Could not mark this bill paid", description: err instanceof Error ? err.message : undefined });
+    }
   }
 
-  function handleDelete(bill: Bill) {
-    remove(bill.id);
-    toast({ variant: "success", title: "Bill deleted" });
+  async function handleDelete(bill: Bill) {
+    try {
+      await remove(bill.id);
+      toast({ variant: "success", title: "Bill deleted" });
+    } catch (err) {
+      toast({ variant: "error", title: "Could not delete this bill", description: err instanceof Error ? err.message : undefined });
+    }
   }
 
   // -- New bill (via the shared full-screen form, real save) + Pay bills --
@@ -355,7 +376,7 @@ export function BillsPage() {
       </div>
 
       {showEditForm ? (
-        <Card title="Edit bill" description="Not backed by a server yet -- saved to this browser only." className="mb-4">
+        <Card title="Edit bill" className="mb-4">
           <form onSubmit={handleEditSubmit} className="flex flex-wrap items-end gap-3">
             <div className="w-56">
               <Select label="Vendor" value={vendorId} onChange={setVendorId} options={vendorOptions} placeholder="Select a vendor" allowCustomValue={false} />
@@ -474,7 +495,7 @@ export function BillsPage() {
                   <td className={`border-l border-l-dotted border-l-[var(--color-divider-tertiary)] ${cellPadding} align-top text-right`}>
                     <div className="flex justify-end gap-3 text-[13px]">
                       {bill.status !== "PAID" ? (
-                        <button type="button" onClick={() => setStatus(bill, "PAID")} className="font-medium text-[var(--color-link-action)] hover:underline">
+                        <button type="button" onClick={() => setPayingBill(bill)} className="font-medium text-[var(--color-link-action)] hover:underline">
                           Mark paid
                         </button>
                       ) : null}
@@ -611,18 +632,15 @@ export function BillsPage() {
           accounts={accounts}
           vendors={vendors}
           nextCheckNumber={1}
-          onSaveBill={(input) => {
-            add({
-              id: localId(),
+          onSaveBill={async (input) => {
+            await add({
               vendorId: input.vendorId,
               billNumber: input.billNumber || undefined,
               billDate: input.billDate,
               dueDate: input.dueDate,
               amount: input.amount,
-              categoryAccountId: input.categoryAccountId || undefined,
-              memo: input.memo || undefined,
-              status: "OPEN",
-              createdAt: new Date().toISOString()
+              categoryAccountId: input.categoryAccountId,
+              memo: input.memo || undefined
             });
           }}
           onClose={() => setShowNewBillModal(false)}
@@ -631,8 +649,10 @@ export function BillsPage() {
 
       {showPayBills ? (
         <PayBillsModal
+          bills={openBills}
+          vendorNameById={vendorNameById}
           accounts={accounts}
-          openBillCount={openBillCount}
+          onPay={pay}
           onEnterNewBill={() => {
             setShowPayBills(false);
             setShowNewBillModal(true);
@@ -640,6 +660,76 @@ export function BillsPage() {
           onClose={() => setShowPayBills(false)}
         />
       ) : null}
+
+      {payingBill ? (
+        <PayBillDialog
+          bill={payingBill}
+          vendorName={vendorNameById.get(payingBill.vendorId) ?? "this vendor"}
+          accounts={accounts}
+          onConfirm={handleConfirmPay}
+          onClose={() => setPayingBill(null)}
+        />
+      ) : null}
     </>
+  );
+}
+
+// A real bank/credit account is required to post the payment leg (Dr
+// Accounts Payable, Cr Cash-or-Bank) -- this small dialog is the minimum
+// needed to collect that, rather than the full "Pay Bills" batch screen
+// (PayBillsModal), which isn't wired up to actually schedule payments yet.
+function PayBillDialog({
+  bill,
+  vendorName,
+  accounts,
+  onConfirm,
+  onClose
+}: {
+  bill: Bill;
+  vendorName: string;
+  accounts: Account[];
+  onConfirm: (paymentAccountId: string, paymentDate: string) => Promise<void>;
+  onClose: () => void;
+}) {
+  const bankAccountOptions = useMemo(
+    () => accounts.filter((a) => a.category === "BANK" || a.category === "CREDIT_CARD").map((a) => ({ value: a.id, label: a.name })),
+    [accounts]
+  );
+  const [paymentAccountId, setPaymentAccountId] = useState(bankAccountOptions[0]?.value ?? "");
+  const [paymentDate, setPaymentDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [submitting, setSubmitting] = useState(false);
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!paymentAccountId) return;
+    setSubmitting(true);
+    try {
+      await onConfirm(paymentAccountId, paymentDate);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20">
+      <div className="w-full max-w-sm rounded-lg bg-[var(--color-container-background-primary)] p-5 shadow-xl">
+        <h2 className="mb-1 text-lg font-semibold text-[var(--color-text-global)]">Mark bill paid</h2>
+        <p className="mb-4 text-sm text-[var(--color-text-primary)]">
+          {formatMoney(bill.amount)} to {vendorName}
+        </p>
+        <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+          <Select label="Payment account" value={paymentAccountId} onChange={setPaymentAccountId} options={bankAccountOptions} placeholder="Select account" allowCustomValue={false} />
+          <InputField label="Payment date" type="date" value={paymentDate} onChange={(e) => setPaymentDate(e.target.value)} />
+          <div className="mt-2 flex justify-end gap-2">
+            <Button type="button" variant="secondary" onClick={onClose} disabled={submitting}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={!paymentAccountId || submitting}>
+              {submitting ? "Marking paid…" : "Mark paid"}
+            </Button>
+          </div>
+        </form>
+      </div>
+    </div>
   );
 }

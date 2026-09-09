@@ -6,8 +6,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Table } from "@/components/ui/table";
 import { useCompany } from "@/lib/company/company-provider";
-import { companyScopedKey, useLocalCollection } from "@/lib/local-store/use-local-collection";
-import type { Vendor } from "@/lib/local-store/expenses-bills-types";
+import { useVendors } from "@/lib/hooks/use-vendors";
 
 // Not a separate entity -- without Payroll (out of scope, see the plan
 // doc), a "contractor" here is just a vendor flagged 1099-eligible.
@@ -15,8 +14,7 @@ import type { Vendor } from "@/lib/local-store/expenses-bills-types";
 // that owns vendor data, not two.
 export function ContractorsPage() {
   const { activeCompany } = useCompany();
-  const storageKey = activeCompany ? companyScopedKey(activeCompany.name, "vendors") : null;
-  const { items: vendors, hydrated } = useLocalCollection<Vendor>(storageKey ?? "newgl:phase1:pending:vendors");
+  const { items: vendors, hydrated } = useVendors();
   const contractors = vendors.filter((v) => v.is1099Contractor);
 
   if (!activeCompany) {

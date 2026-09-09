@@ -1,13 +1,17 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { InputField } from "@/components/ui/input-field";
+import { Select } from "@/components/ui/select";
 import { useToast } from "@/components/ui/toast/toast-context";
 import { useCompany } from "@/lib/company/company-provider";
-import type { Invoice, InvoiceStatus } from "@/lib/local-store/sales-types";
+import type { Invoice, InvoiceStatus } from "@/lib/services/invoices-service";
 import { InvoiceFormDrawer } from "@/components/sales/invoice-form-drawer";
 import { useSalesData } from "@/components/sales/use-sales-data";
+import { getServiceContainer } from "@/lib/services/service-container-v2";
+import type { Account } from "@/modules/accounting/domain/models";
 
 function formatMoney(value: number): string {
   return value.toLocaleString("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -16,27 +20,62 @@ function formatMoney(value: number): string {
 const TABS: InvoiceStatus[] = ["OPEN", "PAID"];
 const STATUS_LABEL: Record<InvoiceStatus, string> = { DRAFT: "Draft", OPEN: "Unpaid", PAID: "Paid" };
 
-// Phase 1: real local invoices. Collecting a real online payment (the
+// Phase 1.5, Step 7: real invoices that post real ledger transactions --
+// see @/lib/hooks/use-invoices. Collecting a real online payment (the
 // reference's "QuickBooks Payments" hero) needs a payments processor
 // integration this app doesn't have -- "Compare rates" stays disabled,
 // and "Create invoice" is genericized to not brand a feature we don't
-// offer as a named third-party product.
+// offer as a named third-party product; "Mark paid" here still records a
+// real deposit against a bank/credit account you pick, just not via an
+// online payments processor.
 export function InvoicesPage() {
   const { activeCompany } = useCompany();
   const { toast } = useToast();
-  const { customers, productsServices, invoices, addInvoice, addCustomer, updateInvoice, removeInvoice } = useSalesData();
+  const { customers, productsServices, invoices, addInvoice, addCustomer, payInvoice, removeInvoice } = useSalesData();
   const [showInvoiceDrawer, setShowInvoiceDrawer] = useState(false);
   const [tab, setTab] = useState<InvoiceStatus>("OPEN");
+
+  const services = useMemo(() => getServiceContainer(), []);
+  const [accounts, setAccounts] = useState<Account[]>([]);
+  useEffect(() => {
+    services.accountService.listAccounts().then(setAccounts).catch(() => setAccounts([]));
+  }, [services]);
 
   const customerNameById = useMemo(() => new Map(customers.map((c) => [c.id, c.name])), [customers]);
   const tabCounts = useMemo(() => Object.fromEntries(TABS.map((s) => [s, invoices.filter((i) => i.status === s).length])), [invoices]);
   const tabInvoices = useMemo(() => invoices.filter((i) => i.status === tab).sort((a, b) => b.invoiceDate.localeCompare(a.invoiceDate)), [invoices, tab]);
   const total = useMemo(() => tabInvoices.reduce((sum, i) => sum + i.amount, 0), [tabInvoices]);
 
-  function handleSaveInvoice(input: Omit<Invoice, "id" | "createdAt" | "status">) {
-    addInvoice(input);
-    setShowInvoiceDrawer(false);
-    toast({ variant: "success", title: "Invoice created" });
+  async function handleSaveInvoice(input: Omit<Invoice, "id" | "createdAt" | "status">) {
+    try {
+      await addInvoice(input);
+      setShowInvoiceDrawer(false);
+      toast({ variant: "success", title: "Invoice created" });
+    } catch (err) {
+      toast({ variant: "error", title: "Could not create this invoice", description: err instanceof Error ? err.message : undefined });
+    }
+  }
+
+  const [payingInvoice, setPayingInvoice] = useState<Invoice | null>(null);
+
+  async function handleConfirmPay(depositAccountId: string, paymentDate: string) {
+    if (!payingInvoice) return;
+    try {
+      await payInvoice(payingInvoice.id, { depositAccountId, paymentDate });
+      toast({ variant: "success", title: "Invoice marked paid" });
+      setPayingInvoice(null);
+    } catch (err) {
+      toast({ variant: "error", title: "Could not mark this invoice paid", description: err instanceof Error ? err.message : undefined });
+    }
+  }
+
+  async function handleDelete(invoiceId: string) {
+    try {
+      await removeInvoice(invoiceId);
+      toast({ variant: "success", title: "Invoice deleted" });
+    } catch (err) {
+      toast({ variant: "error", title: "Could not delete this invoice", description: err instanceof Error ? err.message : undefined });
+    }
   }
 
   if (!activeCompany) {
@@ -53,7 +92,8 @@ export function InvoicesPage() {
               <li className="flex items-start gap-2">
                 <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--color-positive)]" />
                 <span>
-                  <span className="font-medium text-[var(--color-text-global)]">Create invoices in seconds</span> from customers and items you&apos;ve already saved
+                  <span className="font-medium text-[var(--color-text-global)]">Create invoices in seconds</span>{" "}
+                  from customers and items you&apos;ve already saved
                 </span>
               </li>
               <li className="flex items-start gap-2">
@@ -65,7 +105,8 @@ export function InvoicesPage() {
               <li className="flex items-start gap-2">
                 <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--color-positive)]" />
                 <span>
-                  <span className="font-medium text-[var(--color-text-global)]">Mark invoices paid</span> once the money&apos;s in hand
+                  <span className="font-medium text-[var(--color-text-global)]">Mark invoices paid</span>{" "}
+                  once the money&apos;s in hand
                 </span>
               </li>
             </ul>
@@ -154,11 +195,11 @@ export function InvoicesPage() {
                   <td className="border-l border-l-dotted border-l-[var(--color-divider-tertiary)] p-2 align-top text-right">
                     <div className="flex justify-end gap-3 text-[13px]">
                       {invoice.status !== "PAID" ? (
-                        <button type="button" onClick={() => updateInvoice(invoice.id, { status: "PAID" })} className="font-medium text-[var(--color-link-action)] hover:underline">
+                        <button type="button" onClick={() => setPayingInvoice(invoice)} className="font-medium text-[var(--color-link-action)] hover:underline">
                           Mark paid
                         </button>
                       ) : null}
-                      <button type="button" onClick={() => removeInvoice(invoice.id)} className="font-medium text-[var(--color-negative)] hover:underline">
+                      <button type="button" onClick={() => handleDelete(invoice.id)} className="font-medium text-[var(--color-negative)] hover:underline">
                         Delete
                       </button>
                     </div>
@@ -177,6 +218,75 @@ export function InvoicesPage() {
       {showInvoiceDrawer ? (
         <InvoiceFormDrawer customers={customers} productsServices={productsServices} onAddCustomer={addCustomer} onSave={handleSaveInvoice} onClose={() => setShowInvoiceDrawer(false)} />
       ) : null}
+
+      {payingInvoice ? (
+        <PayInvoiceDialog
+          invoice={payingInvoice}
+          customerName={customerNameById.get(payingInvoice.customerId) ?? "this customer"}
+          accounts={accounts}
+          onConfirm={handleConfirmPay}
+          onClose={() => setPayingInvoice(null)}
+        />
+      ) : null}
     </>
+  );
+}
+
+// A real bank/credit account is required to post the payment leg (Dr
+// Cash-or-Bank, Cr Accounts Receivable) -- mirrors PayBillDialog on the
+// Bills screen, the AP side of this exact same need.
+function PayInvoiceDialog({
+  invoice,
+  customerName,
+  accounts,
+  onConfirm,
+  onClose
+}: {
+  invoice: Invoice;
+  customerName: string;
+  accounts: Account[];
+  onConfirm: (depositAccountId: string, paymentDate: string) => Promise<void>;
+  onClose: () => void;
+}) {
+  const depositAccountOptions = useMemo(
+    () => accounts.filter((a) => a.category === "BANK" || a.category === "CREDIT_CARD").map((a) => ({ value: a.id, label: a.name })),
+    [accounts]
+  );
+  const [depositAccountId, setDepositAccountId] = useState(depositAccountOptions[0]?.value ?? "");
+  const [paymentDate, setPaymentDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [submitting, setSubmitting] = useState(false);
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!depositAccountId) return;
+    setSubmitting(true);
+    try {
+      await onConfirm(depositAccountId, paymentDate);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20">
+      <div className="w-full max-w-sm rounded-lg bg-[var(--color-container-background-primary)] p-5 shadow-xl">
+        <h2 className="mb-1 text-lg font-semibold text-[var(--color-text-global)]">Mark invoice paid</h2>
+        <p className="mb-4 text-sm text-[var(--color-text-primary)]">
+          {formatMoney(invoice.amount)} from {customerName}
+        </p>
+        <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+          <Select label="Deposit to" value={depositAccountId} onChange={setDepositAccountId} options={depositAccountOptions} placeholder="Select account" allowCustomValue={false} />
+          <InputField label="Payment date" type="date" value={paymentDate} onChange={(e) => setPaymentDate(e.target.value)} />
+          <div className="mt-2 flex justify-end gap-2">
+            <Button type="button" variant="secondary" onClick={onClose} disabled={submitting}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={!depositAccountId || submitting}>
+              {submitting ? "Marking paid…" : "Mark paid"}
+            </Button>
+          </div>
+        </form>
+      </div>
+    </div>
   );
 }

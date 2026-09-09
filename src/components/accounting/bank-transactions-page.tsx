@@ -12,7 +12,7 @@ import { useToast } from "@/components/ui/toast/toast-context";
 import { useCompany } from "@/lib/company/company-provider";
 import { companyScopedKey, localId, useLocalCollection } from "@/lib/local-store/use-local-collection";
 import type { PendingBankTxn, PendingTxnStatus } from "@/lib/local-store/accounting-types";
-import type { Vendor } from "@/lib/local-store/expenses-bills-types";
+import { useVendors } from "@/lib/hooks/use-vendors";
 import { getServiceContainer } from "@/lib/services/service-container-v2";
 import { ACCOUNT_CATEGORY_LABELS } from "@/constants/ui";
 import { DEBIT_NORMAL_CATEGORIES } from "@/modules/accounting/domain/accounting-reports";
@@ -180,8 +180,7 @@ export function BankTransactionsPage() {
         .map((a) => ({ value: a.id, label: a.name, rightLabel: ACCOUNT_CATEGORY_LABELS[a.category] })),
     [accounts]
   );
-  const vendorsKey = activeCompany ? companyScopedKey(activeCompany.name, "vendors") : null;
-  const { items: vendors, add: addVendor } = useLocalCollection<Vendor>(vendorsKey ?? "newgl:phase1:pending:vendors");
+  const { items: vendors, add: addVendor } = useVendors();
   const vendorOptions = useMemo(() => vendors.map((v) => ({ value: v.name, label: v.name, rightLabel: v.is1099Contractor ? "Vendor" : "Contact" })), [vendors]);
 
   const [showAddForm, setShowAddForm] = useState(false);
@@ -249,7 +248,7 @@ export function BankTransactionsPage() {
     const samplePayees = Array.from(new Set(samples.map((s) => s.payee).filter((p): p is string => Boolean(p))));
     samplePayees.forEach((name) => {
       if (vendors.some((v) => v.name.toLowerCase() === name.toLowerCase())) return;
-      addVendor({ id: localId(), name, is1099Contractor: false, status: "ACTIVE", createdAt: new Date().toISOString() });
+      addVendor({ name }).catch(() => {});
     });
     toast({ variant: "success", title: "Sample transactions loaded", description: "Local-only, for trying out Pending/Posted/Excluded -- delete anytime." });
   }
@@ -530,8 +529,9 @@ export function BankTransactionsPage() {
                           const name = txn.payee?.trim();
                           if (!name) return;
                           if (vendors.some((v) => v.name.toLowerCase() === name.toLowerCase())) return;
-                          addVendor({ id: localId(), name, is1099Contractor: false, status: "ACTIVE", createdAt: new Date().toISOString() });
-                          toast({ variant: "success", title: `"${name}" added to Vendors` });
+                          addVendor({ name })
+                            .then(() => toast({ variant: "success", title: `"${name}" added to Vendors` }))
+                            .catch((err) => toast({ variant: "error", title: "Could not add vendor", description: err instanceof Error ? err.message : undefined }));
                         }}
                         addNewLabel="+ Add new"
                         optionSize="sm"

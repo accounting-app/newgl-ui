@@ -27,6 +27,10 @@ import type { DrillTransaction } from "@/lib/accounting/drill-down";
 import { getServiceContainer } from "@/lib/services/service-container-v2";
 import { DEBIT_NORMAL_CATEGORIES } from "@/modules/accounting/domain/accounting-reports";
 import type { Account, LedgerPosting } from "@/modules/accounting/domain/models";
+import { listInvoices } from "@/lib/services/invoices-service";
+import type { Invoice } from "@/lib/services/invoices-service";
+import { listBills } from "@/lib/services/bills-service";
+import type { Bill } from "@/lib/services/bills-service";
 
 type ReportsPageProps = {
   reportType: ReportType;
@@ -244,6 +248,93 @@ function signedImpact(account: Account, posting: LedgerPosting): number {
   return posting.entryType === "CREDIT" ? posting.amount : -posting.amount;
 }
 
+/**
+ * Cash vs Accrual only matters for Income/Expense recognition timing, and
+ * only for the two domains that can be "entered" before cash actually
+ * moves: Invoices (AR) and Bills (AP). Everything else -- a direct deposit,
+ * a card swipe recorded straight to an expense account -- has no AR/AP
+ * leg, so cash and accrual agree on it already.
+ *
+ * An invoice/bill's *entry* transaction (postedTransactionId) posts
+ * Dr AR/Cr Income or Dr Expense/Cr AP -- the honest accrual moment. Its
+ * *payment* transaction (paymentTransactionId) only swaps AR/AP for Cash;
+ * it never touches Income/Expense at all in this ledger, so there is
+ * nothing in the raw postings for a cash-basis report to "pick up" once
+ * the invoice/bill is paid. This synthesizes that missing recognition:
+ * for cash basis, drop the entry transaction's Income/Expense posting
+ * entirely (unless/until paid), and if/when it *is* paid, recognize the
+ * full amount as of the payment date instead of the entry date.
+ *
+ * Whole-amount payments only (this domain has no partial payments), so
+ * "paid" vs "not yet paid" is the only split needed -- no proration.
+ */
+function buildCashBasisPostings(postings: LedgerPosting[], invoices: Invoice[], bills: Bill[]): LedgerPosting[] {
+  const deferredTransactionIds = new Set<string>();
+  for (const invoice of invoices) {
+    if (invoice.postedTransactionId) deferredTransactionIds.add(invoice.postedTransactionId);
+  }
+  for (const bill of bills) {
+    if (bill.postedTransactionId) deferredTransactionIds.add(bill.postedTransactionId);
+  }
+
+  const postingDateByTransactionId = new Map<string, string>();
+  for (const posting of postings) {
+    if (!postingDateByTransactionId.has(posting.transactionId)) {
+      postingDateByTransactionId.set(posting.transactionId, posting.postingDate);
+    }
+  }
+
+  /** The specific income/expense account an entry transaction actually posted to, so a paid invoice/bill recognizes against the same account under cash basis (handles a per-item incomeAccountId, or the "Sales Income" fallback, identically -- both already show up in this transaction's own postings). */
+  function categoryAccountIdForEntryTransaction(transactionId: string | undefined, entryType: LedgerPosting["entryType"]): string | undefined {
+    if (!transactionId) return undefined;
+    return postings.find((p) => p.transactionId === transactionId && p.entryType === entryType)?.accountId;
+  }
+
+  const undeferredPostings = postings.filter((p) => !deferredTransactionIds.has(p.transactionId));
+
+  const recognizedOnPayment: LedgerPosting[] = [];
+  for (const invoice of invoices) {
+    if (invoice.status !== "PAID" || !invoice.paymentTransactionId) continue;
+    const accountId = categoryAccountIdForEntryTransaction(invoice.postedTransactionId, "CREDIT");
+    const paymentDate = postingDateByTransactionId.get(invoice.paymentTransactionId);
+    if (!accountId || !paymentDate) continue;
+    recognizedOnPayment.push(makeSyntheticPosting(invoice.paymentTransactionId, accountId, "CREDIT", invoice.amount, paymentDate));
+  }
+  for (const bill of bills) {
+    if (bill.status !== "PAID" || !bill.paymentTransactionId) continue;
+    const paymentDate = postingDateByTransactionId.get(bill.paymentTransactionId);
+    if (!paymentDate) continue;
+    recognizedOnPayment.push(makeSyntheticPosting(bill.paymentTransactionId, bill.categoryAccountId, "DEBIT", bill.amount, paymentDate));
+  }
+
+  return [...undeferredPostings, ...recognizedOnPayment];
+}
+
+let syntheticPostingCounter = 0;
+function makeSyntheticPosting(
+  transactionId: string,
+  accountId: string,
+  entryType: LedgerPosting["entryType"],
+  amount: number,
+  postingDate: string
+): LedgerPosting {
+  syntheticPostingCounter += 1;
+  return {
+    id: `cash-basis-recognition-${syntheticPostingCounter}`,
+    transactionId,
+    accountId,
+    entryType,
+    amount,
+    currency: "USD",
+    exchangeRate: 1,
+    postingDate,
+    fiscalPeriod: postingDate.slice(0, 7),
+    reconciliationStatus: "UNRECONCILED",
+    status: "POSTED",
+    createdAt: new Date().toISOString()
+  };
+}
+
 // ── Report compare + columnar statements (PLAINGL_FEATURES_TO_IMPLEMENT.md #3) ──
 // Both modes reuse the same single-period computation, just fed a different
 // date range: "compare" runs it once more against a shifted range, "columnar"
@@ -320,7 +411,11 @@ function computeProfitAndLoss(
 type BSTotals = {
   bankAccounts: { name: string; amount: number }[];
   totalBankAccounts: number;
+  otherCurrentAssets: { name: string; amount: number }[];
+  totalOtherCurrentAssets: number;
   totalCurrentAssets: number;
+  fixedAssets: { name: string; amount: number }[];
+  totalFixedAssets: number;
   totalAssets: number;
   liabilities: { name: string; amount: number }[];
   totalLiabilities: number;
@@ -356,13 +451,27 @@ function computeBalanceSheet(
       .sort((a, b) => a.name.localeCompare(b.name));
 
   const bankAccounts = byCategory(new Set(["BANK"]));
+  // Accounts Receivable and Other Current Assets shown as their own rows --
+  // otherwise their balance is silently folded into "Total for Current
+  // Assets" with no line item to explain it (e.g. once Invoices/Bills post
+  // real AR/AP, as of Phase 1.5 Steps 3 & 7).
+  const otherCurrentAssets = byCategory(new Set(["ACCOUNTS_RECEIVABLE", "OTHER_CURRENT_ASSET"]));
   const currentAssets = byCategory(new Set(["BANK", "ACCOUNTS_RECEIVABLE", "OTHER_CURRENT_ASSET"]));
-  const liabilities = byCategory(new Set(["CREDIT_CARD", "LONG_TERM_LIABILITY", "OTHER_CURRENT_LIABILITY"]));
+  // FIXED_ASSET is a distinct top-level section (Equipment, Vehicles, ...),
+  // not part of Current Assets -- also previously missing entirely, same
+  // "silently drop a whole category" bug as Accounts Payable below.
+  const fixedAssets = byCategory(new Set(["FIXED_ASSET"]));
+  // ACCOUNTS_PAYABLE must be included here -- without it, a company with any
+  // unpaid bill has a Balance Sheet where Assets != Liabilities + Equity,
+  // which should never happen in double-entry accounting.
+  const liabilities = byCategory(new Set(["ACCOUNTS_PAYABLE", "CREDIT_CARD", "LONG_TERM_LIABILITY", "OTHER_CURRENT_LIABILITY"]));
   const equityRows = byCategory(new Set(["EQUITY"]));
 
   const totalBankAccounts = bankAccounts.reduce((s, r) => s + r.amount, 0);
+  const totalOtherCurrentAssets = otherCurrentAssets.reduce((s, r) => s + r.amount, 0);
   const totalCurrentAssets = currentAssets.reduce((s, r) => s + r.amount, 0);
-  const totalAssets = totalCurrentAssets;
+  const totalFixedAssets = fixedAssets.reduce((s, r) => s + r.amount, 0);
+  const totalAssets = totalCurrentAssets + totalFixedAssets;
   const totalLiabilities = liabilities.reduce((s, r) => s + r.amount, 0);
   const totalEquityWithoutNetIncome = equityRows.reduce((s, r) => s + r.amount, 0);
   const netIncome = computeNetIncome(postings, accountById, netIncomeFrom, resolvedAsOf);
@@ -372,7 +481,11 @@ function computeBalanceSheet(
   return {
     bankAccounts,
     totalBankAccounts,
+    otherCurrentAssets,
+    totalOtherCurrentAssets,
     totalCurrentAssets,
+    fixedAssets,
+    totalFixedAssets,
     totalAssets,
     liabilities,
     totalLiabilities,
@@ -531,6 +644,8 @@ function ReportsPageInner({ reportType }: ReportsPageProps) {
   const [compareTo, setCompareTo] = useState<string>(() => parseCompareTo(searchParams));
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [postings, setPostings] = useState<LedgerPosting[]>([]);
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [bills, setBills] = useState<Bill[]>([]);
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({
     income: true,
     expenses: true,
@@ -565,6 +680,10 @@ function ReportsPageInner({ reportType }: ReportsPageProps) {
   useEffect(() => {
     services.accountService.listAccounts().then(setAccounts).catch(() => setAccounts([]));
     services.ledgerService.listPostings().then(setPostings).catch(() => setPostings([]));
+    // Only the P&L's Cash/Accrual split needs these (see buildCashBasisPostings) --
+    // fetched here rather than in a heavier hook since reports are read-only.
+    listInvoices().then(setInvoices).catch(() => setInvoices([]));
+    listBills().then(setBills).catch(() => setBills([]));
   }, [services]);
 
   const reportQueryString = useMemo(
@@ -604,14 +723,21 @@ function ReportsPageInner({ reportType }: ReportsPageProps) {
     return map;
   }, [accounts]);
 
-  const netIncome = useMemo(
-    () => computeNetIncome(postings, accountById, fromDate, toDate),
-    [postings, accountById, fromDate, toDate]
+  // The Cash/Accrual toggle only changes Profit and Loss -- see
+  // buildCashBasisPostings' doc comment. The Balance Sheet's own asset and
+  // liability balances (Cash, Accounts Receivable/Payable, ...) are real
+  // ledger facts independent of reporting method; a true cash-basis Balance
+  // Sheet would also need to drop unpaid AR/AP from Assets/Liabilities
+  // entirely (not just change Net Income), which is a materially bigger,
+  // separate feature -- so it stays accrual-only for now, deliberately.
+  const plPostings = useMemo(
+    () => (accountingMethod === "cash" ? buildCashBasisPostings(postings, invoices, bills) : postings),
+    [accountingMethod, postings, invoices, bills]
   );
 
   const profitAndLossData = useMemo(
-    () => computeProfitAndLoss(postings, accountById, fromDate, toDate),
-    [postings, accountById, fromDate, toDate]
+    () => computeProfitAndLoss(plPostings, accountById, fromDate, toDate),
+    [plPostings, accountById, fromDate, toDate]
   );
 
   const balanceSheetData = useMemo(
@@ -634,9 +760,9 @@ function ReportsPageInner({ reportType }: ReportsPageProps) {
     () =>
       columnarPeriods.map((period) => ({
         ...period,
-        data: computeProfitAndLoss(postings, accountById, period.from, period.to)
+        data: computeProfitAndLoss(plPostings, accountById, period.from, period.to)
       })),
-    [columnarPeriods, postings, accountById]
+    [columnarPeriods, plPostings, accountById]
   );
 
   const bsColumnarPeriods = useMemo(
@@ -649,8 +775,8 @@ function ReportsPageInner({ reportType }: ReportsPageProps) {
   );
 
   const plCompareData = useMemo(
-    () => (compareRange ? computeProfitAndLoss(postings, accountById, compareRange.from, compareRange.to) : null),
-    [compareRange, postings, accountById]
+    () => (compareRange ? computeProfitAndLoss(plPostings, accountById, compareRange.from, compareRange.to) : null),
+    [compareRange, plPostings, accountById]
   );
 
   const bsCompareData = useMemo(
@@ -738,10 +864,14 @@ function ReportsPageInner({ reportType }: ReportsPageProps) {
         columns,
         columnLabels,
         bankAccounts: buildHierarchyRowsMulti(bsColumnarPeriods.map((p) => p.data.bankAccounts)),
+        otherCurrentAssets: buildHierarchyRowsMulti(bsColumnarPeriods.map((p) => p.data.otherCurrentAssets)),
+        fixedAssets: buildHierarchyRowsMulti(bsColumnarPeriods.map((p) => p.data.fixedAssets)),
         liabilities: buildHierarchyRowsMulti(bsColumnarPeriods.map((p) => p.data.liabilities)),
         equityRows: buildHierarchyRowsMulti(bsColumnarPeriods.map((p) => p.data.equityRows)),
         totalBankAccounts: bsColumnarPeriods.map((p) => p.data.totalBankAccounts),
+        totalOtherCurrentAssets: bsColumnarPeriods.map((p) => p.data.totalOtherCurrentAssets),
         totalCurrentAssets: bsColumnarPeriods.map((p) => p.data.totalCurrentAssets),
+        totalFixedAssets: bsColumnarPeriods.map((p) => p.data.totalFixedAssets),
         totalAssets: bsColumnarPeriods.map((p) => p.data.totalAssets),
         totalLiabilities: bsColumnarPeriods.map((p) => p.data.totalLiabilities),
         totalEquity: bsColumnarPeriods.map((p) => p.data.totalEquity),
@@ -764,10 +894,16 @@ function ReportsPageInner({ reportType }: ReportsPageProps) {
         columns,
         columnLabels,
         bankAccounts: rowsWithChange(buildHierarchyRowsMulti([balanceSheetData.bankAccounts, bsCompareData.bankAccounts])),
+        otherCurrentAssets: rowsWithChange(
+          buildHierarchyRowsMulti([balanceSheetData.otherCurrentAssets, bsCompareData.otherCurrentAssets])
+        ),
+        fixedAssets: rowsWithChange(buildHierarchyRowsMulti([balanceSheetData.fixedAssets, bsCompareData.fixedAssets])),
         liabilities: rowsWithChange(buildHierarchyRowsMulti([balanceSheetData.liabilities, bsCompareData.liabilities])),
         equityRows: rowsWithChange(buildHierarchyRowsMulti([balanceSheetData.equityRows, bsCompareData.equityRows])),
         totalBankAccounts: withChange(balanceSheetData.totalBankAccounts, bsCompareData.totalBankAccounts),
+        totalOtherCurrentAssets: withChange(balanceSheetData.totalOtherCurrentAssets, bsCompareData.totalOtherCurrentAssets),
         totalCurrentAssets: withChange(balanceSheetData.totalCurrentAssets, bsCompareData.totalCurrentAssets),
+        totalFixedAssets: withChange(balanceSheetData.totalFixedAssets, bsCompareData.totalFixedAssets),
         totalAssets: withChange(balanceSheetData.totalAssets, bsCompareData.totalAssets),
         totalLiabilities: withChange(balanceSheetData.totalLiabilities, bsCompareData.totalLiabilities),
         totalEquity: withChange(balanceSheetData.totalEquity, bsCompareData.totalEquity),
@@ -783,10 +919,14 @@ function ReportsPageInner({ reportType }: ReportsPageProps) {
       columns,
       columnLabels: ["Total"],
       bankAccounts: buildHierarchyRowsMulti([balanceSheetData.bankAccounts]),
+      otherCurrentAssets: buildHierarchyRowsMulti([balanceSheetData.otherCurrentAssets]),
+      fixedAssets: buildHierarchyRowsMulti([balanceSheetData.fixedAssets]),
       liabilities: buildHierarchyRowsMulti([balanceSheetData.liabilities]),
       equityRows: buildHierarchyRowsMulti([balanceSheetData.equityRows]),
       totalBankAccounts: [balanceSheetData.totalBankAccounts],
+      totalOtherCurrentAssets: [balanceSheetData.totalOtherCurrentAssets],
       totalCurrentAssets: [balanceSheetData.totalCurrentAssets],
+      totalFixedAssets: [balanceSheetData.totalFixedAssets],
       totalAssets: [balanceSheetData.totalAssets],
       totalLiabilities: [balanceSheetData.totalLiabilities],
       totalEquity: [balanceSheetData.totalEquity],
@@ -865,25 +1005,33 @@ function ReportsPageInner({ reportType }: ReportsPageProps) {
             <p className="mb-1 text-[11px] text-[var(--color-icon-secondary)]">To</p>
             <InputField type="date" value={toDate} onChange={(e) => handleToChange(e.target.value)} />
           </div>
-          <div>
-            <p className="mb-1 text-[11px] text-[var(--color-icon-secondary)]">Accounting method</p>
-            <div className="inline-flex h-9 w-full rounded border border-[var(--color-input-border-primary)] bg-[var(--color-container-background-primary)] p-0.5">
-              <button
-                className={`flex-1 rounded text-xs ${accountingMethod === "cash" ? "bg-[var(--color-report-toggle-active)] text-white" : "text-[var(--color-text-primary)]"}`}
-                onClick={() => setAccountingMethod("cash")}
-                type="button"
-              >
-                Cash
-              </button>
-              <button
-                className={`flex-1 rounded text-xs ${accountingMethod === "accrual" ? "bg-[var(--color-report-toggle-active)] text-white" : "text-[var(--color-text-primary)]"}`}
-                onClick={() => setAccountingMethod("accrual")}
-                type="button"
-              >
-                Accrual
-              </button>
+          {/* Cash vs Accrual only changes revenue/expense recognition timing, so
+              it's meaningful for Profit and Loss only -- the Balance Sheet's
+              own asset/liability balances are real ledger facts either way
+              (see plPostings' doc comment above). Showing this toggle there
+              without it doing anything would be the exact "looks functional,
+              isn't" trap this fix is closing on the P&L side. */}
+          {reportType === "profit_loss" ? (
+            <div>
+              <p className="mb-1 text-[11px] text-[var(--color-icon-secondary)]">Accounting method</p>
+              <div className="inline-flex h-9 w-full rounded border border-[var(--color-input-border-primary)] bg-[var(--color-container-background-primary)] p-0.5">
+                <button
+                  className={`flex-1 rounded text-xs ${accountingMethod === "cash" ? "bg-[var(--color-report-toggle-active)] text-white" : "text-[var(--color-text-primary)]"}`}
+                  onClick={() => setAccountingMethod("cash")}
+                  type="button"
+                >
+                  Cash
+                </button>
+                <button
+                  className={`flex-1 rounded text-xs ${accountingMethod === "accrual" ? "bg-[var(--color-report-toggle-active)] text-white" : "text-[var(--color-text-primary)]"}`}
+                  onClick={() => setAccountingMethod("accrual")}
+                  type="button"
+                >
+                  Accrual
+                </button>
+              </div>
             </div>
-          </div>
+          ) : null}
           <div>
             <p className="mb-1 text-[11px] text-[var(--color-icon-secondary)]">Display columns by</p>
             <SelectField
@@ -915,7 +1063,7 @@ function ReportsPageInner({ reportType }: ReportsPageProps) {
         {/* ── Report toolbar ── */}
         <div className="mb-4 flex flex-wrap items-center justify-end gap-2 border-b border-[var(--color-divider-tertiary)] pb-3">
           <span className="text-xs text-[var(--color-icon-secondary)]">
-            {accountingMethod === "cash" ? "Cash basis" : "Accrual basis"}
+            {reportType === "profit_loss" && accountingMethod === "cash" ? "Cash basis" : "Accrual basis"}
           </span>
           <Button variant="secondary" size="sm" className="no-print" onClick={() => window.print()}>
             Print
@@ -1136,10 +1284,50 @@ function ReportsPageInner({ reportType }: ReportsPageProps) {
                   <td className="px-6 py-1 font-semibold text-[var(--color-text-primary)]">Total for Bank Accounts</td>
                   <ReportValueCells values={bsReport.totalBankAccounts} columns={bsReport.columns} />
                 </tr>
+                <ReportAccountRows
+                  rows={bsReport.otherCurrentAssets}
+                  columns={bsReport.columns}
+                  collapsedNames={collapsedAccounts}
+                  rowKeyPrefix="other-current-asset"
+                  baseIndentRem={2}
+                  onToggleCollapse={toggleAccountCollapse}
+                  onDrillAmount={() => setDrillSection({
+                    label: "Other Current Assets",
+                    reportLabel,
+                    rows: balanceSheetData.otherCurrentAssets,
+                    total: balanceSheetData.totalOtherCurrentAssets,
+                  })}
+                />
                 <tr className="border-b border-[var(--color-container-background-secondary)]">
                   <td className="px-4 py-1 font-semibold text-[var(--color-text-primary)]">Total for Current Assets</td>
                   <ReportValueCells values={bsReport.totalCurrentAssets} columns={bsReport.columns} />
                 </tr>
+                {bsReport.fixedAssets.length > 0 ? (
+                  <>
+                    <tr className="border-b border-[var(--color-container-background-secondary)]">
+                      <td className="px-4 py-1 font-medium text-[var(--color-text-primary)]">Fixed Assets</td>
+                      <td colSpan={bsReport.columns.length} />
+                    </tr>
+                    <ReportAccountRows
+                      rows={bsReport.fixedAssets}
+                      columns={bsReport.columns}
+                      collapsedNames={collapsedAccounts}
+                      rowKeyPrefix="fixed-asset"
+                      baseIndentRem={2}
+                      onToggleCollapse={toggleAccountCollapse}
+                      onDrillAmount={() => setDrillSection({
+                        label: "Fixed Assets",
+                        reportLabel,
+                        rows: balanceSheetData.fixedAssets,
+                        total: balanceSheetData.totalFixedAssets,
+                      })}
+                    />
+                    <tr className="border-b border-[var(--color-container-background-secondary)]">
+                      <td className="px-4 py-1 font-semibold text-[var(--color-text-primary)]">Total for Fixed Assets</td>
+                      <ReportValueCells values={bsReport.totalFixedAssets} columns={bsReport.columns} />
+                    </tr>
+                  </>
+                ) : null}
                 <tr className="border-b border-[var(--color-divider-tertiary)]">
                   <td className="px-3 py-1 font-semibold text-[var(--color-text-primary)]">Total for Assets</td>
                   <ReportValueCells values={bsReport.totalAssets} columns={bsReport.columns} />

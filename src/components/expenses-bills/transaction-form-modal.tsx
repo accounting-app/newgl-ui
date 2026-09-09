@@ -11,7 +11,7 @@ import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/toast/toast-context";
 import { localId } from "@/lib/local-store/use-local-collection";
-import type { Vendor } from "@/lib/local-store/expenses-bills-types";
+import type { Vendor } from "@/lib/services/vendors-service";
 import type { Account } from "@/modules/accounting/domain/models";
 
 export type TxnFormType = "BILL" | "EXPENSE" | "CHECK" | "VENDOR_CREDIT" | "CREDIT_CARD_CREDIT";
@@ -85,7 +85,7 @@ export function TransactionFormModal({
    * which need a real ledger transaction posted, deferred for now), so
    * when the caller passes this, Save actually creates a Bill instead
    * of just showing the "UI preview only" toast. */
-  onSaveBill?: (input: BillSaveInput) => void;
+  onSaveBill?: (input: BillSaveInput) => Promise<void>;
   onClose: () => void;
 }) {
   const { toast } = useToast();
@@ -127,23 +127,28 @@ export function TransactionFormModal({
     setLines([newLineItem(), newLineItem()]);
   }
 
-  function handleSave(andClose: boolean) {
+  async function handleSave(andClose: boolean) {
     if (type === "BILL" && onSaveBill) {
-      if (!payeeId || total <= 0) {
-        toast({ variant: "error", title: "Choose a vendor and at least one line amount first" });
+      const categoryAccountId = lines.find((l) => l.categoryAccountId)?.categoryAccountId ?? "";
+      if (!payeeId || total <= 0 || !categoryAccountId) {
+        toast({ variant: "error", title: "Choose a vendor, a category, and at least one line amount first" });
         return;
       }
-      onSaveBill({
-        vendorId: payeeId,
-        billNumber: billNo.trim(),
-        billDate,
-        dueDate,
-        amount: total,
-        categoryAccountId: lines.find((l) => l.categoryAccountId)?.categoryAccountId ?? "",
-        memo: memo.trim()
-      });
-      toast({ variant: "success", title: "Bill added" });
-      if (andClose) onClose();
+      try {
+        await onSaveBill({
+          vendorId: payeeId,
+          billNumber: billNo.trim(),
+          billDate,
+          dueDate,
+          amount: total,
+          categoryAccountId,
+          memo: memo.trim()
+        });
+        toast({ variant: "success", title: "Bill added" });
+        if (andClose) onClose();
+      } catch (err) {
+        toast({ variant: "error", title: "Could not save this bill", description: err instanceof Error ? err.message : undefined });
+      }
       return;
     }
     toast({

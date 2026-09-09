@@ -8,8 +8,8 @@ import { IconButton } from "@/components/ui/icon-button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/components/ui/toast/toast-context";
 import { useCompany } from "@/lib/company/company-provider";
-import { companyScopedKey, useLocalCollection, usePersistedJSON } from "@/lib/local-store/use-local-collection";
-import type { Bill } from "@/lib/local-store/expenses-bills-types";
+import { companyScopedKey, usePersistedJSON } from "@/lib/local-store/use-local-collection";
+import { useBills } from "@/lib/hooks/use-bills";
 import { getServiceContainer } from "@/lib/services/service-container-v2";
 import { DEBIT_NORMAL_CATEGORIES } from "@/modules/accounting/domain/accounting-reports";
 import type { Account, Transaction } from "@/modules/accounting/domain/models";
@@ -81,8 +81,7 @@ export function ExpensesBillsOverviewPage() {
   const { toast } = useToast();
   const services = useMemo(() => getServiceContainer(), []);
 
-  const billsKey = activeCompany ? companyScopedKey(activeCompany.name, "bills") : null;
-  const { items: bills, hydrated: billsHydrated } = useLocalCollection<Bill>(billsKey ?? "newgl:phase1:pending:bills");
+  const { items: bills, hydrated: billsHydrated } = useBills();
 
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);

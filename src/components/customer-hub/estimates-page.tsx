@@ -5,7 +5,7 @@ import { Handshake } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toast/toast-context";
 import { useCompany } from "@/lib/company/company-provider";
-import type { Estimate, EstimateStatus } from "@/lib/local-store/sales-types";
+import type { Estimate, EstimateStatus } from "@/lib/services/estimates-service";
 import { useSalesData } from "@/components/sales/use-sales-data";
 import { EstimateFormDrawer } from "@/components/customer-hub/estimate-form-drawer";
 
@@ -15,7 +15,8 @@ function formatMoney(value: number): string {
 
 const STATUS_LABEL: Record<EstimateStatus, string> = { OPEN: "Open", ACCEPTED: "Accepted", DECLINED: "Declined" };
 
-// Phase 1: real local estimates. The reference's "ask for approvals
+// Phase 1.5, Step 8: real estimates -- metadata-only, no ledger impact
+// (see @/lib/hooks/use-estimates). The reference's "ask for approvals
 // directly on your estimate" needs a real e-signature/online-approval
 // integration this app doesn't have, so accept/decline here is just a
 // status you set yourself, not something a customer confirms online.
@@ -28,10 +29,31 @@ export function EstimatesPage() {
   const customerNameById = useMemo(() => new Map(customers.map((c) => [c.id, c.name])), [customers]);
   const sorted = useMemo(() => [...estimates].sort((a, b) => b.estimateDate.localeCompare(a.estimateDate)), [estimates]);
 
-  function handleSave(input: Omit<Estimate, "id" | "createdAt" | "status">) {
-    addEstimate(input);
-    setShowDrawer(false);
-    toast({ variant: "success", title: "Estimate created" });
+  async function handleSave(input: Omit<Estimate, "id" | "createdAt" | "status">) {
+    try {
+      await addEstimate(input);
+      setShowDrawer(false);
+      toast({ variant: "success", title: "Estimate created" });
+    } catch (err) {
+      toast({ variant: "error", title: "Could not create this estimate", description: err instanceof Error ? err.message : undefined });
+    }
+  }
+
+  async function handleSetStatus(estimateId: string, status: EstimateStatus) {
+    try {
+      await updateEstimate(estimateId, { status });
+    } catch (err) {
+      toast({ variant: "error", title: "Could not update this estimate", description: err instanceof Error ? err.message : undefined });
+    }
+  }
+
+  async function handleDelete(estimateId: string) {
+    try {
+      await removeEstimate(estimateId);
+      toast({ variant: "success", title: "Estimate deleted" });
+    } catch (err) {
+      toast({ variant: "error", title: "Could not delete this estimate", description: err instanceof Error ? err.message : undefined });
+    }
   }
 
   if (!activeCompany) {
@@ -105,15 +127,15 @@ export function EstimatesPage() {
                   <div className="flex justify-end gap-3 text-[13px]">
                     {estimate.status === "OPEN" ? (
                       <>
-                        <button type="button" onClick={() => updateEstimate(estimate.id, { status: "ACCEPTED" })} className="font-medium text-[var(--color-link-action)] hover:underline">
+                        <button type="button" onClick={() => handleSetStatus(estimate.id, "ACCEPTED")} className="font-medium text-[var(--color-link-action)] hover:underline">
                           Accept
                         </button>
-                        <button type="button" onClick={() => updateEstimate(estimate.id, { status: "DECLINED" })} className="font-medium text-[var(--color-text-primary)] hover:underline">
+                        <button type="button" onClick={() => handleSetStatus(estimate.id, "DECLINED")} className="font-medium text-[var(--color-text-primary)] hover:underline">
                           Decline
                         </button>
                       </>
                     ) : null}
-                    <button type="button" onClick={() => removeEstimate(estimate.id)} className="font-medium text-[var(--color-negative)] hover:underline">
+                    <button type="button" onClick={() => handleDelete(estimate.id)} className="font-medium text-[var(--color-negative)] hover:underline">
                       Delete
                     </button>
                   </div>

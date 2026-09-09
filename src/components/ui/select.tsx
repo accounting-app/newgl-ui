@@ -60,12 +60,17 @@ export function Select({
   );
 
   useEffect(() => {
-    if (allowCustomValue) {
-      setQuery(value);
+    // A matched option's label always wins, even in allowCustomValue mode --
+    // otherwise selecting a real option (e.g. a customer/vendor id) displays
+    // its raw id instead of its name once this effect re-syncs `query` from
+    // the now-changed `value` prop. Only fall back to the raw value when it
+    // doesn't match any option, i.e. the user actually typed a custom value.
+    if (selectedOption) {
+      setQuery(selectedOption.label);
       return;
     }
-    setQuery(selectedOption?.label ?? "");
-  }, [allowCustomValue, selectedOption?.label, value]);
+    setQuery(allowCustomValue ? value : "");
+  }, [allowCustomValue, selectedOption, value]);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
