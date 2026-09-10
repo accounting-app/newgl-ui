@@ -149,6 +149,7 @@ function BankRegisterLayoutInner() {
           onDeleteEntry={deleteRegisterEntryInline}
           onCycleReconcileStatus={cycleReconcileStatus}
           accountOptions={accountOptions}
+          accounts={accounts}
           onCreateAccount={createAccount}
           availableTransactionTypes={availableTransactionTypes}
           selectedTransactionType={selectedTransactionType}

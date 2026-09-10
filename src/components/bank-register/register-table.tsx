@@ -62,6 +62,7 @@ type RegisterTableProps = {
   onDeleteEntry: (entryId: string) => Promise<void>;
   onCycleReconcileStatus: (entryId: string) => void;
   accountOptions: SelectFieldOption[];
+  accounts: Account[];
   onCreateAccount: (input: { name: string; category: Account["category"]; subtype?: string; openingBalance?: number }) => Promise<Account>;
   availableTransactionTypes: BankRegisterTransactionTypeOption[];
   selectedTransactionType: BankRegisterTransactionTypeId;
@@ -113,6 +114,7 @@ export function RegisterTable({
   onDeleteEntry,
   onCycleReconcileStatus,
   accountOptions,
+  accounts,
   onCreateAccount,
   availableTransactionTypes,
   selectedTransactionType,
@@ -729,6 +731,7 @@ export function RegisterTable({
       />
       <AddAccountModal
         open={isAccountModalOpen}
+        accounts={accounts}
         onClose={() => setIsAccountModalOpen(false)}
         onSave={async (input) => {
           const created = await onCreateAccount(input);
