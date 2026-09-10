@@ -550,13 +550,13 @@ export function RegisterTable({
           ) : null}
         </div>
         <div className="flex h-full items-center gap-4 text-[var(--color-icon-muted)]">
-          <Tooltip label="Print">
+          <Tooltip label="Print" side="bottom">
             <IconButton icon={Printer} label="Print" onClick={handlePrintRegister} />
           </Tooltip>
-          <Tooltip label="Export">
+          <Tooltip label="Export" side="bottom">
             <IconButton icon={Download} label="Export" onClick={handleExportRegister} />
           </Tooltip>
-          <Tooltip label="Import">
+          <Tooltip label="Import" side="bottom">
             <span className="relative inline-flex">
               <IconButton icon={FileUp} label="Import" onClick={onOpenImport} />
               {savedImportRowCount > 0 ? (
@@ -566,10 +566,10 @@ export function RegisterTable({
               ) : null}
             </span>
           </Tooltip>
-          <Tooltip label="Journal Entry">
+          <Tooltip label="Journal Entry" side="bottom">
             <IconButton icon={BookOpenText} label="New Journal Entry" onClick={onOpenJournalEntry} />
           </Tooltip>
-          <Tooltip label="Manage .bean file">
+          <Tooltip label="Manage .bean file" side="bottom">
             <Link
               href="/settings/ledger"
               className="flex h-full items-center hover:text-[var(--color-icon-secondary)]"
@@ -579,7 +579,7 @@ export function RegisterTable({
             </Link>
           </Tooltip>
           <div className="relative flex h-full items-center" data-settings-popover-root>
-            <Tooltip label="Settings">
+            <Tooltip label="Settings" side="bottom">
               <IconButton
                 icon={Settings}
                 label="Settings"
