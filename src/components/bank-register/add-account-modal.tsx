@@ -205,26 +205,27 @@ export function AddAccountModal({ open, accounts, onClose, onSave }: AddAccountM
               }}
             />
 
-            <div>
-              <div className="mb-1 flex items-center gap-x-8 text-xs text-[var(--color-icon-secondary)]">
-                <span className="flex-1">Account type*</span>
-                <Tooltip label="These are the major categories accounts fall under. You can see them in Reports as part of a balance sheet or profit & loss statement. Find out more">
-                  <Info className="h-3.5 w-3.5 text-[var(--color-icon-secondary)]" aria-hidden="true" />
-                </Tooltip>
-                <span className="flex-1">Detail type*</span>
-              </div>
-              <div className="flex gap-3">
-                <div className="flex-1">
-                  <Select
-                    value={accountType}
-                    onChange={handleAccountTypeChange}
-                    options={ACCOUNT_TYPE_OPTIONS}
-                    placeholder="Select account type"
-                    allowCustomValue={false}
-                  />
+            <div className="flex gap-3">
+              <div className="flex-1">
+                <div className="mb-1 flex items-center gap-1 text-xs text-[var(--color-icon-secondary)]">
+                  <span>Account type*</span>
+                  <Tooltip label="These are the major categories accounts fall under. You can see them in Reports as part of a balance sheet or profit & loss statement. Find out more">
+                    <Info className="h-3.5 w-3.5 text-[var(--color-icon-secondary)]" aria-hidden="true" />
+                  </Tooltip>
                 </div>
-                <div className="flex-1">
-                  <Select
+                <Select
+                  value={accountType}
+                  onChange={handleAccountTypeChange}
+                  options={ACCOUNT_TYPE_OPTIONS}
+                  placeholder="Select account type"
+                  allowCustomValue={false}
+                />
+              </div>
+              <div className="flex-1">
+                <div className="mb-1 flex items-center gap-1 text-xs text-[var(--color-icon-secondary)]">
+                  <span>Detail type*</span>
+                </div>
+                <Select
                     value={subtype}
                     onChange={setSubtype}
                     options={detailTypeOptions}
@@ -232,7 +233,6 @@ export function AddAccountModal({ open, accounts, onClose, onSave }: AddAccountM
                     allowCustomValue={false}
                     disabled={!accountType}
                   />
-                </div>
               </div>
             </div>
 
