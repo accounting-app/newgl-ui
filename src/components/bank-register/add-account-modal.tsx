@@ -6,11 +6,16 @@ import { InputField } from "@/components/ui/input-field";
 import { NumberField } from "@/components/ui/number-field";
 import { Select } from "@/components/ui/select";
 import type { SelectOption } from "@/components/ui/select";
-import { ACCOUNT_TYPE_GROUPS, DETAIL_TYPES_BY_CATEGORY } from "@/constants/account-detail-types";
+import {
+  ACCOUNT_TYPE_GROUPS,
+  DETAIL_TYPES_BY_ACCOUNT_TYPE,
+  categoryForAccountType,
+  type AccountTypeKey
+} from "@/constants/account-detail-types";
 import type { Account } from "@/modules/accounting/domain/models";
 
 const ACCOUNT_TYPE_OPTIONS: SelectOption[] = ACCOUNT_TYPE_GROUPS.flatMap((group) =>
-  group.options.map((option) => ({ value: option.category, label: option.label, group: group.groupLabel }))
+  group.options.map((option) => ({ value: option.key, label: option.label, group: group.groupLabel }))
 );
 
 type NewAccountInput = {
@@ -41,19 +46,19 @@ type AddAccountModalProps = {
  */
 export function AddAccountModal({ open, onClose, onSave }: AddAccountModalProps) {
   const [name, setName] = useState("");
-  const [category, setCategory] = useState<Account["category"] | "">("");
+  const [accountType, setAccountType] = useState<AccountTypeKey | "">("");
   const [subtype, setSubtype] = useState("");
   const [openingBalance, setOpeningBalance] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const detailTypeOptions: SelectOption[] = category
-    ? DETAIL_TYPES_BY_CATEGORY[category].map((detailType) => ({ value: detailType, label: detailType }))
+  const detailTypeOptions: SelectOption[] = accountType
+    ? DETAIL_TYPES_BY_ACCOUNT_TYPE[accountType].map((detailType) => ({ value: detailType, label: detailType }))
     : [];
 
   function resetForm() {
     setName("");
-    setCategory("");
+    setAccountType("");
     setSubtype("");
     setOpeningBalance("");
     setSaving(false);
@@ -65,8 +70,8 @@ export function AddAccountModal({ open, onClose, onSave }: AddAccountModalProps)
     onClose();
   }
 
-  function handleCategoryChange(value: string) {
-    setCategory(value as Account["category"]);
+  function handleAccountTypeChange(value: string) {
+    setAccountType(value as AccountTypeKey);
     // A Detail type from the previous Account type would no longer be one
     // of this one's options -- same as QBO resetting it on this switch.
     setSubtype("");
@@ -79,7 +84,7 @@ export function AddAccountModal({ open, onClose, onSave }: AddAccountModalProps)
       setError("Account name is required.");
       return;
     }
-    if (!category) {
+    if (!accountType) {
       setError("Account type is required.");
       return;
     }
@@ -93,7 +98,7 @@ export function AddAccountModal({ open, onClose, onSave }: AddAccountModalProps)
     try {
       await onSave({
         name: name.trim(),
-        category,
+        category: categoryForAccountType(accountType),
         subtype,
         openingBalance: openingBalance.trim() && Number.isFinite(parsedBalance) ? parsedBalance : undefined
       });
@@ -130,8 +135,8 @@ export function AddAccountModal({ open, onClose, onSave }: AddAccountModalProps)
             <div className="flex-1">
               <Select
                 label="Account type*"
-                value={category}
-                onChange={handleCategoryChange}
+                value={accountType}
+                onChange={handleAccountTypeChange}
                 options={ACCOUNT_TYPE_OPTIONS}
                 placeholder="Select account type"
                 allowCustomValue={false}
@@ -145,7 +150,7 @@ export function AddAccountModal({ open, onClose, onSave }: AddAccountModalProps)
                 options={detailTypeOptions}
                 placeholder="Select detail type"
                 allowCustomValue={false}
-                disabled={!category}
+                disabled={!accountType}
               />
             </div>
           </div>

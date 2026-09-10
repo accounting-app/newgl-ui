@@ -11,7 +11,13 @@ import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/toast/toast-context";
 import { ACCOUNT_CATEGORY_LABELS } from "@/constants/ui";
-import { ACCOUNT_TYPE_GROUPS, DETAIL_TYPES_BY_CATEGORY } from "@/constants/account-detail-types";
+import {
+  ACCOUNT_TYPE_GROUPS,
+  DETAIL_TYPES_BY_ACCOUNT_TYPE,
+  accountTypeKeyForCategory,
+  categoryForAccountType,
+  type AccountTypeKey
+} from "@/constants/account-detail-types";
 import type { SelectOption } from "@/components/ui/select";
 import { ACCOUNT_ROOT_GROUPS } from "@/modules/accounting/domain/accounting-reports";
 import { getServiceContainer } from "@/lib/services/service-container-v2";
@@ -31,7 +37,7 @@ const TYPE_FILTER_OPTIONS = [{ value: "", label: "All" }, ...CATEGORY_OPTIONS];
 // -- one account-creation form, not two different pickers for the same
 // action depending on which screen you started from.
 const ACCOUNT_TYPE_SELECT_OPTIONS: SelectOption[] = ACCOUNT_TYPE_GROUPS.flatMap((group) =>
-  group.options.map((option) => ({ value: option.category, label: option.label, group: group.groupLabel }))
+  group.options.map((option) => ({ value: option.key, label: option.label, group: group.groupLabel }))
 );
 
 function formatMoney(value: number): string {
@@ -59,7 +65,7 @@ export function ChartOfAccountsPage() {
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingAccount, setEditingAccount] = useState<Account | null>(null);
   const [newName, setNewName] = useState("");
-  const [newCategory, setNewCategory] = useState<Account["category"]>("BANK");
+  const [newAccountType, setNewAccountType] = useState<AccountTypeKey>("BANK");
   const [newSubtype, setNewSubtype] = useState("");
   const [newOpeningBalance, setNewOpeningBalance] = useState("");
   const [creating, setCreating] = useState(false);
@@ -147,7 +153,7 @@ export function ChartOfAccountsPage() {
   function startAdd() {
     setEditingAccount(null);
     setNewName("");
-    setNewCategory("BANK");
+    setNewAccountType("BANK");
     setNewSubtype("");
     setNewOpeningBalance("");
     setShowAddForm(true);
@@ -157,7 +163,7 @@ export function ChartOfAccountsPage() {
   function startEdit(account: Account) {
     setEditingAccount(account);
     setNewName(account.name);
-    setNewCategory(account.category);
+    setNewAccountType(accountTypeKeyForCategory(account.category));
     setNewSubtype(account.subtype ?? "");
     setNewOpeningBalance("");
     setShowAddForm(true);
@@ -166,14 +172,14 @@ export function ChartOfAccountsPage() {
   function startSubaccount(parent: Account) {
     setEditingAccount(null);
     setNewName(`${parent.name}:`);
-    setNewCategory(parent.category);
+    setNewAccountType(accountTypeKeyForCategory(parent.category));
     setNewSubtype(parent.subtype ?? "");
     setNewOpeningBalance("");
     setShowAddForm(true);
   }
 
-  function handleNewCategoryChange(value: string) {
-    setNewCategory(value as Account["category"]);
+  function handleNewAccountTypeChange(value: string) {
+    setNewAccountType(value as AccountTypeKey);
     // A Detail type from the previous Account type would no longer be one
     // of this one's options -- same reset QBO's own form does.
     setNewSubtype("");
@@ -193,7 +199,7 @@ export function ChartOfAccountsPage() {
         await services.accountService.createAccount({
           code: nextAccountCode(accounts),
           name: newName.trim(),
-          category: newCategory,
+          category: categoryForAccountType(newAccountType),
           subtype: newSubtype || undefined,
           currency: "USD",
           openingBalance: newOpeningBalance.trim() && Number.isFinite(openingBalance) ? openingBalance : undefined
@@ -366,8 +372,8 @@ export function ChartOfAccountsPage() {
                 <div className="w-48">
                   <Select
                     label="Account type"
-                    value={newCategory}
-                    onChange={handleNewCategoryChange}
+                    value={newAccountType}
+                    onChange={handleNewAccountTypeChange}
                     options={ACCOUNT_TYPE_SELECT_OPTIONS}
                     placeholder="Account type"
                     allowCustomValue={false}
@@ -378,7 +384,7 @@ export function ChartOfAccountsPage() {
                     label="Detail type"
                     value={newSubtype}
                     onChange={setNewSubtype}
-                    options={DETAIL_TYPES_BY_CATEGORY[newCategory].map((detailType) => ({ value: detailType, label: detailType }))}
+                    options={DETAIL_TYPES_BY_ACCOUNT_TYPE[newAccountType].map((detailType) => ({ value: detailType, label: detailType }))}
                     placeholder="Detail type"
                     allowCustomValue={false}
                   />
