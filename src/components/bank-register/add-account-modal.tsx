@@ -71,6 +71,10 @@ type AddAccountModalProps = {
  */
 export function AddAccountModal({ open, accounts, onClose, onSave }: AddAccountModalProps) {
   const [name, setName] = useState("");
+  // The preview list only picks up the typed name once the field is
+  // committed (blur / Enter) -- matches QBO, which doesn't redraw the
+  // statement preview on every keystroke.
+  const [nameForPreview, setNameForPreview] = useState("");
   const [accountType, setAccountType] = useState<AccountTypeKey | "">("");
   const [subtype, setSubtype] = useState("");
   const [isSubaccount, setIsSubaccount] = useState(false);
@@ -101,13 +105,14 @@ export function AddAccountModal({ open, accounts, onClose, onSave }: AddAccountM
     const rows = sameCategoryAccounts.map((a) => ({ label: a.name, isNew: false }));
     // Only the typed account name creates a preview row -- picking a Detail
     // type must not add anything to the list.
-    const pendingName = name.trim();
+    const pendingName = nameForPreview.trim();
     if (pendingName) rows.push({ label: pendingName, isNew: true });
     return rows.sort((a, b) => a.label.localeCompare(b.label));
-  }, [sameCategoryAccounts, name]);
+  }, [sameCategoryAccounts, nameForPreview]);
 
   function resetForm() {
     setName("");
+    setNameForPreview("");
     setAccountType("");
     setSubtype("");
     setIsSubaccount(false);
@@ -194,12 +199,16 @@ export function AddAccountModal({ open, accounts, onClose, onSave }: AddAccountM
               label="Account name*"
               value={name}
               onChange={(event) => setName(event.target.value)}
+              onBlur={() => setNameForPreview(name)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") setNameForPreview(name);
+              }}
             />
 
             <div>
               <div className="mb-1 flex items-center gap-x-8 text-xs text-[var(--color-icon-secondary)]">
                 <span className="flex-1">Account type*</span>
-                <Tooltip label="The account type sets which reports this account appears on and whether it's a debit- or credit-balance account.">
+                <Tooltip label="These are the major categories accounts fall under. You can see them in Reports as part of a balance sheet or profit & loss statement. Find out more">
                   <Info className="h-3.5 w-3.5 text-[var(--color-icon-secondary)]" aria-hidden="true" />
                 </Tooltip>
                 <span className="flex-1">Detail type*</span>
@@ -250,7 +259,7 @@ export function AddAccountModal({ open, accounts, onClose, onSave }: AddAccountM
               <div className="flex-1">
                 <div className="mb-1 flex items-center gap-1 text-xs text-[var(--color-icon-secondary)]">
                   Opening balance
-                  <Tooltip label="The balance in this account as of the date you start tracking it here.">
+                  <Tooltip label="Your opening balance is the amount of money you opened this account with.">
                     <Info className="h-3.5 w-3.5" aria-hidden="true" />
                   </Tooltip>
                 </div>
@@ -316,7 +325,11 @@ export function AddAccountModal({ open, accounts, onClose, onSave }: AddAccountM
                   {previewRows.map((row, index) => (
                     <li
                       key={`${row.label}-${index}`}
-                      className={`pl-4 text-sm ${row.isNew ? "font-semibold text-[var(--color-text-global)]" : "text-[var(--color-text-primary)]"}`}
+                      className={
+                        row.isNew
+                          ? "rounded-md border border-[var(--color-link-action)] bg-[rgba(0,95,158,0.08)] px-3 py-2 text-sm font-semibold text-[var(--color-link-action)]"
+                          : "pl-4 text-sm text-[var(--color-text-primary)]"
+                      }
                     >
                       {row.label}
                     </li>
