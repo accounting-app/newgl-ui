@@ -98,11 +98,13 @@ export function AddAccountModal({ open, accounts, onClose, onSave }: AddAccountM
   const statementTitle = category ? STATEMENT_BY_CHART_TYPE[ACCOUNT_TYPE_BY_CATEGORY[category]] : "Balance Sheet";
 
   const previewRows = useMemo(() => {
-    const pendingLabel = name.trim() || subtype;
     const rows = sameCategoryAccounts.map((a) => ({ label: a.name, isNew: false }));
-    if (pendingLabel) rows.push({ label: pendingLabel, isNew: true });
+    // Only the typed account name creates a preview row -- picking a Detail
+    // type must not add anything to the list.
+    const pendingName = name.trim();
+    if (pendingName) rows.push({ label: pendingName, isNew: true });
     return rows.sort((a, b) => a.label.localeCompare(b.label));
-  }, [sameCategoryAccounts, name, subtype]);
+  }, [sameCategoryAccounts, name]);
 
   function resetForm() {
     setName("");
@@ -305,8 +307,10 @@ export function AddAccountModal({ open, accounts, onClose, onSave }: AddAccountM
             </div>
             <p className="mt-0.5 text-xs text-[var(--color-icon-secondary)]">Active accounts as of {formatUsDate(todayIso())}</p>
             <div className="mt-3 border-t border-[var(--color-divider-tertiary)] pt-3">
-              {previewRows.length === 0 ? (
+              {!category ? (
                 <p className="pl-4 text-sm text-[var(--color-icon-secondary)]">Pick an account type to preview where this lands.</p>
+              ) : previewRows.length === 0 ? (
+                <p className="pl-4 text-sm text-[var(--color-icon-secondary)]">No accounts of this type yet.</p>
               ) : (
                 <ul className="space-y-2">
                   {previewRows.map((row, index) => (
