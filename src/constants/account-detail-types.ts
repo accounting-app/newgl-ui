@@ -51,6 +51,12 @@ export type AccountTypeOption = {
   label: string;
   /** Which of our `category` values an account of this type is stored as. */
   category: Account["category"];
+  /**
+   * Short helper text shown behind the (?) toggle next to this option in
+   * the Account type picker. "Bank" is transcribed verbatim from QBO's own
+   * form; the rest follow the same one-line pattern QBO uses per type.
+   */
+  description: string;
 };
 
 export type AccountTypeGroup = {
@@ -63,41 +69,113 @@ export const ACCOUNT_TYPE_GROUPS: AccountTypeGroup[] = [
   {
     groupLabel: "Asset",
     options: [
-      { key: "BANK", label: "Bank", category: "BANK" },
-      { key: "ACCOUNTS_RECEIVABLE", label: "Accounts receivable (A/R)", category: "ACCOUNTS_RECEIVABLE" },
-      { key: "OTHER_CURRENT_ASSET", label: "Other Current Assets", category: "OTHER_CURRENT_ASSET" },
-      { key: "FIXED_ASSET", label: "Fixed Assets", category: "FIXED_ASSET" },
+      { key: "BANK", label: "Bank", category: "BANK", description: "Tracks transactions for a bank account" },
+      {
+        key: "ACCOUNTS_RECEIVABLE",
+        label: "Accounts receivable (A/R)",
+        category: "ACCOUNTS_RECEIVABLE",
+        description: "Tracks money owed to your business by customers"
+      },
+      {
+        key: "OTHER_CURRENT_ASSET",
+        label: "Other Current Assets",
+        category: "OTHER_CURRENT_ASSET",
+        description: "Tracks assets likely to be converted to cash or used up within one year"
+      },
+      {
+        key: "FIXED_ASSET",
+        label: "Fixed Assets",
+        category: "FIXED_ASSET",
+        description: "Tracks depreciable assets your business owns and uses to generate income"
+      },
       // Interim: no dedicated non-current-asset category yet.
-      { key: "OTHER_ASSET", label: "Other Assets", category: "OTHER_CURRENT_ASSET" }
+      {
+        key: "OTHER_ASSET",
+        label: "Other Assets",
+        category: "OTHER_CURRENT_ASSET",
+        description: "Tracks long-term assets that aren't classified as fixed assets"
+      }
     ]
   },
   {
     groupLabel: "Liability",
     options: [
-      { key: "CREDIT_CARD", label: "Credit Card", category: "CREDIT_CARD" },
-      { key: "ACCOUNTS_PAYABLE", label: "Accounts payable (A/P)", category: "ACCOUNTS_PAYABLE" },
-      { key: "OTHER_CURRENT_LIABILITY", label: "Other Current Liabilities", category: "OTHER_CURRENT_LIABILITY" },
-      { key: "LONG_TERM_LIABILITY", label: "Long Term Liabilities", category: "LONG_TERM_LIABILITY" }
+      {
+        key: "CREDIT_CARD",
+        label: "Credit Card",
+        category: "CREDIT_CARD",
+        description: "Tracks transactions on a business credit card"
+      },
+      {
+        key: "ACCOUNTS_PAYABLE",
+        label: "Accounts payable (A/P)",
+        category: "ACCOUNTS_PAYABLE",
+        description: "Tracks money your business owes to vendors"
+      },
+      {
+        key: "OTHER_CURRENT_LIABILITY",
+        label: "Other Current Liabilities",
+        category: "OTHER_CURRENT_LIABILITY",
+        description: "Tracks short-term obligations due within one year, not tracked elsewhere"
+      },
+      {
+        key: "LONG_TERM_LIABILITY",
+        label: "Long Term Liabilities",
+        category: "LONG_TERM_LIABILITY",
+        description: "Tracks loans and other obligations due in more than 12 months"
+      }
     ]
   },
   {
     groupLabel: "Equity",
-    options: [{ key: "EQUITY", label: "Equity", category: "EQUITY" }]
+    options: [
+      {
+        key: "EQUITY",
+        label: "Equity",
+        category: "EQUITY",
+        description: "Tracks the owner's or shareholders' investment in the business"
+      }
+    ]
   },
   {
     groupLabel: "Income",
     options: [
-      { key: "INCOME", label: "Income", category: "INCOME" },
-      { key: "OTHER_INCOME", label: "Other Income", category: "OTHER_INCOME" }
+      {
+        key: "INCOME",
+        label: "Income",
+        category: "INCOME",
+        description: "Tracks money earned from your normal business operations"
+      },
+      {
+        key: "OTHER_INCOME",
+        label: "Other Income",
+        category: "OTHER_INCOME",
+        description: "Tracks income earned outside of normal business operations"
+      }
     ]
   },
   {
     groupLabel: "Expense",
     options: [
       // Interim: stored as EXPENSE (matches this app's own seed data).
-      { key: "COST_OF_GOODS_SOLD", label: "Cost of Goods Sold", category: "EXPENSE" },
-      { key: "EXPENSES", label: "Expenses", category: "EXPENSE" },
-      { key: "OTHER_EXPENSE", label: "Other Expense", category: "OTHER_EXPENSE" }
+      {
+        key: "COST_OF_GOODS_SOLD",
+        label: "Cost of Goods Sold",
+        category: "EXPENSE",
+        description: "Tracks the direct costs of producing the goods or services you sell"
+      },
+      {
+        key: "EXPENSES",
+        label: "Expenses",
+        category: "EXPENSE",
+        description: "Tracks money spent running your business"
+      },
+      {
+        key: "OTHER_EXPENSE",
+        label: "Other Expense",
+        category: "OTHER_EXPENSE",
+        description: "Tracks expenses that don't fit your normal operating expenses"
+      }
     ]
   }
 ];

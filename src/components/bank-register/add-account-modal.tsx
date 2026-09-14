@@ -19,7 +19,12 @@ import {
 import type { Account } from "@/modules/accounting/domain/models";
 
 const ACCOUNT_TYPE_OPTIONS: SelectOption[] = ACCOUNT_TYPE_GROUPS.flatMap((group) =>
-  group.options.map((option) => ({ value: option.key, label: option.label, group: group.groupLabel }))
+  group.options.map((option) => ({
+    value: option.key,
+    label: option.label,
+    group: group.groupLabel,
+    description: option.description
+  }))
 );
 
 /** Which statement the "New account preview" panel is titled after -- same split QBO's own form uses. */
@@ -219,6 +224,7 @@ export function AddAccountModal({ open, accounts, onClose, onSave }: AddAccountM
                   options={ACCOUNT_TYPE_OPTIONS}
                   placeholder="Select account type"
                   allowCustomValue={false}
+                  showCheckmark
                 />
               </div>
               <div className="flex-1">

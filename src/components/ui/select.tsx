@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useId, useMemo, useRef, useState } from "react";
-import { ChevronDown } from "lucide-react";
+import { Check, ChevronDown, HelpCircle } from "lucide-react";
 import { InputField } from "@/components/ui/input-field";
 
 export type SelectOption = {
@@ -11,6 +11,13 @@ export type SelectOption = {
   keywords?: string[];
   /** Renders a bold, non-clickable section header above this option whenever it differs from the previous option's group (e.g. QBO's own ASSET/LIABILITY/... headers on the Account type picker). Options must already be sorted by group -- this doesn't re-group them. */
   group?: string;
+  /**
+   * Short helper text for this option. When set, a small (?) toggle renders
+   * next to the option -- clicking it expands this text underneath, same as
+   * QBO's own Account type picker. Purely opt-in: options without a
+   * `description` render exactly as before.
+   */
+  description?: string;
 };
 
 type SelectProps = {
@@ -27,6 +34,12 @@ type SelectProps = {
   addNewLabel?: string;
   allowCustomValue?: boolean;
   optionSize?: "default" | "sm";
+  /**
+   * QBO-style option list: a checkmark marks the selected option (instead
+   * of bold text + a strong highlight) and a subtle highlight instead.
+   * Opt-in per select -- other call sites keep the existing look.
+   */
+  showCheckmark?: boolean;
 };
 
 // Promoted from bank-register/select-field.tsx (UI_DESIGN_SYSTEM_PLAN.md
@@ -48,13 +61,19 @@ export function Select({
   onAddNew,
   addNewLabel = "+ Add new",
   allowCustomValue = true,
-  optionSize = "default"
+  optionSize = "default",
+  showCheckmark = false
 }: SelectProps) {
   const [query, setQuery] = useState("");
   const [isOpen, setIsOpen] = useState(false);
   const [isFiltering, setIsFiltering] = useState(false);
+  const [openDescriptionValue, setOpenDescriptionValue] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const generatedId = useId();
+
+  useEffect(() => {
+    if (!isOpen) setOpenDescriptionValue(null);
+  }, [isOpen]);
 
   const selectedOption = useMemo(
     () => options.find((option) => option.value === value),
@@ -181,6 +200,12 @@ export function Select({
             filteredOptions.map((option, index) => {
               const isSelected = option.value === value;
               const showGroupHeader = option.group && option.group !== filteredOptions[index - 1]?.group;
+              const isDescriptionOpen = openDescriptionValue === option.value;
+              const rowHighlightClassName = isSelected
+                ? showCheckmark
+                  ? "bg-[var(--color-action-passive-subtle-hover)]"
+                  : "bg-[var(--color-action-passive-subtle-active)] hover:bg-[var(--color-action-passive-subtle-hover)] focus-visible:bg-[var(--color-action-passive-subtle-focus)] active:bg-[var(--color-action-passive-subtle-active)]"
+                : "hover:bg-[var(--color-action-passive-subtle-hover)]";
               return (
                 <div key={option.value}>
                   {showGroupHeader ? (
@@ -188,23 +213,49 @@ export function Select({
                       {option.group}
                     </p>
                   ) : null}
-                  <button
-                    type="button"
-                    onMouseDown={(event) => event.preventDefault()}
-                    onClick={() => handleSelectOption(option)}
-                    className={`grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-4 px-4 py-2 text-left ${optionTextClassName} ${
-                      isSelected
-                        ? "bg-[var(--color-action-passive-subtle-active)] hover:bg-[var(--color-action-passive-subtle-hover)] focus-visible:bg-[var(--color-action-passive-subtle-focus)] active:bg-[var(--color-action-passive-subtle-active)]"
-                        : "hover:bg-[var(--color-action-passive-subtle-hover)]"
-                    }`}
-                  >
-                    <span className={`whitespace-nowrap ${optionLabelClassName} ${isSelected ? "font-bold" : ""}`}>
-                      {option.label}
-                    </span>
-                    {option.rightLabel ? (
-                      <span className={`shrink-0 ${optionRightLabelClassName}`}>{option.rightLabel}</span>
+                  <div className={`flex items-center ${rowHighlightClassName}`}>
+                    <button
+                      type="button"
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() => handleSelectOption(option)}
+                      className={`grid flex-1 grid-cols-[minmax(0,1fr)_auto] items-center gap-4 py-2 pl-4 text-left ${optionTextClassName} ${
+                        option.description ? "pr-2" : "pr-4"
+                      }`}
+                    >
+                      <span
+                        className={`flex min-w-0 items-center gap-2 whitespace-nowrap ${optionLabelClassName} ${
+                          isSelected && !showCheckmark ? "font-bold" : ""
+                        }`}
+                      >
+                        {showCheckmark ? (
+                          isSelected ? (
+                            <Check className="h-4 w-4 shrink-0" aria-hidden="true" />
+                          ) : (
+                            <span className="w-4 shrink-0" aria-hidden="true" />
+                          )
+                        ) : null}
+                        <span className="truncate">{option.label}</span>
+                      </span>
+                      {option.rightLabel ? (
+                        <span className={`shrink-0 ${optionRightLabelClassName}`}>{option.rightLabel}</span>
+                      ) : null}
+                    </button>
+                    {option.description ? (
+                      <button
+                        type="button"
+                        aria-label={`About ${option.label}`}
+                        aria-expanded={isDescriptionOpen}
+                        onMouseDown={(event) => event.preventDefault()}
+                        onClick={() => setOpenDescriptionValue(isDescriptionOpen ? null : option.value)}
+                        className="mr-3 shrink-0 rounded p-1 text-[var(--color-icon-secondary)] hover:bg-[var(--color-action-passive-subtle-hover)] hover:text-[var(--color-text-global)]"
+                      >
+                        <HelpCircle className="h-3.5 w-3.5" aria-hidden="true" />
+                      </button>
                     ) : null}
-                  </button>
+                  </div>
+                  {isDescriptionOpen && option.description ? (
+                    <p className="px-4 pb-2 pl-11 pr-4 text-xs text-[var(--color-icon-secondary)]">{option.description}</p>
+                  ) : null}
                 </div>
               );
             })
