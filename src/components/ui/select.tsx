@@ -254,7 +254,12 @@ export function Select({
                     ) : null}
                   </div>
                   {isDescriptionOpen && option.description ? (
-                    <p className="px-4 pb-2 pl-11 pr-4 text-xs text-[var(--color-icon-secondary)]">{option.description}</p>
+                    // Capped so a long description can never widen the dropdown
+                    // itself -- it just wraps onto more lines (matches QBO: the
+                    // "box containing the option list" keeps a stable size).
+                    <p className="max-w-[240px] break-words px-4 pb-2 pl-11 pr-4 text-xs text-[var(--color-icon-secondary)]">
+                      {option.description}
+                    </p>
                   ) : null}
                 </div>
               );
