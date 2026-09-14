@@ -21,6 +21,7 @@ import {
   toDomainTransactionType
 } from "@/modules/accounting/presentation/transaction-type-policy";
 import { generateNextRefNumber } from "@/modules/accounting/domain/accounting-reports";
+import { nextAccountCode } from "@/lib/accounting/next-account-code";
 import type {
   BankRegisterTransactionTypeId,
   BankRegisterTransactionTypeOption
@@ -529,6 +530,28 @@ export function useBankRegister() {
     [existingRefNumbers, refreshAccounts, refreshEntries, refreshRefNumbers, services.transactionService]
   );
 
+  /**
+   * The Register's own "+ Add new" account picker (same idea as Payee's --
+   * see payee-side-modal.tsx -- but real: this one actually creates a row
+   * in the chart of accounts via the same service Chart of Accounts' own
+   * "New account" form uses, rather than a client-side-only stand-in).
+   */
+  const createAccount = useCallback(
+    async (input: { name: string; category: Account["category"]; subtype?: string; openingBalance?: number }): Promise<Account> => {
+      const created = await services.accountService.createAccount({
+        code: nextAccountCode(accounts),
+        name: input.name,
+        category: input.category,
+        subtype: input.subtype,
+        currency: "USD",
+        openingBalance: input.openingBalance
+      });
+      await refreshAccounts();
+      return created;
+    },
+    [accounts, refreshAccounts, services.accountService]
+  );
+
   const importTransactions = useCallback(
     async (input: ImportTransactionsInput): Promise<ImportTransactionsResult> => {
       const result = await services.transactionService.importTransactions(input);
@@ -636,6 +659,7 @@ export function useBankRegister() {
     reverseTransaction,
     importTransactions,
     createJournalEntry,
+    createAccount,
     toggleSplitMode,
     addDraftSplitLine,
     removeDraftSplitLine,

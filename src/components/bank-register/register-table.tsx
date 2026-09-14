@@ -8,6 +8,7 @@ import { useRegisterFilters } from "@hooks/use-register-filters";
 import { useRegisterPrint } from "@hooks/use-register-print";
 import { PayeeSideModal } from "@/components/bank-register/payee-side-modal";
 import type { PayeeOption } from "@/components/bank-register/payee-side-modal";
+import { AddAccountModal } from "@/components/bank-register/add-account-modal";
 import { RegisterTableColumnGroup } from "@/components/bank-register/register-table-column-group";
 import { RegisterTableHeader } from "@/components/bank-register/register-table-header";
 import { SelectField } from "@/components/bank-register/select-field";
@@ -22,7 +23,7 @@ import {
   REGISTER_OUTFLOW_ROW_TYPES,
   REGISTER_ROWS_PER_PAGE_OPTIONS
 } from "@/constants/ui";
-import type { RegisterEntry } from "@/modules/accounting/domain/models";
+import type { Account, RegisterEntry } from "@/modules/accounting/domain/models";
 import {
   nextReconcileStatus
 } from "@hooks/use-bank-register";
@@ -61,6 +62,8 @@ type RegisterTableProps = {
   onDeleteEntry: (entryId: string) => Promise<void>;
   onCycleReconcileStatus: (entryId: string) => void;
   accountOptions: SelectFieldOption[];
+  accounts: Account[];
+  onCreateAccount: (input: { name: string; category: Account["category"]; subtype?: string; openingBalance?: number }) => Promise<Account>;
   availableTransactionTypes: BankRegisterTransactionTypeOption[];
   selectedTransactionType: BankRegisterTransactionTypeId;
   onAddSelectedTransaction: () => void;
@@ -111,6 +114,8 @@ export function RegisterTable({
   onDeleteEntry,
   onCycleReconcileStatus,
   accountOptions,
+  accounts,
+  onCreateAccount,
   availableTransactionTypes,
   selectedTransactionType,
   onAddSelectedTransaction,
@@ -145,6 +150,8 @@ export function RegisterTable({
   const [payees, setPayees] = useState<PayeeOption[]>([]);
   const [isPayeeModalOpen, setIsPayeeModalOpen] = useState(false);
   const [payeeModalTarget, setPayeeModalTarget] = useState<"draft" | "row">("draft");
+  const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
+  const [accountModalTarget, setAccountModalTarget] = useState<"draft" | "row">("draft");
   const [isSettingsPopoverOpen, setIsSettingsPopoverOpen] = useState(false);
   const [rowsPerPage, setRowsPerPage] = useState<number>(40);
   const [currentPage, setCurrentPage] = useState<number>(1);
@@ -339,6 +346,11 @@ export function RegisterTable({
   function openPayeeModal(target: "draft" | "row") {
     setPayeeModalTarget(target);
     setIsPayeeModalOpen(true);
+  }
+
+  function openAccountModal(target: "draft" | "row") {
+    setAccountModalTarget(target);
+    setIsAccountModalOpen(true);
   }
 
   async function handleSaveRow() {
@@ -538,13 +550,13 @@ export function RegisterTable({
           ) : null}
         </div>
         <div className="flex h-full items-center gap-4 text-[var(--color-icon-muted)]">
-          <Tooltip label="Print">
+          <Tooltip label="Print" side="bottom">
             <IconButton icon={Printer} label="Print" onClick={handlePrintRegister} />
           </Tooltip>
-          <Tooltip label="Export">
+          <Tooltip label="Export" side="bottom">
             <IconButton icon={Download} label="Export" onClick={handleExportRegister} />
           </Tooltip>
-          <Tooltip label="Import">
+          <Tooltip label="Import" side="bottom">
             <span className="relative inline-flex">
               <IconButton icon={FileUp} label="Import" onClick={onOpenImport} />
               {savedImportRowCount > 0 ? (
@@ -554,10 +566,10 @@ export function RegisterTable({
               ) : null}
             </span>
           </Tooltip>
-          <Tooltip label="Journal Entry">
+          <Tooltip label="Journal Entry" side="bottom">
             <IconButton icon={BookOpenText} label="New Journal Entry" onClick={onOpenJournalEntry} />
           </Tooltip>
-          <Tooltip label="Manage .bean file">
+          <Tooltip label="Manage .bean file" side="bottom">
             <Link
               href="/settings/ledger"
               className="flex h-full items-center hover:text-[var(--color-icon-secondary)]"
@@ -567,7 +579,7 @@ export function RegisterTable({
             </Link>
           </Tooltip>
           <div className="relative flex h-full items-center" data-settings-popover-root>
-            <Tooltip label="Settings">
+            <Tooltip label="Settings" side="bottom">
               <IconButton
                 icon={Settings}
                 label="Settings"
@@ -632,6 +644,7 @@ export function RegisterTable({
             onDraftCancel={onDraftCancel}
             onReconcileCycle={onDraftReconcileCycle}
             onOpenPayeeModal={() => openPayeeModal("draft")}
+            onOpenAccountModal={() => openAccountModal("draft")}
             isSplitMode={isSplitMode}
             draftSplits={draftSplits}
             onToggleSplitMode={onToggleSplitMode}
@@ -667,6 +680,7 @@ export function RegisterTable({
                           onEditorChange={(field, value) => setEditor((current) => ({ ...current, [field]: value }))}
                           onReconcileCycle={cycleEditorReconcileStatus}
                           onOpenPayeeModal={() => openPayeeModal("row")}
+                          onOpenAccountModal={() => openAccountModal("row")}
                           onDelete={handleDeleteRow}
                           onCancel={() => {
                             setSelectedEntryId(null);
@@ -713,6 +727,21 @@ export function RegisterTable({
           if (payeeModalTarget === "row") {
             setEditor((current) => ({ ...current, payee: payee.name }));
           }
+        }}
+      />
+      <AddAccountModal
+        open={isAccountModalOpen}
+        accounts={accounts}
+        onClose={() => setIsAccountModalOpen(false)}
+        onSave={async (input) => {
+          const created = await onCreateAccount(input);
+          if (accountModalTarget === "draft" && draftTransaction) {
+            onDraftFieldChange("accountTypeId", created.id);
+          }
+          if (accountModalTarget === "row") {
+            setEditor((current) => ({ ...current, accountTypeId: created.id }));
+          }
+          return created;
         }}
       />
     </>
