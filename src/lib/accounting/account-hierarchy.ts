@@ -1,5 +1,32 @@
 export type AccountRow = { name: string; amount: number };
 
+/**
+ * Real account names (colon hierarchy convention, e.g. "Coding Services"
+ * given "Coding Services:By Hector M Garcia") that are an ancestor of at
+ * least one of `activeRowNames`. Report screens (P&L, Balance Sheet,
+ * Trial Balance) use this to seed a zero-balance row for a real parent
+ * account whose children have activity this period -- otherwise
+ * buildHierarchyRows below has nothing to hang those children on and
+ * treats the parent as a phantom path segment, rendering them unindented
+ * at the top level instead of nested under their real parent.
+ *
+ * Scoped to `activeRowNames` (not just "any real account with children in
+ * the whole chart of accounts") so a branch with no activity at all this
+ * period -- neither the parent nor any child -- still doesn't show up as
+ * a stray $0.00 row.
+ */
+export function neededParentNames(activeRowNames: string[], realAccountNames: Set<string>): Set<string> {
+  const needed = new Set<string>();
+  for (const name of activeRowNames) {
+    const parts = name.split(":");
+    for (let i = 1; i < parts.length; i++) {
+      const ancestor = parts.slice(0, i).join(":");
+      if (realAccountNames.has(ancestor)) needed.add(ancestor);
+    }
+  }
+  return needed;
+}
+
 export type HierarchyRow = {
   label: string;
   fullName: string;

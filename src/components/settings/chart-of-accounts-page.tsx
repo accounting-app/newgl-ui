@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { ChevronDown, ChevronRight, MessageSquarePlus, Pencil, Printer, Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { IconButton } from "@/components/ui/icon-button";
 import { InputField } from "@/components/ui/input-field";
 import { NumberField } from "@/components/ui/number-field";
@@ -40,6 +41,13 @@ const ACCOUNT_TYPE_SELECT_OPTIONS: SelectOption[] = ACCOUNT_TYPE_GROUPS.flatMap(
   group.options.map((option) => ({ value: option.key, label: option.label, group: group.groupLabel }))
 );
 
+/** Splits "Parent:Child" into { parentName: "Parent", leaf: "Child" }; a name with no ":" has no parent. */
+function splitAccountName(name: string): { parentName: string | null; leaf: string } {
+  const separatorIndex = name.lastIndexOf(":");
+  if (separatorIndex === -1) return { parentName: null, leaf: name };
+  return { parentName: name.slice(0, separatorIndex), leaf: name.slice(separatorIndex + 1) };
+}
+
 function formatMoney(value: number): string {
   return value.toLocaleString("en-US", {
     style: "currency",
@@ -68,6 +76,14 @@ export function ChartOfAccountsPage() {
   const [newAccountType, setNewAccountType] = useState<AccountTypeKey>("BANK");
   const [newSubtype, setNewSubtype] = useState("");
   const [newOpeningBalance, setNewOpeningBalance] = useState("");
+  // Subaccount support for BOTH add and edit -- when checked, `newName` holds
+  // just the leaf segment and the full colon-joined name (this app's existing
+  // hierarchy convention -- see account-hierarchy.ts) is computed on submit.
+  // Editing an already-nested account pre-populates these from its name, so
+  // "Edit" doubles as the only way to turn an existing top-level account into
+  // a subaccount of another one (issue #28).
+  const [isSubaccount, setIsSubaccount] = useState(false);
+  const [parentId, setParentId] = useState("");
   const [creating, setCreating] = useState(false);
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
@@ -150,65 +166,101 @@ export function ChartOfAccountsPage() {
     [activeAccounts]
   );
 
+  // Which category the parent picker filters to -- the account type being
+  // created, or (editing) the account's own category, since Edit doesn't
+  // let you change the type.
+  const parentPickerCategory = editingAccount ? editingAccount.category : categoryForAccountType(newAccountType);
+
+  // A subaccount must share its parent's category and can't be its own
+  // ancestor -- excludes the account itself and anything already nested
+  // under it (picking a descendant as parent would create a cycle).
+  const parentOptions: SelectOption[] = useMemo(
+    () =>
+      accounts
+        .filter(
+          (a) =>
+            a.status === "ACTIVE" &&
+            a.category === parentPickerCategory &&
+            a.id !== editingAccount?.id &&
+            !(editingAccount && a.name.startsWith(`${editingAccount.name}:`))
+        )
+        .map((a) => ({ value: a.id, label: a.name })),
+    [accounts, parentPickerCategory, editingAccount]
+  );
+
   function startAdd() {
     setEditingAccount(null);
     setNewName("");
     setNewAccountType("BANK");
     setNewSubtype("");
     setNewOpeningBalance("");
+    setIsSubaccount(false);
+    setParentId("");
     setShowAddForm(true);
     setNewAccountMenuOpen(false);
   }
 
   function startEdit(account: Account) {
     setEditingAccount(account);
-    setNewName(account.name);
+    const { parentName, leaf } = splitAccountName(account.name);
+    const parent = parentName ? accounts.find((a) => a.name === parentName && a.category === account.category) : undefined;
+    setNewName(parent ? leaf : account.name);
     setNewAccountType(accountTypeKeyForCategory(account.category));
     setNewSubtype(account.subtype ?? "");
     setNewOpeningBalance("");
+    setIsSubaccount(Boolean(parent));
+    setParentId(parent?.id ?? "");
     setShowAddForm(true);
   }
 
   function startSubaccount(parent: Account) {
     setEditingAccount(null);
-    setNewName(`${parent.name}:`);
+    setNewName("");
     setNewAccountType(accountTypeKeyForCategory(parent.category));
     setNewSubtype(parent.subtype ?? "");
     setNewOpeningBalance("");
+    setIsSubaccount(true);
+    setParentId(parent.id);
     setShowAddForm(true);
   }
 
   function handleNewAccountTypeChange(value: string) {
     setNewAccountType(value as AccountTypeKey);
-    // A Detail type from the previous Account type would no longer be one
+    // A Detail type / parent from the previous Account type wouldn't be one
     // of this one's options -- same reset QBO's own form does.
     setNewSubtype("");
+    setParentId("");
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!newName.trim()) return;
     if (!editingAccount && !newSubtype) return;
+    if (isSubaccount && !parentId) return;
+    const parent = accounts.find((a) => a.id === parentId);
+    const finalName = isSubaccount && parent ? `${parent.name}:${newName.trim()}` : newName.trim();
     setCreating(true);
     try {
       if (editingAccount) {
-        await services.accountService.updateAccount(editingAccount.id, { name: newName.trim() });
+        await services.accountService.updateAccount(editingAccount.id, { name: finalName });
         toast({ variant: "success", title: "Account updated" });
       } else {
         const openingBalance = Number(newOpeningBalance);
         await services.accountService.createAccount({
           code: nextAccountCode(accounts),
-          name: newName.trim(),
+          name: finalName,
           category: categoryForAccountType(newAccountType),
           subtype: newSubtype || undefined,
           currency: "USD",
           openingBalance: newOpeningBalance.trim() && Number.isFinite(openingBalance) ? openingBalance : undefined
         });
-        toast({ variant: "success", title: "Account created", description: `"${newName.trim()}" was added to the chart of accounts.` });
+        toast({ variant: "success", title: "Account created", description: `"${finalName}" was added to the chart of accounts.` });
       }
       setNewName("");
       setNewSubtype("");
       setNewOpeningBalance("");
+      setIsSubaccount(false);
+      setParentId("");
       setEditingAccount(null);
       setShowAddForm(false);
       await loadAccounts();
@@ -360,12 +412,21 @@ export function ChartOfAccountsPage() {
       {showAddForm ? (
         <Card
           title={editingAccount ? "Edit account" : "Add an account"}
-          description={editingAccount ? "Only the name can be changed here." : "Give it a friendly name -- it's grouped under the account type and detail type you pick."}
+          description={
+            editingAccount
+              ? "Rename it, or make it a subaccount of another account of the same type."
+              : "Give it a friendly name -- it's grouped under the account type and detail type you pick."
+          }
           className="mb-6"
         >
           <form onSubmit={handleSubmit} className="flex flex-wrap items-end gap-3">
             <div className="flex-1 min-w-[200px]">
-              <InputField label="Account name" placeholder="e.g. Chase Checking" value={newName} onChange={(e) => setNewName(e.target.value)} />
+              <InputField
+                label={isSubaccount ? "Account name (under the parent below)" : "Account name"}
+                placeholder="e.g. Chase Checking"
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+              />
             </div>
             {!editingAccount ? (
               <>
@@ -400,7 +461,37 @@ export function ChartOfAccountsPage() {
                 </div>
               </>
             ) : null}
-            <Button type="submit" disabled={creating || newName.trim() === "" || (!editingAccount && !newSubtype)}>
+
+            <div className="flex w-full items-end gap-3">
+              <div className="pb-2">
+                <Checkbox
+                  label="Make this a subaccount"
+                  checked={isSubaccount}
+                  onChange={(e) => {
+                    setIsSubaccount(e.target.checked);
+                    if (!e.target.checked) setParentId("");
+                  }}
+                />
+              </div>
+              {isSubaccount ? (
+                <div className="w-64">
+                  <Select
+                    label="Parent account"
+                    value={parentId}
+                    onChange={setParentId}
+                    options={parentOptions}
+                    placeholder={parentOptions.length === 0 ? "No accounts of this type yet" : "Select parent account"}
+                    allowCustomValue={false}
+                    disabled={parentOptions.length === 0}
+                  />
+                </div>
+              ) : null}
+            </div>
+
+            <Button
+              type="submit"
+              disabled={creating || newName.trim() === "" || (!editingAccount && !newSubtype) || (isSubaccount && !parentId)}
+            >
               {creating ? "Saving…" : editingAccount ? "Save changes" : "Add account"}
             </Button>
             <Button

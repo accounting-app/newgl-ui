@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { InputField } from "@/components/ui/input-field";
 import { REPORT_NAV_ITEMS } from "@/constants/reports";
 import { REPORT_USER_NAME } from "@/constants/ui";
-import { buildHierarchyRowsMulti } from "@/lib/accounting/account-hierarchy";
+import { buildHierarchyRowsMulti, neededParentNames } from "@/lib/accounting/account-hierarchy";
 import type { ReportValueColumn } from "@/components/reports/report-account-rows";
 import { ReportSection } from "@/components/reports/report-section";
 import { ReportAccountRows } from "@/components/reports/report-account-rows";
@@ -73,21 +73,33 @@ function debitCreditRows(
 ): { debitRows: TBRow[]; creditRows: TBRow[] } {
   const debitRows: TBRow[] = [];
   const creditRows: TBRow[] = [];
+  const realAccountNames = new Set(accountsInCategory.map((a) => a.name));
+  const inCategory = accountsInCategory.filter((a) => categories.has(a.category));
+  const activeNames = inCategory.filter((a) => Math.abs(balances.get(a.id) ?? 0) > 0.0001).map((a) => a.name);
+  // A real parent account with zero balance of its own (e.g. "Coding
+  // Services" when all its money posts to a sub-account) needs a row
+  // seeded -- in either column, amount 0 either way -- so
+  // buildHierarchyRowsMulti has something to nest its active children
+  // under, but only when a child actually has a nonzero balance, so a
+  // branch with no activity anywhere in it still doesn't show up as a
+  // stray $0.00 row.
+  const neededParents = neededParentNames(activeNames, realAccountNames);
 
-  accountsInCategory
-    .filter((a) => categories.has(a.category))
-    .forEach((account) => {
-      const balance = balances.get(account.id) ?? 0;
-      if (Math.abs(balance) <= 0.0001) return;
-      const isDebitNormal = DEBIT_NORMAL_CATEGORIES.has(account.category);
-      const inNaturalDirection = balance >= 0;
-      const isDebit = isDebitNormal === inNaturalDirection;
-      if (isDebit) {
-        debitRows.push({ name: account.name, amount: Math.abs(balance) });
-      } else {
-        creditRows.push({ name: account.name, amount: Math.abs(balance) });
-      }
-    });
+  inCategory.forEach((account) => {
+    const balance = balances.get(account.id) ?? 0;
+    if (Math.abs(balance) <= 0.0001) {
+      if (neededParents.has(account.name)) debitRows.push({ name: account.name, amount: 0 });
+      return;
+    }
+    const isDebitNormal = DEBIT_NORMAL_CATEGORIES.has(account.category);
+    const inNaturalDirection = balance >= 0;
+    const isDebit = isDebitNormal === inNaturalDirection;
+    if (isDebit) {
+      debitRows.push({ name: account.name, amount: Math.abs(balance) });
+    } else {
+      creditRows.push({ name: account.name, amount: Math.abs(balance) });
+    }
+  });
 
   return { debitRows, creditRows };
 }
