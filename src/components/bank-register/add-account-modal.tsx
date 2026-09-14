@@ -255,26 +255,28 @@ export function AddAccountModal({ open, accounts, onClose, onSave }: AddAccountM
               ) : null}
             </div>
 
-            <div className="flex gap-3">
-              <div className="flex-1">
-                <div className="mb-1 flex items-center gap-1 text-xs text-[var(--color-icon-secondary)]">
-                  Opening balance
-                  <Tooltip label="Your opening balance is the amount of money you opened this account with.">
-                    <Info className="h-3.5 w-3.5" aria-hidden="true" />
-                  </Tooltip>
+            {category ? (
+              <div className="flex gap-3">
+                <div className="flex-1">
+                  <div className="mb-1 flex items-center gap-1 text-xs text-[var(--color-icon-secondary)]">
+                    Opening balance
+                    <Tooltip label="Your opening balance is the amount of money you opened this account with.">
+                      <Info className="h-3.5 w-3.5" aria-hidden="true" />
+                    </Tooltip>
+                  </div>
+                  <NumberField currency placeholder="0.00" value={openingBalance} onChange={(event) => setOpeningBalance(event.target.value)} />
+                  <button type="button" className="mt-1 text-xs text-[var(--color-link-action)] hover:underline">
+                    More info on opening balances
+                  </button>
                 </div>
-                <NumberField currency placeholder="0.00" value={openingBalance} onChange={(event) => setOpeningBalance(event.target.value)} />
-                <button type="button" className="mt-1 text-xs text-[var(--color-link-action)] hover:underline">
-                  More info on opening balances
-                </button>
+                <div className="flex-1">
+                  <InputField label="As of" type="date" value={asOf} onChange={(event) => setAsOf(event.target.value)} />
+                  <p className="mt-1 text-xs text-[var(--color-icon-secondary)]">
+                    We&apos;ll start tracking from {formatUsDate(asOf)} onwards.
+                  </p>
+                </div>
               </div>
-              <div className="flex-1">
-                <InputField label="As of" type="date" value={asOf} onChange={(event) => setAsOf(event.target.value)} />
-                <p className="mt-1 text-xs text-[var(--color-icon-secondary)]">
-                  We&apos;ll start tracking from {formatUsDate(asOf)} onwards.
-                </p>
-              </div>
-            </div>
+            ) : null}
 
             <InputField label="Description" value={description} onChange={(event) => setDescription(event.target.value)} />
           </div>
@@ -305,39 +307,41 @@ export function AddAccountModal({ open, accounts, onClose, onSave }: AddAccountM
             </div>
           </div>
 
-          <hr className="my-5 border-[var(--color-divider-tertiary)]" />
+          {category ? (
+            <>
+              <hr className="my-5 border-[var(--color-divider-tertiary)]" />
 
-          <div>
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-[var(--color-text-global)]">{statementTitle}</h3>
-              <span className="rounded bg-[var(--color-link-action)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white">
-                New account preview
-              </span>
-            </div>
-            <p className="mt-0.5 text-xs text-[var(--color-icon-secondary)]">Active accounts as of {formatUsDate(todayIso())}</p>
-            <div className="mt-3 border-t border-[var(--color-divider-tertiary)] pt-3">
-              {!category ? (
-                <p className="pl-4 text-sm text-[var(--color-icon-secondary)]">Pick an account type to preview where this lands.</p>
-              ) : previewRows.length === 0 ? (
-                <p className="pl-4 text-sm text-[var(--color-icon-secondary)]">No accounts of this type yet.</p>
-              ) : (
-                <ul className="space-y-2">
-                  {previewRows.map((row, index) => (
-                    <li
-                      key={`${row.label}-${index}`}
-                      className={
-                        row.isNew
-                          ? "rounded-md border border-[var(--color-link-action)] bg-[rgba(0,95,158,0.08)] px-3 py-2 text-sm font-semibold text-[var(--color-link-action)]"
-                          : "pl-4 text-sm text-[var(--color-text-primary)]"
-                      }
-                    >
-                      {row.label}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          </div>
+              <div>
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-semibold text-[var(--color-text-global)]">{statementTitle}</h3>
+                  <span className="rounded bg-[var(--color-link-action)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white">
+                    New account preview
+                  </span>
+                </div>
+                <p className="mt-0.5 text-xs text-[var(--color-icon-secondary)]">Active accounts as of {formatUsDate(todayIso())}</p>
+                <div className="mt-3 border-t border-[var(--color-divider-tertiary)] pt-3">
+                  {previewRows.length === 0 ? (
+                    <p className="pl-4 text-sm text-[var(--color-icon-secondary)]">No accounts of this type yet.</p>
+                  ) : (
+                    <ul className="space-y-2">
+                      {previewRows.map((row, index) => (
+                        <li
+                          key={`${row.label}-${index}`}
+                          className={
+                            row.isNew
+                              ? "rounded-md border border-[var(--color-link-action)] bg-[rgba(0,95,158,0.08)] px-3 py-2 text-sm font-semibold text-[var(--color-link-action)]"
+                              : "pl-4 text-sm text-[var(--color-text-primary)]"
+                          }
+                        >
+                          {row.label}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              </div>
+            </>
+          ) : null}
 
           {error ? <p className="mt-4 text-xs text-[var(--color-negative)]">{error}</p> : null}
         </div>
