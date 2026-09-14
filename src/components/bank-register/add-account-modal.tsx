@@ -36,6 +36,22 @@ const STATEMENT_BY_CHART_TYPE: Record<string, "Balance Sheet" | "Profit & Loss">
   EXPENSE: "Profit & Loss"
 };
 
+/**
+ * Account types QBO's own form never shows an Opening balance / As of for --
+ * Accounts payable is populated by entering bills, not a manual balance, and
+ * every Income/Expense type is a Profit & Loss (period) account, which has
+ * no "opening balance" concept at all. Everything else (Bank, A/R, Fixed
+ * Assets, Credit Card, Equity, ...) keeps showing it.
+ */
+const ACCOUNT_TYPES_WITHOUT_OPENING_BALANCE = new Set<AccountTypeKey>([
+  "ACCOUNTS_PAYABLE",
+  "INCOME",
+  "OTHER_INCOME",
+  "COST_OF_GOODS_SOLD",
+  "EXPENSES",
+  "OTHER_EXPENSE"
+]);
+
 function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
 }
@@ -92,6 +108,7 @@ export function AddAccountModal({ open, accounts, onClose, onSave }: AddAccountM
   const [error, setError] = useState<string | null>(null);
 
   const category = accountType ? categoryForAccountType(accountType) : null;
+  const showsOpeningBalance = category !== null && !ACCOUNT_TYPES_WITHOUT_OPENING_BALANCE.has(accountType as AccountTypeKey);
 
   const detailTypeOptions: SelectOption[] = accountType
     ? DETAIL_TYPES_BY_ACCOUNT_TYPE[accountType].map((detailType) => ({ value: detailType, label: detailType }))
@@ -141,6 +158,12 @@ export function AddAccountModal({ open, accounts, onClose, onSave }: AddAccountM
     // of this one's options -- same reset QBO's own form does.
     setSubtype("");
     setParentId("");
+    // Switching to a type that hides Opening balance (A/P, Income/Expense
+    // types) drops whatever was typed there -- it'd otherwise be silently
+    // submitted on Save despite the field no longer being visible.
+    if (ACCOUNT_TYPES_WITHOUT_OPENING_BALANCE.has(value as AccountTypeKey)) {
+      setOpeningBalance("");
+    }
   }
 
   if (!open) return null;
@@ -261,7 +284,7 @@ export function AddAccountModal({ open, accounts, onClose, onSave }: AddAccountM
               ) : null}
             </div>
 
-            {category ? (
+            {showsOpeningBalance ? (
               <div className="flex gap-3">
                 <div className="flex-1">
                   <div className="mb-1 flex items-center gap-1 text-xs text-[var(--color-icon-secondary)]">
