@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Info, Lock, Unlock, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -13,7 +13,9 @@ import { ACCOUNT_TYPE_BY_CATEGORY } from "@/lib/services/http-service-container"
 import {
   ACCOUNT_TYPE_GROUPS,
   DETAIL_TYPES_BY_ACCOUNT_TYPE,
+  accountTypeKeyForCategory,
   categoryForAccountType,
+  splitAccountName,
   type AccountTypeKey
 } from "@/constants/account-detail-types";
 import type { Account } from "@/modules/accounting/domain/models";
@@ -68,20 +70,47 @@ type NewAccountInput = {
   openingBalance?: number;
 };
 
+type UpdateAccountInput = {
+  name: string;
+  subtype?: string;
+};
+
 type AddAccountModalProps = {
   open: boolean;
   /** Full chart of accounts -- drives the subaccount parent picker and the live preview panel. */
   accounts: Account[];
+  /**
+   * Present -> the panel edits this account instead of creating a new one:
+   * title becomes "Edit account", Account type locks to its existing
+   * category (not editable server-side), Opening balance/As of hide (no
+   * update path for those either), and the form pre-fills from its current
+   * name/subtype/parent so unchecking/rechecking "Make this a subaccount"
+   * can move it in or out of a parent.
+   */
+  editingAccount?: Account | null;
+  /**
+   * Creating a new account that starts pre-nested under a known parent
+   * (the "Create subaccount" row action) -- pre-checks "Make this a
+   * subaccount" and preselects `parent`, type/detail type included.
+   * Ignored when `editingAccount` is set.
+   */
+  initialParentAccount?: Account | null;
   onClose: () => void;
   onSave: (input: NewAccountInput) => Promise<Account>;
+  /** Required when `editingAccount` can be set. */
+  onUpdate?: (accountId: string, input: UpdateAccountInput) => Promise<void>;
 };
 
 /**
- * The Register's own "+ Add new" account picker. Laid out field-for-field
- * like QuickBooks Online's own "New account" side panel (Account name,
- * Account type / Detail type, Make this a subaccount, Opening balance /
- * As of, Description, Lock account, and the live statement preview) --
- * everything except QBO's "Video tutorials" link.
+ * The shared "New account" / "Edit account" side panel -- laid out
+ * field-for-field like QuickBooks Online's own form (Account name, Account
+ * type / Detail type, Make this a subaccount, Opening balance / As of,
+ * Description, Lock account, and the live statement preview) -- everything
+ * except QBO's "Video tutorials" link. Used both by the Register's "+ Add
+ * new" account picker and Chart of Accounts' "New account" / "Edit" /
+ * "Create subaccount" actions, so there's one add/edit account UI in the
+ * app, not two different-looking ones depending on which screen you
+ * started from.
  *
  * Functionally wired for now: name, account type, detail type, opening
  * balance, and the subaccount parent (prefixes "Parent:" onto the name,
@@ -90,7 +119,17 @@ type AddAccountModalProps = {
  * standing "functionality later" note; `subtype` already stores the Detail
  * type verbatim regardless.
  */
-export function AddAccountModal({ open, accounts, onClose, onSave }: AddAccountModalProps) {
+export function AddAccountModal({
+  open,
+  accounts,
+  editingAccount = null,
+  initialParentAccount = null,
+  onClose,
+  onSave,
+  onUpdate
+}: AddAccountModalProps) {
+  const isEditing = editingAccount !== null;
+
   const [name, setName] = useState("");
   // The preview list only picks up the typed name once the field is
   // committed (blur / Enter) -- matches QBO, which doesn't redraw the
@@ -107,31 +146,6 @@ export function AddAccountModal({ open, accounts, onClose, onSave }: AddAccountM
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const category = accountType ? categoryForAccountType(accountType) : null;
-  const showsOpeningBalance = category !== null && !ACCOUNT_TYPES_WITHOUT_OPENING_BALANCE.has(accountType as AccountTypeKey);
-
-  const detailTypeOptions: SelectOption[] = accountType
-    ? DETAIL_TYPES_BY_ACCOUNT_TYPE[accountType].map((detailType) => ({ value: detailType, label: detailType }))
-    : [];
-
-  const sameCategoryAccounts = useMemo(
-    () => (category ? accounts.filter((a) => a.category === category && a.status === "ACTIVE") : []),
-    [accounts, category]
-  );
-
-  const parentOptions: SelectOption[] = sameCategoryAccounts.map((a) => ({ value: a.id, label: a.name }));
-
-  const statementTitle = category ? STATEMENT_BY_CHART_TYPE[ACCOUNT_TYPE_BY_CATEGORY[category]] : "Balance Sheet";
-
-  const previewRows = useMemo(() => {
-    const rows = sameCategoryAccounts.map((a) => ({ label: a.name, isNew: false }));
-    // Only the typed account name creates a preview row -- picking a Detail
-    // type must not add anything to the list.
-    const pendingName = nameForPreview.trim();
-    if (pendingName) rows.push({ label: pendingName, isNew: true });
-    return rows.sort((a, b) => a.label.localeCompare(b.label));
-  }, [sameCategoryAccounts, nameForPreview]);
-
   function resetForm() {
     setName("");
     setNameForPreview("");
@@ -146,6 +160,86 @@ export function AddAccountModal({ open, accounts, onClose, onSave }: AddAccountM
     setSaving(false);
     setError(null);
   }
+
+  // Re-initializes every time the panel opens, from whichever of
+  // editingAccount / initialParentAccount was passed (or neither, for a
+  // plain blank "New account"). Runs on `open` rather than mount because
+  // this one component instance is reused across every open/close cycle.
+  useEffect(() => {
+    if (!open) return;
+    if (editingAccount) {
+      const { parentName, leaf } = splitAccountName(editingAccount.name);
+      const parent = parentName
+        ? accounts.find((a) => a.name === parentName && a.category === editingAccount.category)
+        : undefined;
+      setName(parent ? leaf : editingAccount.name);
+      setNameForPreview(parent ? leaf : editingAccount.name);
+      setAccountType(accountTypeKeyForCategory(editingAccount.category));
+      setSubtype(editingAccount.subtype ?? "");
+      setIsSubaccount(Boolean(parent));
+      setParentId(parent?.id ?? "");
+      setOpeningBalance("");
+      setAsOf(todayIso());
+      setDescription("");
+      setLocked(false);
+      setError(null);
+      return;
+    }
+    if (initialParentAccount) {
+      setName("");
+      setNameForPreview("");
+      setAccountType(accountTypeKeyForCategory(initialParentAccount.category));
+      setSubtype(initialParentAccount.subtype ?? "");
+      setIsSubaccount(true);
+      setParentId(initialParentAccount.id);
+      setOpeningBalance("");
+      setAsOf(todayIso());
+      setDescription("");
+      setLocked(false);
+      setError(null);
+      return;
+    }
+    resetForm();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, editingAccount, initialParentAccount]);
+
+  const category = accountType ? categoryForAccountType(accountType) : null;
+  const showsOpeningBalance =
+    !isEditing && category !== null && !ACCOUNT_TYPES_WITHOUT_OPENING_BALANCE.has(accountType as AccountTypeKey);
+
+  const detailTypeOptions: SelectOption[] = accountType
+    ? DETAIL_TYPES_BY_ACCOUNT_TYPE[accountType].map((detailType) => ({ value: detailType, label: detailType }))
+    : [];
+
+  const sameCategoryAccounts = useMemo(
+    () => (category ? accounts.filter((a) => a.category === category && a.status === "ACTIVE") : []),
+    [accounts, category]
+  );
+
+  // A subaccount must share its parent's category and can't be its own
+  // ancestor -- excludes the account being edited and anything already
+  // nested under it (picking a descendant as parent would create a cycle).
+  const parentOptions: SelectOption[] = sameCategoryAccounts
+    .filter((a) => a.id !== editingAccount?.id && !(editingAccount && a.name.startsWith(`${editingAccount.name}:`)))
+    .map((a) => ({ value: a.id, label: a.name }));
+
+  const statementTitle = category ? STATEMENT_BY_CHART_TYPE[ACCOUNT_TYPE_BY_CATEGORY[category]] : "Balance Sheet";
+
+  const previewRows = useMemo(() => {
+    // Exclude the account being edited from the "existing" list -- its
+    // pending (possibly renamed/reparented) state is the `isNew` row below.
+    const rows = sameCategoryAccounts
+      .filter((a) => a.id !== editingAccount?.id)
+      .map((a) => ({ label: a.name, isNew: false }));
+    // Only the typed account name creates a preview row -- picking a Detail
+    // type must not add anything to the list.
+    const pendingLeaf = nameForPreview.trim();
+    if (pendingLeaf) {
+      const parent = isSubaccount ? accounts.find((a) => a.id === parentId) : undefined;
+      rows.push({ label: isSubaccount && parent ? `${parent.name}:${pendingLeaf}` : pendingLeaf, isNew: true });
+    }
+    return rows.sort((a, b) => a.label.localeCompare(b.label));
+  }, [sameCategoryAccounts, nameForPreview, isSubaccount, parentId, accounts, editingAccount]);
 
   function handleClose() {
     resetForm();
@@ -177,7 +271,7 @@ export function AddAccountModal({ open, accounts, onClose, onSave }: AddAccountM
       setError("Account type is required.");
       return;
     }
-    if (!subtype) {
+    if (!isEditing && !subtype) {
       setError("Detail type is required.");
       return;
     }
@@ -187,20 +281,25 @@ export function AddAccountModal({ open, accounts, onClose, onSave }: AddAccountM
     }
     const parent = accounts.find((a) => a.id === parentId);
     const finalName = isSubaccount && parent ? `${parent.name}:${name.trim()}` : name.trim();
-    const parsedBalance = Number(openingBalance);
     setSaving(true);
     setError(null);
     try {
-      await onSave({
-        name: finalName,
-        category: categoryForAccountType(accountType),
-        subtype,
-        openingBalance: openingBalance.trim() && Number.isFinite(parsedBalance) ? parsedBalance : undefined
-      });
+      if (isEditing && editingAccount) {
+        if (!onUpdate) throw new Error("Editing isn't wired up here.");
+        await onUpdate(editingAccount.id, { name: finalName, subtype: subtype || undefined });
+      } else {
+        const parsedBalance = Number(openingBalance);
+        await onSave({
+          name: finalName,
+          category: categoryForAccountType(accountType),
+          subtype,
+          openingBalance: openingBalance.trim() && Number.isFinite(parsedBalance) ? parsedBalance : undefined
+        });
+      }
       resetForm();
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not create this account.");
+      setError(err instanceof Error ? err.message : `Could not ${isEditing ? "update" : "create"} this account.`);
       setSaving(false);
     }
   }
@@ -210,7 +309,7 @@ export function AddAccountModal({ open, accounts, onClose, onSave }: AddAccountM
       <button type="button" aria-label="Close new account panel" onClick={handleClose} className="h-full flex-1 bg-black/40" />
       <aside className="flex h-screen w-[640px] max-w-full flex-col bg-[var(--color-container-background-primary)] text-[var(--color-text-primary)] shadow-2xl">
         <header className="relative border-b border-[var(--color-divider-tertiary)] px-6 py-4 text-center">
-          <h2 className="text-lg font-semibold text-[var(--color-text-global)]">New account</h2>
+          <h2 className="text-lg font-semibold text-[var(--color-text-global)]">{isEditing ? "Edit account" : "New account"}</h2>
           <button
             type="button"
             aria-label="Close"
@@ -224,7 +323,7 @@ export function AddAccountModal({ open, accounts, onClose, onSave }: AddAccountM
         <div className="flex-1 overflow-y-auto px-6 py-5">
           <div className="space-y-5">
             <InputField
-              label="Account name*"
+              label={isSubaccount ? "Account name* (under the parent below)" : "Account name*"}
               value={name}
               onChange={(event) => setName(event.target.value)}
               onBlur={() => setNameForPreview(name)}
@@ -248,7 +347,11 @@ export function AddAccountModal({ open, accounts, onClose, onSave }: AddAccountM
                   placeholder="Select account type"
                   allowCustomValue={false}
                   showCheckmark
+                  disabled={isEditing}
                 />
+                {isEditing ? (
+                  <p className="mt-1 text-xs text-[var(--color-icon-secondary)]">Account type can&apos;t be changed once created.</p>
+                ) : null}
               </div>
               <div className="flex-1">
                 <div className="mb-1 flex items-center gap-1 text-xs text-[var(--color-icon-secondary)]">
@@ -380,7 +483,7 @@ export function AddAccountModal({ open, accounts, onClose, onSave }: AddAccountM
             Cancel
           </Button>
           <Button variant="primary" onClick={handleSave} disabled={saving}>
-            {saving ? "Saving..." : "Save"}
+            {saving ? "Saving..." : isEditing ? "Save changes" : "Save"}
           </Button>
         </footer>
       </aside>
