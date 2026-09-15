@@ -201,6 +201,19 @@ export function accountTypeKeyForCategory(category: Account["category"]): Accoun
   return primary[category] ?? (category as AccountTypeKey);
 }
 
+/**
+ * Splits "Parent:Child" into { parentName: "Parent", leaf: "Child" } (this
+ * app's colon hierarchy convention -- see account-hierarchy.ts); a name
+ * with no ":" has no parent. Shared by every place that edits an existing
+ * account's subaccount relationship (the register/Chart of Accounts "New
+ * account" panel, Chart of Accounts' row actions).
+ */
+export function splitAccountName(name: string): { parentName: string | null; leaf: string } {
+  const separatorIndex = name.lastIndexOf(":");
+  if (separatorIndex === -1) return { parentName: null, leaf: name };
+  return { parentName: name.slice(0, separatorIndex), leaf: name.slice(separatorIndex + 1) };
+}
+
 /** QBO's real "Detail type" options for each Account type, in their own on-screen order. */
 export const DETAIL_TYPES_BY_ACCOUNT_TYPE: Record<AccountTypeKey, string[]> = {
   BANK: ["Cash on hand", "Checking", "Money Market", "Rents Held in Trust", "Savings", "Trust account"],

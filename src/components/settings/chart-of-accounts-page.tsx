@@ -2,23 +2,15 @@
 
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { ChevronDown, ChevronRight, MessageSquarePlus, Pencil, Printer, Settings } from "lucide-react";
+import { AddAccountModal } from "@/components/bank-register/add-account-modal";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { IconButton } from "@/components/ui/icon-button";
 import { InputField } from "@/components/ui/input-field";
-import { NumberField } from "@/components/ui/number-field";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/toast/toast-context";
 import { ACCOUNT_CATEGORY_LABELS } from "@/constants/ui";
-import {
-  ACCOUNT_TYPE_GROUPS,
-  DETAIL_TYPES_BY_ACCOUNT_TYPE,
-  accountTypeKeyForCategory,
-  categoryForAccountType,
-  type AccountTypeKey
-} from "@/constants/account-detail-types";
-import type { SelectOption } from "@/components/ui/select";
 import { ACCOUNT_ROOT_GROUPS } from "@/modules/accounting/domain/accounting-reports";
 import { getServiceContainer } from "@/lib/services/service-container-v2";
 import { buildRollupHierarchyRows, filterCollapsed } from "@/lib/accounting/account-hierarchy";
@@ -31,14 +23,6 @@ const CATEGORY_OPTIONS = ACCOUNT_ROOT_GROUPS.flatMap((group) =>
   [...group.categories].map((category) => ({ value: category, label: ACCOUNT_CATEGORY_LABELS[category] }))
 );
 const TYPE_FILTER_OPTIONS = [{ value: "", label: "All" }, ...CATEGORY_OPTIONS];
-
-// Same Account type / Detail type picker as the Register's own "+ Add
-// new" account modal (see add-account-modal.tsx + account-detail-types.ts)
-// -- one account-creation form, not two different pickers for the same
-// action depending on which screen you started from.
-const ACCOUNT_TYPE_SELECT_OPTIONS: SelectOption[] = ACCOUNT_TYPE_GROUPS.flatMap((group) =>
-  group.options.map((option) => ({ value: option.key, label: option.label, group: group.groupLabel }))
-);
 
 function formatMoney(value: number): string {
   return value.toLocaleString("en-US", {
@@ -62,13 +46,16 @@ export function ChartOfAccountsPage() {
   // navigating to (or touching) the real /register.
   const [registerAccountId, setRegisterAccountId] = useState<string | null>(null);
 
-  const [showAddForm, setShowAddForm] = useState(false);
+  // "New account" / "Edit account" -- the same QBO-style side panel the
+  // Register's own "+ Add new" account picker uses (add-account-modal.tsx),
+  // so there's one add/edit account UI in the app rather than two
+  // different-looking ones depending on which screen you started from.
+  // `editingAccount` set -> editing; `initialParentAccount` set (and
+  // editingAccount not) -> a brand-new subaccount pre-nested under it (the
+  // "Create subaccount" row action); neither -> a plain blank "New account".
+  const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
   const [editingAccount, setEditingAccount] = useState<Account | null>(null);
-  const [newName, setNewName] = useState("");
-  const [newAccountType, setNewAccountType] = useState<AccountTypeKey>("BANK");
-  const [newSubtype, setNewSubtype] = useState("");
-  const [newOpeningBalance, setNewOpeningBalance] = useState("");
-  const [creating, setCreating] = useState(false);
+  const [initialParentAccount, setInitialParentAccount] = useState<Account | null>(null);
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
   const [newAccountMenuOpen, setNewAccountMenuOpen] = useState(false);
@@ -152,71 +139,52 @@ export function ChartOfAccountsPage() {
 
   function startAdd() {
     setEditingAccount(null);
-    setNewName("");
-    setNewAccountType("BANK");
-    setNewSubtype("");
-    setNewOpeningBalance("");
-    setShowAddForm(true);
+    setInitialParentAccount(null);
+    setIsAccountModalOpen(true);
     setNewAccountMenuOpen(false);
   }
 
   function startEdit(account: Account) {
     setEditingAccount(account);
-    setNewName(account.name);
-    setNewAccountType(accountTypeKeyForCategory(account.category));
-    setNewSubtype(account.subtype ?? "");
-    setNewOpeningBalance("");
-    setShowAddForm(true);
+    setInitialParentAccount(null);
+    setIsAccountModalOpen(true);
   }
 
   function startSubaccount(parent: Account) {
     setEditingAccount(null);
-    setNewName(`${parent.name}:`);
-    setNewAccountType(accountTypeKeyForCategory(parent.category));
-    setNewSubtype(parent.subtype ?? "");
-    setNewOpeningBalance("");
-    setShowAddForm(true);
+    setInitialParentAccount(parent);
+    setIsAccountModalOpen(true);
   }
 
-  function handleNewAccountTypeChange(value: string) {
-    setNewAccountType(value as AccountTypeKey);
-    // A Detail type from the previous Account type would no longer be one
-    // of this one's options -- same reset QBO's own form does.
-    setNewSubtype("");
+  function closeAccountModal() {
+    setIsAccountModalOpen(false);
+    setEditingAccount(null);
+    setInitialParentAccount(null);
   }
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!newName.trim()) return;
-    if (!editingAccount && !newSubtype) return;
-    setCreating(true);
-    try {
-      if (editingAccount) {
-        await services.accountService.updateAccount(editingAccount.id, { name: newName.trim() });
-        toast({ variant: "success", title: "Account updated" });
-      } else {
-        const openingBalance = Number(newOpeningBalance);
-        await services.accountService.createAccount({
-          code: nextAccountCode(accounts),
-          name: newName.trim(),
-          category: categoryForAccountType(newAccountType),
-          subtype: newSubtype || undefined,
-          currency: "USD",
-          openingBalance: newOpeningBalance.trim() && Number.isFinite(openingBalance) ? openingBalance : undefined
-        });
-        toast({ variant: "success", title: "Account created", description: `"${newName.trim()}" was added to the chart of accounts.` });
-      }
-      setNewName("");
-      setNewSubtype("");
-      setNewOpeningBalance("");
-      setEditingAccount(null);
-      setShowAddForm(false);
-      await loadAccounts();
-    } catch (err) {
-      toast({ variant: "error", title: editingAccount ? "Could not update this account" : "Could not create this account", description: err instanceof Error ? err.message : undefined });
-    } finally {
-      setCreating(false);
-    }
+  async function handleCreateAccount(input: {
+    name: string;
+    category: Account["category"];
+    subtype?: string;
+    openingBalance?: number;
+  }): Promise<Account> {
+    const created = await services.accountService.createAccount({
+      code: nextAccountCode(accounts),
+      name: input.name,
+      category: input.category,
+      subtype: input.subtype,
+      currency: "USD",
+      openingBalance: input.openingBalance
+    });
+    toast({ variant: "success", title: "Account created", description: `"${input.name}" was added to the chart of accounts.` });
+    await loadAccounts();
+    return created;
+  }
+
+  async function handleUpdateAccount(accountId: string, input: { name: string; subtype?: string }): Promise<void> {
+    await services.accountService.updateAccount(accountId, { name: input.name, subtype: input.subtype });
+    toast({ variant: "success", title: "Account updated" });
+    await loadAccounts();
   }
 
   async function handleArchive(account: Account) {
@@ -345,7 +313,6 @@ export function ChartOfAccountsPage() {
                   onClick={() => {
                     setNewAccountMenuOpen(false);
                     setBulkOpen(true);
-                    startAdd();
                   }}
                   className="block w-full px-3 py-1.5 text-left text-sm text-[var(--color-text-global)] hover:bg-[var(--color-action-passive-subtle-hover)]"
                 >
@@ -357,98 +324,44 @@ export function ChartOfAccountsPage() {
         </div>
       </div>
 
-      {showAddForm ? (
-        <Card
-          title={editingAccount ? "Edit account" : "Add an account"}
-          description={editingAccount ? "Only the name can be changed here." : "Give it a friendly name -- it's grouped under the account type and detail type you pick."}
-          className="mb-6"
-        >
-          <form onSubmit={handleSubmit} className="flex flex-wrap items-end gap-3">
-            <div className="flex-1 min-w-[200px]">
-              <InputField label="Account name" placeholder="e.g. Chase Checking" value={newName} onChange={(e) => setNewName(e.target.value)} />
-            </div>
-            {!editingAccount ? (
-              <>
-                <div className="w-48">
-                  <Select
-                    label="Account type"
-                    value={newAccountType}
-                    onChange={handleNewAccountTypeChange}
-                    options={ACCOUNT_TYPE_SELECT_OPTIONS}
-                    placeholder="Account type"
-                    allowCustomValue={false}
-                  />
-                </div>
-                <div className="w-48">
-                  <Select
-                    label="Detail type"
-                    value={newSubtype}
-                    onChange={setNewSubtype}
-                    options={DETAIL_TYPES_BY_ACCOUNT_TYPE[newAccountType].map((detailType) => ({ value: detailType, label: detailType }))}
-                    placeholder="Detail type"
-                    allowCustomValue={false}
-                  />
-                </div>
-                <div className="w-40">
-                  <NumberField
-                    label="Opening balance"
-                    currency
-                    placeholder="0.00"
-                    value={newOpeningBalance}
-                    onChange={(e) => setNewOpeningBalance(e.target.value)}
-                  />
-                </div>
-              </>
-            ) : null}
-            <Button type="submit" disabled={creating || newName.trim() === "" || (!editingAccount && !newSubtype)}>
-              {creating ? "Saving…" : editingAccount ? "Save changes" : "Add account"}
-            </Button>
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => {
-                setShowAddForm(false);
-                setEditingAccount(null);
-                setBulkOpen(false);
-              }}
-            >
-              Cancel
-            </Button>
-            {!editingAccount ? (
-              <Button type="button" variant="secondary" onClick={() => setBulkOpen((open) => !open)}>
-                {bulkOpen ? "Cancel bulk import" : "Bulk import"}
-              </Button>
-            ) : null}
-          </form>
+      <AddAccountModal
+        open={isAccountModalOpen}
+        accounts={accounts}
+        editingAccount={editingAccount}
+        initialParentAccount={initialParentAccount}
+        onClose={closeAccountModal}
+        onSave={handleCreateAccount}
+        onUpdate={handleUpdateAccount}
+      />
 
-          {bulkOpen && !editingAccount ? (
-            <form onSubmit={handleBulkImport} className="mt-4 flex flex-col gap-3 border-t border-[var(--color-divider-tertiary)] pt-4">
-              <p className="text-sm text-[var(--color-text-primary)]">
-                One account name per line. All imported accounts use the category below.
-              </p>
-              <div className="w-56">
-                <Select
-                  label="Category"
-                  value={bulkCategory}
-                  onChange={(value) => setBulkCategory(value as Account["category"])}
-                  options={CATEGORY_OPTIONS}
-                  placeholder="Category"
-                  allowCustomValue={false}
-                />
-              </div>
-              <Textarea
-                value={bulkText}
-                onChange={(e) => setBulkText(e.target.value)}
-                rows={5}
-                placeholder={"Office Supplies\nSoftware Subscriptions\nTravel"}
+      {bulkOpen ? (
+        <Card title="Import accounts" description="One account name per line. All imported accounts use the category below." className="mb-6">
+          <form onSubmit={handleBulkImport} className="flex flex-col gap-3">
+            <div className="w-56">
+              <Select
+                label="Category"
+                value={bulkCategory}
+                onChange={(value) => setBulkCategory(value as Account["category"])}
+                options={CATEGORY_OPTIONS}
+                placeholder="Category"
+                allowCustomValue={false}
               />
-              <div>
-                <Button type="submit" disabled={bulkImporting || bulkText.trim() === ""}>
-                  {bulkImporting ? "Importing…" : "Import accounts"}
-                </Button>
-              </div>
-            </form>
-          ) : null}
+            </div>
+            <Textarea
+              value={bulkText}
+              onChange={(e) => setBulkText(e.target.value)}
+              rows={5}
+              placeholder={"Office Supplies\nSoftware Subscriptions\nTravel"}
+            />
+            <div className="flex gap-2">
+              <Button type="submit" disabled={bulkImporting || bulkText.trim() === ""}>
+                {bulkImporting ? "Importing…" : "Import accounts"}
+              </Button>
+              <Button type="button" variant="secondary" onClick={() => setBulkOpen(false)}>
+                Cancel
+              </Button>
+            </div>
+          </form>
         </Card>
       ) : null}
 

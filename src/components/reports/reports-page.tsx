@@ -18,7 +18,7 @@ import {
 } from "@/constants/ui";
 import { REPORT_NAV_ITEMS } from "@/constants/reports";
 import type { ReportType } from "@/constants/reports";
-import { buildHierarchyRowsMulti } from "@/lib/accounting/account-hierarchy";
+import { buildHierarchyRowsMulti, neededParentNames } from "@/lib/accounting/account-hierarchy";
 import type { ReportValueColumn } from "@/components/reports/report-account-rows";
 import { ReportSection } from "@/components/reports/report-section";
 import { ReportAccountRows } from "@/components/reports/report-account-rows";
@@ -391,14 +391,26 @@ function computeProfitAndLoss(
       expenseMap.set(account.name, (expenseMap.get(account.name) ?? 0) + impact);
   });
 
+  // A real parent account with no direct postings of its own (e.g. "Coding
+  // Services" when all its money is posted to "Coding Services:By Hector M
+  // Garcia") needs a zero row seeded so buildHierarchyRows below has
+  // something to nest its active children under -- but only when a child
+  // actually has activity this period, so a branch with no postings
+  // anywhere in it still doesn't show up at all.
+  const realAccountNames = new Set([...accountById.values()].map((a) => a.name));
+  const neededIncomeParents = neededParentNames([...incomeMap.keys()], realAccountNames);
+  const neededExpenseParents = neededParentNames([...expenseMap.keys()], realAccountNames);
+  neededIncomeParents.forEach((name) => incomeMap.set(name, incomeMap.get(name) ?? 0));
+  neededExpenseParents.forEach((name) => expenseMap.set(name, expenseMap.get(name) ?? 0));
+
   const incomeRows = [...incomeMap.entries()]
     .map(([name, amount]) => ({ name, amount }))
-    .filter((r) => Math.abs(r.amount) > 0.0001)
+    .filter((r) => Math.abs(r.amount) > 0.0001 || neededIncomeParents.has(r.name))
     .sort((a, b) => a.name.localeCompare(b.name));
 
   const expenseRows = [...expenseMap.entries()]
     .map(([name, amount]) => ({ name, amount }))
-    .filter((r) => Math.abs(r.amount) > 0.0001)
+    .filter((r) => Math.abs(r.amount) > 0.0001 || neededExpenseParents.has(r.name))
     .sort((a, b) => a.name.localeCompare(b.name));
 
   const totalIncome = incomeRows.reduce((s, r) => s + r.amount, 0);
@@ -443,12 +455,22 @@ function computeBalanceSheet(
     balances.set(posting.accountId, (balances.get(posting.accountId) ?? 0) + signedImpact(account, posting));
   });
 
-  const byCategory = (categories: Set<Account["category"]>) =>
-    accounts
-      .filter((a) => categories.has(a.category))
-      .map((a) => ({ name: a.name, amount: balances.get(a.id) ?? 0 }))
-      .filter((r) => Math.abs(r.amount) > 0.0001)
+  const realAccountNames = new Set(accounts.map((a) => a.name));
+
+  const byCategory = (categories: Set<Account["category"]>) => {
+    const rows = accounts.filter((a) => categories.has(a.category)).map((a) => ({ name: a.name, amount: balances.get(a.id) ?? 0 }));
+    // A real parent account with zero balance of its own (e.g. "Coding
+    // Services" when all its money posts to "Coding Services:By Hector M
+    // Garcia") needs a row seeded so buildHierarchyRows below has
+    // something to nest its active children under -- but only when a
+    // child actually has a nonzero balance, so a branch with no activity
+    // anywhere in it still doesn't show up as a stray $0.00 row.
+    const activeNames = rows.filter((r) => Math.abs(r.amount) > 0.0001).map((r) => r.name);
+    const neededParents = neededParentNames(activeNames, realAccountNames);
+    return rows
+      .filter((r) => Math.abs(r.amount) > 0.0001 || neededParents.has(r.name))
       .sort((a, b) => a.name.localeCompare(b.name));
+  };
 
   const bankAccounts = byCategory(new Set(["BANK"]));
   // Accounts Receivable and Other Current Assets shown as their own rows --
