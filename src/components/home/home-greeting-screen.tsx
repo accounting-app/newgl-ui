@@ -62,8 +62,15 @@ export function HomeGreetingScreen() {
     supabase.auth.getUser().then(({ data }) => {
       const user = data.user;
       if (!user) return;
+      // Prefer the onboarding wizard's own first_name field (set for every
+      // email/password account once onboarding is done); fall back to
+      // full_name (what Google OAuth populates automatically, and what
+      // pre-onboarding-wizard accounts may already have), then an
+      // email-derived guess for anyone with neither.
+      const firstNameField = typeof user.user_metadata?.first_name === "string" ? user.user_metadata.first_name : null;
       const fullName = typeof user.user_metadata?.full_name === "string" ? user.user_metadata.full_name : null;
-      const firstName = fullName ? fullName.split(" ")[0] : user.email ? displayNameFromEmail(user.email) : null;
+      const firstName =
+        firstNameField || (fullName ? fullName.split(" ")[0] : null) || (user.email ? displayNameFromEmail(user.email) : null);
       setDisplayName(firstName);
     });
   }, []);
