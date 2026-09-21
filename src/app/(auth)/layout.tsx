@@ -20,14 +20,19 @@ export default function AuthGroupLayout({ children }: AuthGroupLayoutProps) {
       <div className="flex flex-1 items-center justify-center px-6 py-12">
         <div className="w-full max-w-sm">
           <div className="mb-8 flex justify-center lg:hidden">
-            <Image
-              style={{ height: "auto", width: "auto" }}
-              src="/logo-big.png"
-              alt="Simple"
-              width={120}
-              height={68}
-              priority
-            />
+            {/* Small dark chip regardless of the active theme -- the white
+                wordmark needs a dark surface to read on, but this sits on
+                the theme-following panel (light in the default theme). */}
+            <div className="inline-flex items-center rounded-lg bg-[#0b0f0d] px-4 py-3">
+              <Image
+                style={{ height: "auto", width: "auto" }}
+                src="/logo-simple-white.png"
+                alt="Simple"
+                width={120}
+                height={39}
+                priority
+              />
+            </div>
           </div>
           {children}
         </div>
@@ -56,7 +61,7 @@ function BrandPanel() {
       />
 
       <div className="relative">
-        <Image style={{ height: "auto", width: "auto" }} src="/logo-big.png" alt="Simple" width={130} height={74} priority />
+        <Image style={{ height: "auto", width: "auto" }} src="/logo-simple-white.png" alt="Simple" width={150} height={49} priority />
       </div>
 
       <div className="relative">
