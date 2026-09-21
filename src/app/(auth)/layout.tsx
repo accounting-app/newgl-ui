@@ -6,35 +6,40 @@ type AuthGroupLayoutProps = Readonly<{
 }>;
 
 // No AppShell/sidebar here on purpose -- these are the only pages an
-// unauthenticated visitor ever sees. Two-panel layout: a fixed-dark brand
-// panel (left, hidden below lg -- there's no room for it on a phone) and a
-// theme-following form panel (right) so inputs/text stay correct whatever
-// light/dark/palette the visitor's browser or a returning user's saved
-// preference resolves to. Built entirely from this app's own design tokens
-// and wordmark, not a copied template's colors/type.
+// unauthenticated visitor ever sees. One framed card holds both panels: a
+// fixed-dark brand panel (left, larger share, rounded and inset so the
+// card's own background shows as a border around it -- hidden below lg,
+// there's no room for it on a phone) and a theme-following, centered form
+// panel (right). Built entirely from this app's own design tokens and
+// wordmark, not a copied template's colors or type.
 export default function AuthGroupLayout({ children }: AuthGroupLayoutProps) {
   return (
-    <main className="flex min-h-screen bg-[var(--color-container-background-primary)]">
-      <BrandPanel />
+    <main className="flex min-h-screen items-center justify-center bg-[var(--color-container-background-accent)] p-4 sm:p-6">
+      <div className="flex w-full max-w-6xl overflow-hidden rounded-3xl border border-[var(--color-divider-tertiary)] bg-[var(--color-container-background-primary)] p-3 shadow-xl">
+        <BrandPanel />
 
-      <div className="flex flex-1 items-center justify-center px-6 py-12">
-        <div className="w-full max-w-sm">
-          <div className="mb-8 flex justify-center lg:hidden">
-            {/* Small dark chip regardless of the active theme -- the white
-                wordmark needs a dark surface to read on, but this sits on
-                the theme-following panel (light in the default theme). */}
-            <div className="inline-flex items-center rounded-lg bg-[#0b0f0d] px-4 py-3">
-              <Image
-                style={{ height: "auto", width: "auto" }}
-                src="/logo-simple-white.png"
-                alt="Simple"
-                width={120}
-                height={39}
-                priority
-              />
-            </div>
+        <div className="flex flex-1 flex-col items-center justify-center px-6 py-12 text-center sm:px-12">
+          <div className="mb-8">
+            <Image
+              className="hidden dark:block"
+              style={{ height: "auto", width: "auto" }}
+              src="/logo-simple-white.png"
+              alt="Simple"
+              width={120}
+              height={39}
+              priority
+            />
+            <Image
+              className="block dark:hidden"
+              style={{ height: "auto", width: "auto" }}
+              src="/logo-simple-green.png"
+              alt="Simple"
+              width={120}
+              height={39}
+              priority
+            />
           </div>
-          {children}
+          <div className="w-full max-w-sm">{children}</div>
         </div>
       </div>
     </main>
@@ -43,9 +48,11 @@ export default function AuthGroupLayout({ children }: AuthGroupLayoutProps) {
 
 function BrandPanel() {
   return (
-    <aside className="relative hidden w-[42%] max-w-[560px] flex-col justify-between overflow-hidden bg-[#0b0f0d] px-12 py-10 text-white lg:flex">
+    <aside className="relative hidden w-[58%] flex-col justify-between overflow-hidden rounded-2xl bg-[#0b0f0d] px-12 py-10 text-white lg:flex">
       {/* Ledger-line motif: faint parallel rules evoking a general ledger's
-          rows, in the product's own green -- decorative only, aria-hidden. */}
+          rows, in the product's own green -- decorative only, aria-hidden.
+          A photo/illustration can replace this background later for more
+          contrast against the text. */}
       <div
         aria-hidden="true"
         className="pointer-events-none absolute inset-0 opacity-[0.15]"
