@@ -6,41 +6,42 @@ type AuthGroupLayoutProps = Readonly<{
 }>;
 
 // No AppShell/sidebar here on purpose -- these are the only pages an
-// unauthenticated visitor ever sees. One framed card holds both panels: a
-// fixed-dark brand panel (left, larger share, rounded and inset so the
-// card's own background shows as a border around it -- hidden below lg,
-// there's no room for it on a phone) and a theme-following, centered form
-// panel (right). Built entirely from this app's own design tokens and
-// wordmark, not a copied template's colors or type.
+// unauthenticated visitor ever sees. Full-bleed two-panel layout, not a
+// centered card: the brand panel (left, larger share, hidden below lg --
+// there's no room for it on a phone) is inset with its own padding so it
+// reads as a rounded card floating away from the screen edges, while the
+// right side runs edge-to-edge and centers its own content (logo + form)
+// both horizontally and vertically. Built entirely from this app's own
+// design tokens and wordmark, not a copied template's colors or type.
 export default function AuthGroupLayout({ children }: AuthGroupLayoutProps) {
   return (
-    <main className="flex min-h-screen items-center justify-center bg-[var(--color-container-background-accent)] p-4 sm:p-6">
-      <div className="flex w-full max-w-6xl overflow-hidden rounded-3xl border border-[var(--color-divider-tertiary)] bg-[var(--color-container-background-primary)] p-3 shadow-xl">
+    <main className="flex h-screen bg-[var(--color-container-background-primary)]">
+      <div className="hidden w-[45%] max-w-[640px] shrink-0 p-4 lg:block">
         <BrandPanel />
+      </div>
 
-        <div className="flex flex-1 flex-col items-center justify-center px-6 py-12 text-center sm:px-12">
-          <div className="mb-8">
-            <Image
-              className="hidden dark:block"
-              style={{ height: "auto", width: "auto" }}
-              src="/logo-simple-white.png"
-              alt="Simple"
-              width={120}
-              height={39}
-              priority
-            />
-            <Image
-              className="block dark:hidden"
-              style={{ height: "auto", width: "auto" }}
-              src="/logo-simple-green.png"
-              alt="Simple"
-              width={120}
-              height={39}
-              priority
-            />
-          </div>
-          <div className="w-full max-w-sm">{children}</div>
+      <div className="flex flex-1 flex-col items-center justify-center px-6 text-center">
+        <div className="mb-8">
+          <Image
+            className="hidden dark:block"
+            style={{ height: "auto", width: "auto" }}
+            src="/logo-simple-white.png"
+            alt="Simple"
+            width={120}
+            height={39}
+            priority
+          />
+          <Image
+            className="block dark:hidden"
+            style={{ height: "auto", width: "auto" }}
+            src="/logo-simple-green.png"
+            alt="Simple"
+            width={120}
+            height={39}
+            priority
+          />
         </div>
+        <div className="w-full max-w-sm">{children}</div>
       </div>
     </main>
   );
@@ -48,7 +49,7 @@ export default function AuthGroupLayout({ children }: AuthGroupLayoutProps) {
 
 function BrandPanel() {
   return (
-    <aside className="relative hidden w-[58%] flex-col justify-between overflow-hidden rounded-2xl bg-[#0b0f0d] px-12 py-10 text-white lg:flex">
+    <aside className="relative flex h-full w-full flex-col justify-between overflow-hidden rounded-3xl bg-[#0b0f0d] px-12 py-10 text-white">
       {/* Ledger-line motif: faint parallel rules evoking a general ledger's
           rows, in the product's own green -- decorative only, aria-hidden.
           A photo/illustration can replace this background later for more
@@ -67,12 +68,9 @@ function BrandPanel() {
         style={{ backgroundColor: "#2CA01C" }}
       />
 
-      <div className="relative">
-        <Image style={{ height: "auto", width: "auto" }} src="/logo-simple-white.png" alt="Simple" width={150} height={49} priority />
-      </div>
+      <p className="relative text-xs font-semibold uppercase tracking-[0.2em] text-white/60">Double-entry, done right</p>
 
       <div className="relative">
-        <p className="mb-3 text-xs font-semibold uppercase tracking-[0.2em] text-[#7fd68a]">Double-entry, done right</p>
         <h2 className="mb-3 text-4xl font-semibold leading-tight">Every transaction, perfectly balanced.</h2>
         <p className="max-w-sm text-sm text-white/70">The GL of accountants, by accountants, for accountants.</p>
       </div>
