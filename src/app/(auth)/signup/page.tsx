@@ -1,9 +1,9 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { GoogleIcon } from "@/components/ui/google-icon";
 import { InputField } from "@/components/ui/input-field";
 import { createClient } from "@/lib/supabase/client";
 
@@ -13,7 +13,31 @@ export default function SignupPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isGoogleSubmitting, setIsGoogleSubmitting] = useState(false);
   const [checkEmail, setCheckEmail] = useState(false);
+
+  async function handleGoogleSignUp() {
+    setError(null);
+    setIsGoogleSubmitting(true);
+    try {
+      const supabase = createClient();
+      const { error: oauthError } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo: `${window.location.origin}/auth/callback`
+        }
+      });
+      // A successful call navigates the whole page away to Google -- this
+      // only returns for an error (e.g. the provider isn't configured yet).
+      if (oauthError) {
+        setError(oauthError.message);
+        setIsGoogleSubmitting(false);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
+      setIsGoogleSubmitting(false);
+    }
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -58,19 +82,41 @@ export default function SignupPage() {
     );
   }
 
+  const disabled = isSubmitting || isGoogleSubmitting;
+
   return (
     <>
-      <h1 className="mb-1 text-xl font-semibold text-[var(--color-text-global)]">Create your account</h1>
+      <h1 className="mb-1 text-2xl font-semibold text-[var(--color-text-global)]">Create your account</h1>
       <p className="mb-6 text-sm text-[var(--color-text-primary)]">
         Start with New GL&apos;s free plan — no credit card required.
       </p>
+
+      <Button
+        type="button"
+        variant="secondary"
+        size="lg"
+        className="mb-5 w-full"
+        iconLeft={GoogleIcon}
+        onClick={handleGoogleSignUp}
+        disabled={disabled}
+      >
+        {isGoogleSubmitting ? "Redirecting…" : "Sign up with Google"}
+      </Button>
+
+      <div className="mb-5 flex items-center gap-3">
+        <span className="h-px flex-1 bg-[var(--color-divider-tertiary)]" />
+        <span className="text-xs uppercase tracking-wide text-[var(--color-text-disabled)]">or</span>
+        <span className="h-px flex-1 bg-[var(--color-divider-tertiary)]" />
+      </div>
 
       <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
         <InputField
           label="Email"
           type="email"
+          size="lg"
           autoComplete="email"
           required
+          disabled={disabled}
           value={email}
           onChange={(event) => setEmail(event.target.value)}
         />
@@ -78,26 +124,21 @@ export default function SignupPage() {
         <InputField
           label="Password"
           type="password"
+          size="lg"
           autoComplete="new-password"
           required
           minLength={6}
+          disabled={disabled}
           value={password}
           onChange={(event) => setPassword(event.target.value)}
         />
 
         {error ? <p className="text-sm text-[var(--color-negative)]">{error}</p> : null}
 
-        <Button type="submit" variant="primary" disabled={isSubmitting}>
+        <Button type="submit" variant="primary" size="lg" className="w-full" disabled={disabled}>
           {isSubmitting ? "Creating account…" : "Sign up"}
         </Button>
       </form>
-
-      <p className="mt-6 text-center text-sm text-[var(--color-text-primary)]">
-        Already have an account?{" "}
-        <Link href="/login" className="text-[var(--color-link-action)] hover:underline">
-          Sign in
-        </Link>
-      </p>
     </>
   );
 }

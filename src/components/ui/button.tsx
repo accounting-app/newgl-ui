@@ -25,7 +25,9 @@ const BASE_CLASSES =
 const SIZE_CLASSES: Record<ButtonSize, string> = {
   sm: "h-8 min-w-[64px] px-3 text-xs",
   md: "h-[34px] min-w-[80px] px-5 text-sm",
-  lg: "h-10 min-w-[96px] px-6 text-sm"
+  // Matches InputField's "lg" height (h-12) so a form's fields and its
+  // primary button feel like one substantial, unified control group.
+  lg: "h-12 min-w-[96px] px-6 text-base"
 };
 
 const VARIANT_CLASSES: Record<ButtonVariant, string> = {

@@ -9,6 +9,13 @@ export type Tenant = {
   name: string;
   planId: string;
   aiEnabled: boolean;
+  industry: string | null;
+  companySize: string | null;
+  country: string | null;
+  baseCurrency: string;
+  // null until the onboarding wizard has been completed once -- OnboardingGate
+  // (app/(app)/layout.tsx) redirects to /onboarding whenever this is null.
+  onboardingCompletedAt: string | null;
 };
 
 type TenantContextValue = {
