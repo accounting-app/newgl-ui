@@ -1,7 +1,7 @@
 import { forwardRef, useId } from "react";
 import type { InputHTMLAttributes } from "react";
 
-export type InputFieldSize = "sm" | "md";
+export type InputFieldSize = "sm" | "md" | "lg";
 
 type InputFieldProps = Omit<InputHTMLAttributes<HTMLInputElement>, "size"> & {
   label?: string;
@@ -26,7 +26,11 @@ export const INPUT_BASE_CLASSES =
 
 export const INPUT_SIZE_CLASSES: Record<InputFieldSize, string> = {
   sm: "h-8 rounded-[var(--radius-x-small)] px-3 text-[13px]",
-  md: "h-9 rounded px-3 text-sm"
+  md: "h-9 rounded px-3 text-sm",
+  // Substantial-feeling fields for standalone forms (auth pages, wizards)
+  // where the default md height reads as too thin next to a full-width
+  // primary button -- same tokens, just more breathing room.
+  lg: "h-12 rounded-lg px-4 text-base"
 };
 
 const BASE_CLASSES = INPUT_BASE_CLASSES;

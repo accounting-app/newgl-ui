@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { GoogleIcon } from "@/components/ui/google-icon";
@@ -95,6 +94,7 @@ export default function SignupPage() {
       <Button
         type="button"
         variant="secondary"
+        size="lg"
         className="mb-5 w-full"
         iconLeft={GoogleIcon}
         onClick={handleGoogleSignUp}
@@ -113,6 +113,7 @@ export default function SignupPage() {
         <InputField
           label="Email"
           type="email"
+          size="lg"
           autoComplete="email"
           required
           disabled={disabled}
@@ -123,6 +124,7 @@ export default function SignupPage() {
         <InputField
           label="Password"
           type="password"
+          size="lg"
           autoComplete="new-password"
           required
           minLength={6}
@@ -133,17 +135,10 @@ export default function SignupPage() {
 
         {error ? <p className="text-sm text-[var(--color-negative)]">{error}</p> : null}
 
-        <Button type="submit" variant="primary" className="w-full" disabled={disabled}>
+        <Button type="submit" variant="primary" size="lg" className="w-full" disabled={disabled}>
           {isSubmitting ? "Creating account…" : "Sign up"}
         </Button>
       </form>
-
-      <p className="mt-6 text-center text-sm text-[var(--color-text-primary)]">
-        Already have an account?{" "}
-        <Link href="/login" className="text-[var(--color-link-action)] hover:underline">
-          Sign in
-        </Link>
-      </p>
     </>
   );
 }

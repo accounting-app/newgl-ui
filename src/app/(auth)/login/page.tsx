@@ -1,7 +1,6 @@
 "use client";
 
 import { Suspense, useState, type FormEvent } from "react";
-import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { GoogleIcon } from "@/components/ui/google-icon";
@@ -87,6 +86,7 @@ function LoginForm() {
       <Button
         type="button"
         variant="secondary"
+        size="lg"
         className="mb-5 w-full"
         iconLeft={GoogleIcon}
         onClick={handleGoogleSignIn}
@@ -105,6 +105,7 @@ function LoginForm() {
         <InputField
           label="Email"
           type="email"
+          size="lg"
           autoComplete="email"
           required
           disabled={disabled}
@@ -115,6 +116,7 @@ function LoginForm() {
         <InputField
           label="Password"
           type="password"
+          size="lg"
           autoComplete="current-password"
           required
           disabled={disabled}
@@ -124,17 +126,10 @@ function LoginForm() {
 
         {error ? <p className="text-sm text-[var(--color-negative)]">{error}</p> : null}
 
-        <Button type="submit" variant="primary" className="w-full" disabled={disabled}>
+        <Button type="submit" variant="primary" size="lg" className="w-full" disabled={disabled}>
           {isSubmitting ? "Signing in…" : "Sign in"}
         </Button>
       </form>
-
-      <p className="mt-6 text-center text-sm text-[var(--color-text-primary)]">
-        Don&apos;t have an account?{" "}
-        <Link href="/signup" className="text-[var(--color-link-action)] hover:underline">
-          Sign up
-        </Link>
-      </p>
     </>
   );
 }
