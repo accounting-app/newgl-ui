@@ -7,21 +7,20 @@ type AuthGroupLayoutProps = Readonly<{
 
 // No AppShell/sidebar here on purpose -- these are the only pages an
 // unauthenticated visitor ever sees. Full-bleed two-panel layout, not a
-// centered card: the brand panel (left, larger share, hidden below lg --
-// there's no room for it on a phone) is inset with its own padding so it
-// reads as a rounded card floating away from the screen edges, while the
-// right side runs edge-to-edge and centers its own content (logo + form)
-// both horizontally and vertically. Built entirely from this app's own
-// design tokens and wordmark, not a copied template's colors or type.
+// centered card: the brand panel (left, 50/50 with the form, hidden below
+// lg -- there's no room for it on a phone) is inset with its own padding
+// so it reads as a rounded card floating away from the screen edges,
+// while the right side runs edge-to-edge -- logo pinned near the top,
+// the form centered in the remaining space below it.
 export default function AuthGroupLayout({ children }: AuthGroupLayoutProps) {
   return (
     <main className="flex h-screen bg-[var(--color-container-background-primary)]">
-      <div className="hidden w-[45%] max-w-[640px] shrink-0 p-4 lg:block">
+      <div className="hidden w-1/2 shrink-0 p-4 lg:block">
         <BrandPanel />
       </div>
 
-      <div className="flex flex-1 flex-col items-center justify-center px-6 text-center">
-        <div className="mb-8">
+      <div className="flex flex-1 flex-col items-center px-6 py-10 text-center">
+        <div>
           <Image
             className="hidden dark:block"
             style={{ height: "auto", width: "auto" }}
@@ -41,7 +40,10 @@ export default function AuthGroupLayout({ children }: AuthGroupLayoutProps) {
             priority
           />
         </div>
-        <div className="w-full max-w-sm">{children}</div>
+
+        <div className="flex w-full flex-1 flex-col items-center justify-center">
+          <div className="w-full max-w-sm">{children}</div>
+        </div>
       </div>
     </main>
   );
@@ -49,30 +51,23 @@ export default function AuthGroupLayout({ children }: AuthGroupLayoutProps) {
 
 function BrandPanel() {
   return (
-    <aside className="relative flex h-full w-full flex-col justify-between overflow-hidden rounded-3xl bg-[#0b0f0d] px-12 py-10 text-white">
-      {/* Ledger-line motif: faint parallel rules evoking a general ledger's
-          rows, in the product's own green -- decorative only, aria-hidden.
-          A photo/illustration can replace this background later for more
-          contrast against the text. */}
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-0 opacity-[0.15]"
-        style={{
-          backgroundImage:
-            "repeating-linear-gradient(180deg, transparent, transparent 38px, #2CA01C 39px, transparent 40px)"
-        }}
-      />
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full opacity-20 blur-3xl"
-        style={{ backgroundColor: "#2CA01C" }}
-      />
+    <aside className="relative h-full w-full overflow-hidden rounded-3xl text-white">
+      <Image src="/login-back.jpeg" alt="" fill sizes="50vw" priority className="object-cover" />
 
-      <p className="relative text-xs font-semibold uppercase tracking-[0.2em] text-white/60">Double-entry, done right</p>
+      {/* Brand-color gradient overlay -- the photo alone is too light for
+          white text to read on; this darkens it bottom-heavy (where the
+          headline sits) and tints it with the product's own green rather
+          than a flat black scrim. */}
+      <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/50 to-black/10" />
+      <div className="absolute inset-0 bg-gradient-to-br from-[#0b3d1a]/70 via-transparent to-[#2CA01C]/30 mix-blend-multiply" />
 
-      <div className="relative">
-        <h2 className="mb-3 text-4xl font-semibold leading-tight">Every transaction, perfectly balanced.</h2>
-        <p className="max-w-sm text-sm text-white/70">The GL of accountants, by accountants, for accountants.</p>
+      <div className="relative flex h-full flex-col justify-between px-12 py-10">
+        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-white/60">Double-entry, done right</p>
+
+        <div>
+          <h2 className="mb-3 text-5xl font-semibold leading-[1.05] md:text-6xl">Every transaction, perfectly balanced.</h2>
+          <p className="max-w-sm text-sm text-white/70">The GL of accountants, by accountants, for accountants.</p>
+        </div>
       </div>
     </aside>
   );
