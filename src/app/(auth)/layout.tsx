@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { ThemeToggle } from "@/components/theme/theme-toggle";
 
 type AuthGroupLayoutProps = Readonly<{
   children: ReactNode;
@@ -23,7 +24,11 @@ export default function AuthGroupLayout({ children }: AuthGroupLayoutProps) {
   const isLogin = pathname?.startsWith("/login");
 
   return (
-    <main className="flex h-screen bg-[var(--color-container-background-primary)]">
+    <main className="relative flex h-screen bg-[var(--color-container-background-primary)]">
+      <div className="absolute bottom-4 right-4 z-20">
+        <ThemeToggle menuAlign="top" />
+      </div>
+
       <div className="hidden w-1/2 shrink-0 p-4 lg:block">
         <BrandPanel />
       </div>

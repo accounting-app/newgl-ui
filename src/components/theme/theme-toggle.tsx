@@ -14,11 +14,18 @@ const THEME_OPTIONS: ThemeOption[] = [
   { value: "pretty", label: "Pretty" }
 ];
 
+type ThemeToggleProps = {
+  /** Which edge of the button the menu opens from -- "bottom" (default, the
+   * top header's own placement) or "top" for a trigger sitting in a bottom
+   * corner (e.g. the auth pages), where a downward menu would run off-screen. */
+  menuAlign?: "top" | "bottom";
+};
+
 // Was a two-state light/dark toggle button; now a dropdown since the app
 // has more than two skins (PlainGL parity #10 -- PlainGL ships 5 cosmetic
 // skins via a <select>, this mirrors that with the app's own menu pattern
 // instead of a native select).
-export function ThemeToggle() {
+export function ThemeToggle({ menuAlign = "bottom" }: ThemeToggleProps) {
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
@@ -59,7 +66,9 @@ export function ThemeToggle() {
       {isOpen ? (
         <div
           role="menu"
-          className="absolute right-0 top-full z-10 mt-2 w-40 overflow-hidden rounded-lg border border-[var(--color-divider-tertiary)] bg-[var(--color-container-background-primary)] py-1 shadow-lg"
+          className={`absolute right-0 z-10 w-40 overflow-hidden rounded-lg border border-[var(--color-divider-tertiary)] bg-[var(--color-container-background-primary)] py-1 shadow-lg ${
+            menuAlign === "top" ? "bottom-full mb-2" : "top-full mt-2"
+          }`}
         >
           {THEME_OPTIONS.map((option) => (
             <button
