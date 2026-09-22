@@ -25,8 +25,8 @@ export default function AuthGroupLayout({ children }: AuthGroupLayoutProps) {
 
   return (
     <main className="relative flex h-screen bg-[var(--color-container-background-primary)]">
-      <div className="absolute bottom-4 right-4 z-20">
-        <ThemeToggle menuAlign="top" />
+      <div className="absolute bottom-8 right-6 z-20">
+        <ThemeToggle menuAlign="top" variant="standalone" />
       </div>
 
       <div className="hidden w-1/2 shrink-0 p-4 lg:block">
