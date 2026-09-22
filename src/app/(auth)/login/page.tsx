@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState, type FormEvent } from "react";
+import { Suspense, useEffect, useState, type FormEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { GoogleIcon } from "@/components/ui/google-icon";
@@ -19,6 +19,27 @@ export default function LoginPage() {
   );
 }
 
+// A Google (or any OAuth provider) failure that happens before Supabase can
+// validate/trust our own redirectTo -- e.g. an expired or reused OAuth
+// state -- never reaches our /auth/callback route at all. Supabase instead
+// redirects straight to the project's bare site_url with ?error=... on it,
+// which middleware.ts then bounces to /login (preserving that query string
+// as-is). Without this, that error was silently dropped: the visitor just
+// saw a blank login page with no explanation of what went wrong.
+const OAUTH_ERROR_MESSAGES: Record<string, string> = {
+  bad_oauth_state:
+    "Your Google sign-in session expired before it finished. Please try again -- it only takes a few seconds once you pick an account.",
+  access_denied: "Google sign-in was cancelled."
+};
+
+function oauthErrorMessage(errorCode: string | null, description: string | null): string | null {
+  if (!errorCode) return null;
+  return (
+    OAUTH_ERROR_MESSAGES[errorCode] ??
+    (description ? description.replace(/\+/g, " ") : "Something went wrong signing in with Google. Please try again.")
+  );
+}
+
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -27,6 +48,17 @@ function LoginForm() {
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isGoogleSubmitting, setIsGoogleSubmitting] = useState(false);
+
+  useEffect(() => {
+    const message = oauthErrorMessage(searchParams.get("error_code"), searchParams.get("error_description"));
+    if (!message) return;
+    setError(message);
+    // Strip the error params from the URL so refreshing (or just looking at
+    // the address bar) doesn't keep re-showing a stale failure.
+    const next = searchParams.get("next");
+    router.replace(next ? `/login?next=${encodeURIComponent(next)}` : "/login");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function handleGoogleSignIn() {
     setError(null);
