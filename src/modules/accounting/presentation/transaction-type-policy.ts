@@ -282,13 +282,44 @@ export function isRegisterAccountCategory(category: Account["category"]): boolea
 const BANK_OR_CREDIT_CARD_CATEGORIES = new Set<Account["category"]>(["BANK", "CREDIT_CARD"]);
 
 /**
- * Reconcile's setup form only shows the service-charge/interest-earned
- * mini-form for non-bank/credit-card accounts (matches QBO: a statement
- * from an asset/liability/equity account can carry a bank fee or interest
- * adjustment same as a real bank statement would).
+ * Reconcile's setup form calls the ending-balance/date fields "Statement
+ * ending balance"/"Statement ending date" for Bank and Credit Card
+ * accounts, and just "Ending balance"/"Ending date" for everything else --
+ * matches QBO's own wording exactly (confirmed against its Reconcile
+ * screen for each account category).
  */
 export function isBankOrCreditCardCategory(category: Account["category"]): boolean {
   return BANK_OR_CREDIT_CARD_CATEGORIES.has(category);
+}
+
+export type ReconcileAdjustmentKind = "none" | "serviceChargeAndInterest" | "financeCharge";
+
+/**
+ * Which optional adjustment mini-form Reconcile's setup screen shows,
+ * per account category -- matches QBO's own behavior exactly, confirmed
+ * against screenshots of each category's real setup screen:
+ * - Bank: no adjustment form at all.
+ * - Credit Card / Other Current Liability / Long-term Liability: a single
+ *   "finance charge" field (date + amount + expense account) -- these are
+ *   liabilities, so any adjustment can only ever be a charge against them,
+ *   never earned interest.
+ * - Other Current Asset / Fixed Asset: the fuller "service charge or
+ *   interest earned" form (both a charge-side and an earn-side row) --
+ *   these are assets, so a statement adjustment could go either way.
+ * - Equity: no adjustment form at all.
+ */
+export function getReconcileAdjustmentKind(category: Account["category"]): ReconcileAdjustmentKind {
+  switch (category) {
+    case "OTHER_CURRENT_ASSET":
+    case "FIXED_ASSET":
+      return "serviceChargeAndInterest";
+    case "CREDIT_CARD":
+    case "OTHER_CURRENT_LIABILITY":
+    case "LONG_TERM_LIABILITY":
+      return "financeCharge";
+    default:
+      return "none";
+  }
 }
 
 // Matches QBO's own Reconcile account picker: grouped by category in this

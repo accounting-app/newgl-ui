@@ -15,6 +15,7 @@ import { getServiceContainer } from "@/lib/services/service-container-v2";
 import { listReconciliations, listReconciliationsForAccount, type Reconciliation } from "@/lib/services/reconciliation-service";
 import { ACCOUNT_CATEGORY_LABELS } from "@/constants/ui";
 import {
+  getReconcileAdjustmentKind,
   groupAccountsByCategory,
   isBankOrCreditCardCategory,
   isRegisterAccountCategory
@@ -120,7 +121,10 @@ export function ReconcilePage() {
   const [statementEndingBalance, setStatementEndingBalance] = useState("");
   const [statementEndingDate, setStatementEndingDate] = useState("");
 
-  const showAdjustmentsForm = selectedAccount ? !isBankOrCreditCardCategory(selectedAccount.category) : false;
+  const useStatementLabel = selectedAccount ? isBankOrCreditCardCategory(selectedAccount.category) : true;
+  const endingBalanceLabel = useStatementLabel ? "Statement ending balance" : "Ending balance";
+  const endingDateLabel = useStatementLabel ? "Statement ending date" : "Ending date";
+  const adjustmentKind = selectedAccount ? getReconcileAdjustmentKind(selectedAccount.category) : "none";
   const expenseAccountOptions = useMemo(
     () => accounts.filter((a) => a.category === "EXPENSE" || a.category === "OTHER_EXPENSE").map((a) => ({ value: a.id, label: a.name })),
     [accounts]
@@ -168,12 +172,12 @@ export function ReconcilePage() {
       statementEndingBalance,
       statementBeginningBalance: String(beginningBalance)
     });
-    if (showAdjustmentsForm && serviceChargeAmount.trim() !== "" && serviceChargeDate && serviceChargeExpenseAccountId) {
+    if (adjustmentKind !== "none" && serviceChargeAmount.trim() !== "" && serviceChargeDate && serviceChargeExpenseAccountId) {
       params.set("serviceChargeAmount", serviceChargeAmount);
       params.set("serviceChargeDate", serviceChargeDate);
       params.set("serviceChargeExpenseAccountId", serviceChargeExpenseAccountId);
     }
-    if (showAdjustmentsForm && interestEarnedAmount.trim() !== "" && interestEarnedDate && interestEarnedIncomeAccountId) {
+    if (adjustmentKind === "serviceChargeAndInterest" && interestEarnedAmount.trim() !== "" && interestEarnedDate && interestEarnedIncomeAccountId) {
       params.set("interestEarnedAmount", interestEarnedAmount);
       params.set("interestEarnedDate", interestEarnedDate);
       params.set("interestEarnedIncomeAccountId", interestEarnedIncomeAccountId);
@@ -225,15 +229,15 @@ export function ReconcilePage() {
                   <p className="flex h-9 items-center text-sm text-[var(--color-text-primary)]">{formatPlain(beginningBalance)}</p>
                 </div>
                 <div className="w-40">
-                  <NumberField label="Statement ending balance" currency placeholder="0.00" value={statementEndingBalance} onChange={(e) => setStatementEndingBalance(e.target.value)} />
+                  <NumberField label={endingBalanceLabel} currency placeholder="0.00" value={statementEndingBalance} onChange={(e) => setStatementEndingBalance(e.target.value)} />
                 </div>
                 <div className="w-44">
-                  <InputField label="Statement ending date" type="date" value={statementEndingDate} onChange={(e) => setStatementEndingDate(e.target.value)} />
+                  <InputField label={endingDateLabel} type="date" value={statementEndingDate} onChange={(e) => setStatementEndingDate(e.target.value)} />
                 </div>
               </div>
             </div>
 
-            {showAdjustmentsForm ? (
+            {adjustmentKind === "serviceChargeAndInterest" ? (
               <div>
                 <p className="mb-3 text-base text-[var(--color-text-global)]">Enter the service charge or interest earned, if necessary</p>
                 <div className="flex flex-wrap gap-6">
@@ -272,6 +276,30 @@ export function ReconcilePage() {
                         allowCustomValue={false}
                       />
                     </div>
+                  </div>
+                </div>
+              </div>
+            ) : null}
+
+            {adjustmentKind === "financeCharge" ? (
+              <div>
+                <p className="mb-3 text-base text-[var(--color-text-global)]">Enter the finance charge, if necessary</p>
+                <div className="flex flex-wrap items-end gap-6">
+                  <div className="w-44">
+                    <InputField label="Date" type="date" value={serviceChargeDate} onChange={(e) => setServiceChargeDate(e.target.value)} />
+                  </div>
+                  <div className="w-40">
+                    <NumberField label="Finance charge" currency placeholder="0.00" value={serviceChargeAmount} onChange={(e) => setServiceChargeAmount(e.target.value)} />
+                  </div>
+                  <div className="w-56">
+                    <Select
+                      label="Expense account"
+                      value={serviceChargeExpenseAccountId}
+                      onChange={setServiceChargeExpenseAccountId}
+                      options={expenseAccountOptions}
+                      placeholder="Account"
+                      allowCustomValue={false}
+                    />
                   </div>
                 </div>
               </div>
