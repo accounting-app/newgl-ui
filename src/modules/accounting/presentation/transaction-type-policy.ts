@@ -279,6 +279,40 @@ export function isRegisterAccountCategory(category: Account["category"]): boolea
   return REGISTER_ACCOUNT_CATEGORIES.has(category);
 }
 
+const BANK_OR_CREDIT_CARD_CATEGORIES = new Set<Account["category"]>(["BANK", "CREDIT_CARD"]);
+
+/**
+ * Reconcile's setup form only shows the service-charge/interest-earned
+ * mini-form for non-bank/credit-card accounts (matches QBO: a statement
+ * from an asset/liability/equity account can carry a bank fee or interest
+ * adjustment same as a real bank statement would).
+ */
+export function isBankOrCreditCardCategory(category: Account["category"]): boolean {
+  return BANK_OR_CREDIT_CARD_CATEGORIES.has(category);
+}
+
+// Matches QBO's own Reconcile account picker: grouped by category in this
+// order, not a flat list -- getAccountHierarchy() groups by parent/child,
+// not category, so this is its own small grouping helper.
+const RECONCILE_CATEGORY_ORDER: Account["category"][] = [
+  "BANK",
+  "OTHER_CURRENT_ASSET",
+  "FIXED_ASSET",
+  "CREDIT_CARD",
+  "OTHER_CURRENT_LIABILITY",
+  "LONG_TERM_LIABILITY",
+  "EQUITY"
+];
+
+export function groupAccountsByCategory<T extends { category: Account["category"] }>(
+  accounts: T[]
+): Array<{ category: Account["category"]; accounts: T[] }> {
+  return RECONCILE_CATEGORY_ORDER.map((category) => ({
+    category,
+    accounts: accounts.filter((account) => account.category === category)
+  })).filter((group) => group.accounts.length > 0);
+}
+
 export function isAccountFieldDisabledForTransactionType(
   transactionTypeId: BankRegisterTransactionTypeId
 ): boolean {

@@ -2,20 +2,23 @@
 
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { HelpCircle, Printer, Share } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { IconButton } from "@/components/ui/icon-button";
 import { InputField } from "@/components/ui/input-field";
 import { NumberField } from "@/components/ui/number-field";
 import { Select } from "@/components/ui/select";
-import { useToast } from "@/components/ui/toast/toast-context";
 import { createClient } from "@/lib/supabase/client";
 import { useCompany } from "@/lib/company/company-provider";
-import { companyScopedKey, localId, useLocalCollection } from "@/lib/local-store/use-local-collection";
-import type { ReconciliationRecord } from "@/lib/local-store/accounting-types";
 import { getServiceContainer } from "@/lib/services/service-container-v2";
+import { listReconciliations, listReconciliationsForAccount, type Reconciliation } from "@/lib/services/reconciliation-service";
 import { ACCOUNT_CATEGORY_LABELS } from "@/constants/ui";
-import { isRegisterAccountCategory } from "@/modules/accounting/presentation/transaction-type-policy";
+import {
+  groupAccountsByCategory,
+  isBankOrCreditCardCategory,
+  isRegisterAccountCategory
+} from "@/modules/accounting/presentation/transaction-type-policy";
 import type { Account } from "@/modules/accounting/domain/models";
 
 function formatMoney(value: number): string {
@@ -67,19 +70,28 @@ function ViewSwitcher({ view, onChange }: { view: ReconcileView; onChange: (view
   );
 }
 
-// Phase 1: records that a reconciliation happened (account, statement
-// dates/balances) -- doesn't actually walk through matching individual
-// transactions against a statement yet (that needs the real Register data
-// wired in, Phase 1.5). See newgl-specs/plans/qbo-free-features/QBO_FREE_FEATURES_PLAN.md.
+/**
+ * The setup form only starts a session -- it no longer writes anything
+ * itself. Submitting hands its values to the matching screen
+ * (/all-apps/reconcile/session) via the URL, where the real statement
+ * math and Finish call happen. See reconciliation-session-page.tsx.
+ */
 export function ReconcilePage() {
   const { activeCompany } = useCompany();
-  const { toast } = useToast();
+  const router = useRouter();
   const services = useMemo(() => getServiceContainer(), []);
   const [accounts, setAccounts] = useState<Account[]>([]);
   useEffect(() => {
     services.accountService.listAccounts().then(setAccounts).catch(() => setAccounts([]));
   }, [services]);
   const reconcilableAccounts = useMemo(() => accounts.filter((a) => isRegisterAccountCategory(a.category)), [accounts]);
+  const groupedAccountOptions = useMemo(
+    () =>
+      groupAccountsByCategory(reconcilableAccounts).flatMap(({ category, accounts: categoryAccounts }) =>
+        categoryAccounts.map((account) => ({ value: account.id, label: account.name, group: ACCOUNT_CATEGORY_LABELS[category] }))
+      ),
+    [reconcilableAccounts]
+  );
   const accountById = useMemo(() => new Map(accounts.map((a) => [a.id, a])), [accounts]);
 
   const [userName, setUserName] = useState<string | null>(null);
@@ -87,10 +99,6 @@ export function ReconcilePage() {
     const supabase = createClient();
     supabase.auth.getUser().then(({ data }) => setUserName(data.user?.email ?? null));
   }, []);
-
-  const recordsKey = activeCompany ? companyScopedKey(activeCompany.name, "reconciliations") : null;
-  const { items: records, hydrated, add } = useLocalCollection<ReconciliationRecord>(recordsKey ?? "newgl:phase1:pending:reconciliations");
-  const allRecordsSorted = useMemo(() => [...records].sort((a, b) => b.completedAt.localeCompare(a.completedAt)), [records]);
 
   const [view, setView] = useState<ReconcileView>("reconcile");
 
@@ -100,30 +108,77 @@ export function ReconcilePage() {
   }, [reconcilableAccounts, accountId]);
   const selectedAccount = accounts.find((a) => a.id === accountId);
 
+  const [previousReconciliation, setPreviousReconciliation] = useState<Reconciliation | null>(null);
+  useEffect(() => {
+    if (!accountId) return;
+    listReconciliationsForAccount(accountId)
+      .then((list) => setPreviousReconciliation(list[0] ?? null))
+      .catch(() => setPreviousReconciliation(null));
+  }, [accountId]);
+  const beginningBalance = previousReconciliation?.statementEndingBalance ?? 0;
+
   const [statementEndingBalance, setStatementEndingBalance] = useState("");
   const [statementEndingDate, setStatementEndingDate] = useState("");
-  const accountRecords = useMemo(
-    () => records.filter((r) => r.accountId === accountId).sort((a, b) => b.completedAt.localeCompare(a.completedAt)),
-    [records, accountId]
+
+  const showAdjustmentsForm = selectedAccount ? !isBankOrCreditCardCategory(selectedAccount.category) : false;
+  const expenseAccountOptions = useMemo(
+    () => accounts.filter((a) => a.category === "EXPENSE" || a.category === "OTHER_EXPENSE").map((a) => ({ value: a.id, label: a.name })),
+    [accounts]
   );
-  const beginningBalance = accountRecords[0]?.statementEndingBalance ?? 0;
+  const incomeAccountOptions = useMemo(
+    () => accounts.filter((a) => a.category === "INCOME" || a.category === "OTHER_INCOME").map((a) => ({ value: a.id, label: a.name })),
+    [accounts]
+  );
+  const [serviceChargeAmount, setServiceChargeAmount] = useState("");
+  const [serviceChargeDate, setServiceChargeDate] = useState("");
+  const [serviceChargeExpenseAccountId, setServiceChargeExpenseAccountId] = useState("");
+  const [interestEarnedAmount, setInterestEarnedAmount] = useState("");
+  const [interestEarnedDate, setInterestEarnedDate] = useState("");
+  const [interestEarnedIncomeAccountId, setInterestEarnedIncomeAccountId] = useState("");
+
+  const [historyRecords, setHistoryRecords] = useState<Reconciliation[]>([]);
+  const [historyHydrated, setHistoryHydrated] = useState(false);
+  useEffect(() => {
+    if (!accountId) return;
+    setHistoryHydrated(false);
+    listReconciliationsForAccount(accountId)
+      .then(setHistoryRecords)
+      .catch(() => setHistoryRecords([]))
+      .finally(() => setHistoryHydrated(true));
+  }, [accountId]);
+
+  const [summaryRecords, setSummaryRecords] = useState<Reconciliation[]>([]);
+  const [summaryHydrated, setSummaryHydrated] = useState(false);
+  useEffect(() => {
+    if (view !== "summary") return;
+    setSummaryHydrated(false);
+    listReconciliations()
+      .then(setSummaryRecords)
+      .catch(() => setSummaryRecords([]))
+      .finally(() => setSummaryHydrated(true));
+  }, [view]);
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const parsed = Number(statementEndingBalance);
-    if (!accountId || !statementEndingDate || !Number.isFinite(parsed)) return;
-    add({
-      id: localId(),
-      accountId,
+    if (!accountId || !statementEndingDate || statementEndingBalance.trim() === "") return;
+
+    const params = new URLSearchParams({
+      statementStartDate: previousReconciliation?.statementEndingDate ?? (selectedAccount ? selectedAccount.createdAt.slice(0, 10) : statementEndingDate),
       statementEndingDate,
-      statementEndingBalance: parsed,
-      beginningBalance,
-      completedAt: new Date().toISOString()
+      statementEndingBalance,
+      statementBeginningBalance: String(beginningBalance)
     });
-    toast({ variant: "success", title: "Reconciliation recorded" });
-    setStatementEndingBalance("");
-    setStatementEndingDate("");
-    setView("summary");
+    if (showAdjustmentsForm && serviceChargeAmount.trim() !== "" && serviceChargeDate && serviceChargeExpenseAccountId) {
+      params.set("serviceChargeAmount", serviceChargeAmount);
+      params.set("serviceChargeDate", serviceChargeDate);
+      params.set("serviceChargeExpenseAccountId", serviceChargeExpenseAccountId);
+    }
+    if (showAdjustmentsForm && interestEarnedAmount.trim() !== "" && interestEarnedDate && interestEarnedIncomeAccountId) {
+      params.set("interestEarnedAmount", interestEarnedAmount);
+      params.set("interestEarnedDate", interestEarnedDate);
+      params.set("interestEarnedIncomeAccountId", interestEarnedIncomeAccountId);
+    }
+    router.push(`/all-apps/reconcile/session/${accountId}?${params.toString()}`);
   }
 
   if (!activeCompany) {
@@ -145,7 +200,7 @@ export function ReconcilePage() {
 
       {view === "reconcile" ? (
         reconcilableAccounts.length === 0 ? (
-          <p className="text-sm text-[var(--color-text-disabled)]">No bank or credit card accounts yet.</p>
+          <p className="text-sm text-[var(--color-text-disabled)]">No reconcilable accounts yet.</p>
         ) : (
           <form onSubmit={handleSubmit} className="flex flex-col gap-6">
             <div>
@@ -155,7 +210,7 @@ export function ReconcilePage() {
                   label="Account"
                   value={accountId}
                   onChange={setAccountId}
-                  options={reconcilableAccounts.map((a) => ({ value: a.id, label: a.name }))}
+                  options={groupedAccountOptions}
                   placeholder="Select account"
                   allowCustomValue={false}
                 />
@@ -178,6 +233,50 @@ export function ReconcilePage() {
               </div>
             </div>
 
+            {showAdjustmentsForm ? (
+              <div>
+                <p className="mb-3 text-base text-[var(--color-text-global)]">Enter the service charge or interest earned, if necessary</p>
+                <div className="flex flex-wrap gap-6">
+                  <div className="flex flex-wrap items-end gap-6">
+                    <div className="w-44">
+                      <InputField label="Date" type="date" value={serviceChargeDate} onChange={(e) => setServiceChargeDate(e.target.value)} />
+                    </div>
+                    <div className="w-40">
+                      <NumberField label="Service charge" currency placeholder="0.00" value={serviceChargeAmount} onChange={(e) => setServiceChargeAmount(e.target.value)} />
+                    </div>
+                    <div className="w-56">
+                      <Select
+                        label="Expense account"
+                        value={serviceChargeExpenseAccountId}
+                        onChange={setServiceChargeExpenseAccountId}
+                        options={expenseAccountOptions}
+                        placeholder="Account"
+                        allowCustomValue={false}
+                      />
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap items-end gap-6">
+                    <div className="w-44">
+                      <InputField label="Date" type="date" value={interestEarnedDate} onChange={(e) => setInterestEarnedDate(e.target.value)} />
+                    </div>
+                    <div className="w-40">
+                      <NumberField label="Interest earned" currency placeholder="0.00" value={interestEarnedAmount} onChange={(e) => setInterestEarnedAmount(e.target.value)} />
+                    </div>
+                    <div className="w-56">
+                      <Select
+                        label="Income account"
+                        value={interestEarnedIncomeAccountId}
+                        onChange={setInterestEarnedIncomeAccountId}
+                        options={incomeAccountOptions}
+                        placeholder="Account"
+                        allowCustomValue={false}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : null}
+
             <div>
               <Button type="submit" disabled={statementEndingBalance.trim() === "" || !statementEndingDate}>
                 Start reconciling
@@ -195,8 +294,8 @@ export function ReconcilePage() {
               <p className="mt-1 text-sm font-semibold uppercase tracking-wide text-[var(--color-text-primary)]">Reconciliation summary</p>
             </div>
             <div className="flex items-center gap-1">
-              <IconButton icon={Printer} label="Print" size="sm" />
-              <IconButton icon={Share} label="Export" size="sm" />
+              <IconButton icon={Printer} label="Print" size="sm" onClick={() => window.print()} />
+              <IconButton icon={Share} label="Export" size="sm" onClick={() => window.print()} />
             </div>
           </div>
           <div className="tw-override overflow-auto">
@@ -210,20 +309,20 @@ export function ReconcilePage() {
                 </tr>
               </thead>
               <tbody className="content-table">
-                {!hydrated ? (
+                {!summaryHydrated ? (
                   <tr>
                     <td colSpan={4} className="px-3 py-6 text-center text-sm text-[var(--color-text-primary)]">
                       Loading…
                     </td>
                   </tr>
-                ) : allRecordsSorted.length === 0 ? (
+                ) : summaryRecords.length === 0 ? (
                   <tr>
                     <td colSpan={4} className="px-3 py-4 text-sm text-[var(--color-text-primary)]">
                       Each time you reconcile this account, the reconciliation report is saved here. If you're ready to reconcile now, click the Reconcile tab.
                     </td>
                   </tr>
                 ) : (
-                  allRecordsSorted.map((record) => {
+                  summaryRecords.map((record) => {
                     const account = accountById.get(record.accountId);
                     return (
                       <tr key={record.id} className="border-t border-[var(--color-divider-tertiary)] hover:bg-[var(--color-table-row-hover)]">
@@ -253,7 +352,7 @@ export function ReconcilePage() {
                 label="Account"
                 value={accountId}
                 onChange={setAccountId}
-                options={reconcilableAccounts.map((a) => ({ value: a.id, label: a.name }))}
+                options={groupedAccountOptions}
                 placeholder="Select account"
                 allowCustomValue={false}
               />
@@ -284,20 +383,20 @@ export function ReconcilePage() {
                 </tr>
               </thead>
               <tbody className="content-table">
-                {!hydrated ? (
+                {!historyHydrated ? (
                   <tr>
                     <td colSpan={7} className="px-3 py-6 text-center text-sm text-[var(--color-text-primary)]">
                       Loading…
                     </td>
                   </tr>
-                ) : accountRecords.length === 0 ? (
+                ) : historyRecords.length === 0 ? (
                   <tr>
                     <td colSpan={7} className="px-3 py-4 text-sm text-[var(--color-text-primary)]">
                       Each time you reconcile this account, the reconciliation report is saved here. If you're ready to reconcile now, click the Reconcile tab.
                     </td>
                   </tr>
                 ) : (
-                  accountRecords.map((record) => (
+                  historyRecords.map((record) => (
                     <tr key={record.id} className="border-t border-[var(--color-divider-tertiary)] hover:bg-[var(--color-table-row-hover)]">
                       <td className="p-2 align-top text-[13px] text-[var(--color-text-primary)]">{record.statementEndingDate}</td>
                       <td className="border-l border-l-dotted border-l-[var(--color-divider-tertiary)] p-2 align-top text-[13px] text-[var(--color-text-primary)]">
@@ -306,18 +405,15 @@ export function ReconcilePage() {
                       <td className="border-l border-l-dotted border-l-[var(--color-divider-tertiary)] p-2 align-top text-right text-[13px] text-[var(--color-text-global)]">
                         {formatMoney(record.statementEndingBalance)}
                       </td>
-                      <td className="border-l border-l-dotted border-l-[var(--color-divider-tertiary)] p-2 align-top text-[13px] text-[var(--color-text-primary)]">--</td>
-                      <td className="border-l border-l-dotted border-l-[var(--color-divider-tertiary)] p-2 align-top text-[13px] text-[var(--color-text-primary)]">--</td>
+                      <td className="border-l border-l-dotted border-l-[var(--color-divider-tertiary)] p-2 align-top text-[13px] text-[var(--color-text-primary)]">{record.enteredCount}</td>
+                      <td className="border-l border-l-dotted border-l-[var(--color-divider-tertiary)] p-2 align-top text-[13px] text-[var(--color-text-primary)]">
+                        {record.serviceChargeAmount !== null || record.interestEarnedAmount !== null ? "Yes" : "--"}
+                      </td>
                       <td className="border-l border-l-dotted border-l-[var(--color-divider-tertiary)] p-2 align-top text-[13px] text-[var(--color-text-primary)]">--</td>
                       <td className="border-l border-l-dotted border-l-[var(--color-divider-tertiary)] p-2 align-top text-right">
-                        <button
-                          type="button"
-                          disabled
-                          title="Detailed reconciliation reports aren't available yet"
-                          className="cursor-not-allowed text-sm font-medium text-[var(--color-text-disabled)]"
-                        >
+                        <Link href={`/all-apps/reconcile/report/${record.id}`} className="text-sm font-medium text-[var(--color-link-action)] hover:underline">
                           View report
-                        </button>
+                        </Link>
                       </td>
                     </tr>
                   ))
