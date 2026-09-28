@@ -59,7 +59,7 @@ export const NumberField = forwardRef<HTMLInputElement, NumberFieldProps>(functi
       {label ? (
         <label
           htmlFor={inputId}
-          className={`flex items-center gap-1 text-xs ${error ? "font-medium text-[var(--color-negative)]" : "text-[var(--color-icon-secondary)]"}`}
+          className={`flex items-center gap-1 whitespace-nowrap text-xs ${error ? "font-medium text-[var(--color-negative)]" : "text-[var(--color-icon-secondary)]"}`}
         >
           {error ? <AlertCircle className="h-3.5 w-3.5" aria-hidden="true" /> : null}
           {label}

@@ -255,7 +255,7 @@ export function ReconcilePage() {
                   <p className="mb-1 text-sm font-semibold text-[var(--color-text-global)]">Beginning balance</p>
                   <p className="flex h-9 items-center text-sm text-[var(--color-text-primary)]">{formatPlain(beginningBalance)}</p>
                 </div>
-                <div className="w-40">
+                <div className="w-56">
                   <NumberField
                     label={endingBalanceLabel}
                     currency
@@ -268,7 +268,7 @@ export function ReconcilePage() {
                     error={endingBalanceError}
                   />
                 </div>
-                <div className="w-44">
+                <div className="w-56">
                   <InputField
                     label={endingDateLabel}
                     type="date"
