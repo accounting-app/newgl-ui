@@ -86,10 +86,15 @@ export function ReconcilePage() {
     services.accountService.listAccounts().then(setAccounts).catch(() => setAccounts([]));
   }, [services]);
   const reconcilableAccounts = useMemo(() => accounts.filter((a) => isRegisterAccountCategory(a.category)), [accounts]);
+  // Flat list ordered by category, each option's type shown via rightLabel
+  // -- matches both QBO's own account picker (e.g. "Cash on hand ... Bank")
+  // and this app's existing convention for every other account picker
+  // (bank-transactions-page.tsx, account-selector.tsx, etc.), rather than
+  // introducing a one-off bold-header grouped style just for this screen.
   const groupedAccountOptions = useMemo(
     () =>
       groupAccountsByCategory(reconcilableAccounts).flatMap(({ category, accounts: categoryAccounts }) =>
-        categoryAccounts.map((account) => ({ value: account.id, label: account.name, group: ACCOUNT_CATEGORY_LABELS[category] }))
+        categoryAccounts.map((account) => ({ value: account.id, label: account.name, rightLabel: ACCOUNT_CATEGORY_LABELS[category] }))
       ),
     [reconcilableAccounts]
   );
