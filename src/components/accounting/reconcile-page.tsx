@@ -249,7 +249,12 @@ export function ReconcilePage() {
             </div>
 
             <div>
-              <p className="mb-3 text-base text-[var(--color-text-global)]">Add the following information*</p>
+              <p className="text-base text-[var(--color-text-global)]">Add the following information*</p>
+              {previousReconciliation ? (
+                <p className="mb-3 text-xs text-[var(--color-link-action)]">Last statement ending date {previousReconciliation.statementEndingDate}</p>
+              ) : (
+                <div className="mb-3" />
+              )}
               <div className="flex flex-wrap items-start gap-6">
                 <div className="w-40">
                   <p className="mb-1 text-sm font-semibold text-[var(--color-text-global)]">Beginning balance</p>
@@ -480,8 +485,8 @@ export function ReconcilePage() {
                         {formatMoney(record.statementEndingBalance)}
                       </td>
                       <td className="border-l border-l-dotted border-l-[var(--color-divider-tertiary)] p-2 align-top text-[13px] text-[var(--color-text-primary)]">{record.enteredCount}</td>
-                      <td className="border-l border-l-dotted border-l-[var(--color-divider-tertiary)] p-2 align-top text-[13px] text-[var(--color-text-primary)]">
-                        {record.serviceChargeAmount !== null || record.interestEarnedAmount !== null ? "Yes" : "--"}
+                      <td className="border-l border-l-dotted border-l-[var(--color-divider-tertiary)] p-2 align-top text-right text-[13px] text-[var(--color-text-primary)]">
+                        {record.discrepancyAdjustmentAmount !== null ? formatMoney(record.discrepancyAdjustmentAmount) : "0.00"}
                       </td>
                       <td className="border-l border-l-dotted border-l-[var(--color-divider-tertiary)] p-2 align-top text-[13px] text-[var(--color-text-primary)]">--</td>
                       <td className="border-l border-l-dotted border-l-[var(--color-divider-tertiary)] p-2 align-top text-right">

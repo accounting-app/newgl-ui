@@ -3,12 +3,14 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { InputField } from "@/components/ui/input-field";
+import { Modal } from "@/components/ui/modal";
 import { useToast } from "@/components/ui/toast/toast-context";
 import { getServiceContainer } from "@/lib/services/service-container-v2";
-import { finishReconciliation } from "@/lib/services/reconciliation-service";
+import { finishReconciliation, ReconciliationOutOfBalanceError } from "@/lib/services/reconciliation-service";
 import type { Account, RegisterEntry } from "@/modules/accounting/domain/models";
 
 function formatMoney(value: number): string {
@@ -27,9 +29,10 @@ const TAB_LABEL: Record<EntryTab, string> = {
  * The real matching workspace, reached from the setup form in
  * reconcile-page.tsx. Checking/unchecking a transaction here never calls
  * the API by itself -- it only updates local state and the live math bar.
- * The only write is "Finish now", which sends the whole checked set to
- * POST /accounts/{accountId}/reconciliations/finish in one call (Save for
- * later is out of scope for this pass -- see the plan).
+ * The only write is "Finish now": it always attempts the finish, and if
+ * the difference isn't $0.00, offers QBO's own "Add adjustment and
+ * finish" retry rather than just blocking (Save for later/Undo are
+ * deferred, see the plan).
  */
 export function ReconciliationSessionPage({ accountId }: { accountId: string }) {
   const router = useRouter();
@@ -54,6 +57,10 @@ export function ReconciliationSessionPage({ accountId }: { accountId: string }) 
   const [submitting, setSubmitting] = useState(false);
   const [tab, setTab] = useState<EntryTab>("all");
   const [pendingCleared, setPendingCleared] = useState<Set<string>>(new Set());
+  const [showDifferenceTip, setShowDifferenceTip] = useState(false);
+  const [outOfBalanceDifference, setOutOfBalanceDifference] = useState<number | null>(null);
+  const [adjustmentDate, setAdjustmentDate] = useState(statementEndingDate);
+  const [finishedReconciliationId, setFinishedReconciliationId] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -107,24 +114,46 @@ export function ReconciliationSessionPage({ accountId }: { accountId: string }) 
     });
   }
 
+  function buildFinishInput(discrepancyAdjustmentDate?: string) {
+    return {
+      statementStartDate,
+      statementEndingDate,
+      statementEndingBalance,
+      clearedTransactionIds: [...pendingCleared],
+      ...(serviceChargeAmount && serviceChargeDate && serviceChargeExpenseAccountId
+        ? { serviceCharge: { amount: Number(serviceChargeAmount), date: serviceChargeDate, expenseAccountId: serviceChargeExpenseAccountId } }
+        : {}),
+      ...(interestEarnedAmount && interestEarnedDate && interestEarnedIncomeAccountId
+        ? { interestEarned: { amount: Number(interestEarnedAmount), date: interestEarnedDate, incomeAccountId: interestEarnedIncomeAccountId } }
+        : {}),
+      ...(discrepancyAdjustmentDate ? { discrepancyAdjustmentDate } : {})
+    };
+  }
+
   async function handleFinish() {
-    if (!isBalanced || submitting) return;
+    if (submitting) return;
     setSubmitting(true);
     try {
-      await finishReconciliation(accountId, {
-        statementStartDate,
-        statementEndingDate,
-        statementEndingBalance,
-        clearedTransactionIds: [...pendingCleared],
-        ...(serviceChargeAmount && serviceChargeDate && serviceChargeExpenseAccountId
-          ? { serviceCharge: { amount: Number(serviceChargeAmount), date: serviceChargeDate, expenseAccountId: serviceChargeExpenseAccountId } }
-          : {}),
-        ...(interestEarnedAmount && interestEarnedDate && interestEarnedIncomeAccountId
-          ? { interestEarned: { amount: Number(interestEarnedAmount), date: interestEarnedDate, incomeAccountId: interestEarnedIncomeAccountId } }
-          : {})
-      });
-      toast({ variant: "success", title: "Reconciliation complete" });
-      router.push("/all-apps/reconcile");
+      const finished = await finishReconciliation(accountId, buildFinishInput());
+      setFinishedReconciliationId(finished.id);
+    } catch (error) {
+      if (error instanceof ReconciliationOutOfBalanceError) {
+        setOutOfBalanceDifference(error.difference);
+      } else {
+        toast({ variant: "error", title: error instanceof Error ? error.message : "Couldn't finish this reconciliation" });
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleAddAdjustmentAndFinish() {
+    if (submitting || !adjustmentDate) return;
+    setSubmitting(true);
+    try {
+      const finished = await finishReconciliation(accountId, buildFinishInput(adjustmentDate));
+      setOutOfBalanceDifference(null);
+      setFinishedReconciliationId(finished.id);
     } catch (error) {
       toast({ variant: "error", title: error instanceof Error ? error.message : "Couldn't finish this reconciliation" });
     } finally {
@@ -183,12 +212,31 @@ export function ReconciliationSessionPage({ accountId }: { accountId: string }) 
           </div>
         </div>
 
-        <div className="ml-auto flex items-center gap-2 border-l border-[var(--color-divider-tertiary)] pl-8">
-          {!isBalanced ? <AlertTriangle className="h-5 w-5 text-[var(--color-warning-text)]" aria-hidden="true" /> : null}
-          <div>
-            <p className={`text-xl font-semibold ${isBalanced ? "text-[var(--color-positive)]" : "text-[var(--color-text-global)]"}`}>{formatMoney(difference)}</p>
-            <p className="text-xs uppercase tracking-wide text-[var(--color-text-primary)]">Difference</p>
-          </div>
+        <div className="relative ml-auto border-l border-[var(--color-divider-tertiary)] pl-8">
+          <button
+            type="button"
+            onClick={() => setShowDifferenceTip((current) => !current)}
+            className="flex items-center gap-2 rounded text-left"
+            aria-expanded={showDifferenceTip}
+          >
+            {!isBalanced ? <AlertTriangle className="h-5 w-5 text-[var(--color-warning-text)]" aria-hidden="true" /> : null}
+            <div>
+              <p className={`text-xl font-semibold ${isBalanced ? "text-[var(--color-positive)]" : "text-[var(--color-text-global)]"}`}>{formatMoney(difference)}</p>
+              <p className="text-xs uppercase tracking-wide text-[var(--color-text-primary)] underline decoration-dotted">Difference</p>
+            </div>
+          </button>
+          {showDifferenceTip ? (
+            <div className="absolute right-0 top-full z-10 mt-2 w-72 rounded-lg bg-[var(--color-text-global)] p-4 text-sm text-[var(--color-container-background-primary)] shadow-lg">
+              <button type="button" onClick={() => setShowDifferenceTip(false)} className="absolute right-2 top-2 text-[var(--color-container-background-primary)]/70 hover:text-[var(--color-container-background-primary)]" aria-label="Close">
+                <X className="h-4 w-4" aria-hidden="true" />
+              </button>
+              {isBalanced ? (
+                <p>Your selected transactions match your statement. You&apos;re ready to finish.</p>
+              ) : (
+                <p>Your selected transactions don&apos;t match your statement yet. When they match, you&apos;ll have a difference of $0.00.</p>
+              )}
+            </div>
+          ) : null}
         </div>
       </div>
 
@@ -207,7 +255,7 @@ export function ReconciliationSessionPage({ accountId }: { accountId: string }) 
             </button>
           ))}
         </div>
-        <Button onClick={handleFinish} disabled={!isBalanced || submitting}>
+        <Button onClick={handleFinish} disabled={submitting}>
           {submitting ? "Finishing…" : "Finish now"}
         </Button>
       </div>
@@ -258,6 +306,42 @@ export function ReconciliationSessionPage({ accountId }: { accountId: string }) 
           </tbody>
         </table>
       </div>
+
+      <Modal open={outOfBalanceDifference !== null} onClose={() => setOutOfBalanceDifference(null)} title="Hold on! Your difference isn't $0.00 yet." size="sm">
+        <p className="mb-4 text-sm text-[var(--color-text-primary)]">
+          You aren&apos;t ready to reconcile yet because your selected transactions don&apos;t match your statement. When they match, you&apos;ll have a difference of $0.00.
+        </p>
+        <p className="mb-4 text-sm text-[var(--color-text-primary)]">
+          If you&apos;d still like to proceed, confirm the adjustment date below and click <span className="font-medium text-[var(--color-text-global)]">Add adjustment and finish</span>. This
+          posts a {formatMoney(outOfBalanceDifference ?? 0)} entry to Reconciliation Discrepancies to close the gap.
+        </p>
+        <div className="mb-6 w-48">
+          <InputField label="Adjustment date*" type="date" value={adjustmentDate} onChange={(e) => setAdjustmentDate(e.target.value)} />
+        </div>
+        <div className="flex justify-between">
+          <Button onClick={handleAddAdjustmentAndFinish} disabled={submitting || !adjustmentDate}>
+            {submitting ? "Finishing…" : "Add adjustment and finish"}
+          </Button>
+          <Button variant="secondary" onClick={() => setOutOfBalanceDifference(null)}>
+            Go back
+          </Button>
+        </div>
+      </Modal>
+
+      <Modal open={finishedReconciliationId !== null} onClose={() => router.push("/all-apps/reconcile")} title="You reconciled this account" size="sm">
+        <p className="mb-6 text-sm text-[var(--color-text-primary)]">
+          To see a report of this reconciliation, click{" "}
+          {finishedReconciliationId ? (
+            <Link href={`/all-apps/reconcile/report/${finishedReconciliationId}`} className="text-[var(--color-link-action)] hover:underline">
+              View reconciliation report
+            </Link>
+          ) : null}
+          . Otherwise, you&apos;re done!
+        </p>
+        <div className="flex justify-end">
+          <Button onClick={() => router.push("/all-apps/reconcile")}>Done</Button>
+        </div>
+      </Modal>
     </>
   );
 }

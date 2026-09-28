@@ -11,7 +11,9 @@ export type Reconciliation = {
   clearedBalance: number;
   serviceChargeAmount: number | null;
   interestEarnedAmount: number | null;
+  discrepancyAdjustmentAmount: number | null;
   enteredCount: number;
+  reconciledBy: string | null;
   completedAt: string;
 };
 
@@ -25,7 +27,15 @@ export type ReconciliationEntry = {
   deposit: number | null;
 };
 
-export type ReconciliationDetail = Reconciliation & { entries: ReconciliationEntry[] };
+export type ReconciliationDetail = Reconciliation & {
+  entries: ReconciliationEntry[];
+  paymentsCount: number;
+  paymentsTotal: number;
+  depositsCount: number;
+  depositsTotal: number;
+  unclearedTotal: number;
+  registerBalance: number;
+};
 
 export type FinishReconciliationInput = {
   statementStartDate: string;
@@ -34,14 +44,40 @@ export type FinishReconciliationInput = {
   serviceCharge?: { amount: number; date: string; expenseAccountId: string };
   interestEarned?: { amount: number; date: string; incomeAccountId: string };
   clearedTransactionIds: string[];
+  // Set only on the confirmed retry after ReconciliationOutOfBalanceError --
+  // matches QBO's "Hold on! Your difference isn't $0.00 yet" -> "Add
+  // adjustment and finish".
+  discrepancyAdjustmentDate?: string;
 };
 
+/**
+ * Thrown by finishReconciliation on a 400 "out of balance" response --
+ * carries the numeric difference so the caller can show QBO's own "Hold
+ * on! Your difference isn't $0.00 yet" confirmation instead of just an
+ * error toast.
+ */
+export class ReconciliationOutOfBalanceError extends Error {
+  difference: number;
+  constructor(message: string, difference: number) {
+    super(message);
+    this.name = "ReconciliationOutOfBalanceError";
+    this.difference = difference;
+  }
+}
+
 /** The Reconcile matching screen's "Finish now" -- the only write in this domain (Save-for-later/Undo are deferred, see the plan). */
-export function finishReconciliation(accountId: string, input: FinishReconciliationInput): Promise<Reconciliation> {
-  return request<Reconciliation>(BASE_API_URL, `/accounts/${accountId}/reconciliations/finish`, {
-    method: "POST",
-    body: JSON.stringify(input)
-  });
+export async function finishReconciliation(accountId: string, input: FinishReconciliationInput): Promise<Reconciliation> {
+  try {
+    return await request<Reconciliation>(BASE_API_URL, `/accounts/${accountId}/reconciliations/finish`, {
+      method: "POST",
+      body: JSON.stringify(input)
+    });
+  } catch (error) {
+    if (error instanceof Error && "difference" in error && typeof (error as { difference?: unknown }).difference === "number") {
+      throw new ReconciliationOutOfBalanceError(error.message, (error as { difference: number }).difference);
+    }
+    throw error;
+  }
 }
 
 /** History-by-account tab. */

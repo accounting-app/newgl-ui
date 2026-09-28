@@ -127,14 +127,23 @@ export async function request<T>(baseUrl: string, path: string, init?: RequestIn
 
   if (!response.ok) {
     let message = `Request failed (${response.status})`;
+    let extra: Record<string, unknown> | undefined;
     try {
-      const payload = (await response.json()) as ApiError;
+      const payload = (await response.json()) as ApiError & Record<string, unknown>;
       if (typeof payload.error === "string") message = payload.error;
       else if (payload.error?.message) message = payload.error.message;
+      // Some routes put extra structured detail alongside `error` (e.g. a
+      // numeric `difference` on the reconciliations finish route's 400) --
+      // copy it onto the thrown Error so a caller that knows to expect it
+      // can read it back, without every other caller needing to care.
+      const { error: _error, ...rest } = payload;
+      if (Object.keys(rest).length > 0) extra = rest;
     } catch {
       // ignore parse errors
     }
-    throw new Error(message);
+    const requestError = new Error(message);
+    if (extra) Object.assign(requestError, extra);
+    throw requestError;
   }
 
   if (response.status === 204) {
