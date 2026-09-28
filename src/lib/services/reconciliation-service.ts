@@ -19,6 +19,7 @@ export type Reconciliation = {
 
 export type ReconciliationEntry = {
   transactionId: string;
+  transactionType: string | null;
   date: string | null;
   refNumber: string | null;
   payee: string | null;
@@ -35,6 +36,7 @@ export type ReconciliationDetail = Reconciliation & {
   depositsTotal: number;
   unclearedTotal: number;
   registerBalance: number;
+  unclearedEntries: ReconciliationEntry[];
 };
 
 export type FinishReconciliationInput = {

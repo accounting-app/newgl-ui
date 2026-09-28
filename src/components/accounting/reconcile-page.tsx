@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { HelpCircle, Printer, Share } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { IconButton } from "@/components/ui/icon-button";
@@ -80,6 +80,7 @@ function ViewSwitcher({ view, onChange }: { view: ReconcileView; onChange: (view
 export function ReconcilePage() {
   const { activeCompany } = useCompany();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const services = useMemo(() => getServiceContainer(), []);
   const [accounts, setAccounts] = useState<Account[]>([]);
   useEffect(() => {
@@ -106,7 +107,12 @@ export function ReconcilePage() {
     supabase.auth.getUser().then(({ data }) => setUserName(data.user?.email ?? null));
   }, []);
 
-  const [view, setView] = useState<ReconcileView>("reconcile");
+  // Lets other pages deep-link into a specific tab (e.g. the printable
+  // report's "Summary"/"Reconcile" nav buttons) via /all-apps/reconcile?view=...
+  const initialView = searchParams.get("view");
+  const [view, setView] = useState<ReconcileView>(
+    initialView === "summary" || initialView === "history" ? initialView : "reconcile"
+  );
 
   const [accountId, setAccountId] = useState("");
   useEffect(() => {
@@ -251,7 +257,9 @@ export function ReconcilePage() {
             <div>
               <p className="text-base text-[var(--color-text-global)]">Add the following information*</p>
               {previousReconciliation ? (
-                <p className="mb-3 text-xs text-[var(--color-link-action)]">Last statement ending date {previousReconciliation.statementEndingDate}</p>
+                <Link href={`/all-apps/reconcile/report/${previousReconciliation.id}`} className="mb-3 inline-block text-xs text-[var(--color-link-action)] hover:underline">
+                  Last statement ending date {previousReconciliation.statementEndingDate}
+                </Link>
               ) : (
                 <div className="mb-3" />
               )}
