@@ -211,7 +211,7 @@ export function ReconcilePage() {
         reconcilableAccounts.length === 0 ? (
           <p className="text-sm text-[var(--color-text-disabled)]">No reconcilable accounts yet.</p>
         ) : (
-          <form onSubmit={handleSubmit} className="flex flex-col gap-6">
+          <form onSubmit={handleSubmit} className="flex flex-col gap-8">
             <div>
               <p className="mb-3 text-base text-[var(--color-text-global)]">Which account do you want to reconcile?</p>
               <div className="w-64">
@@ -245,7 +245,7 @@ export function ReconcilePage() {
             {adjustmentKind === "serviceChargeAndInterest" ? (
               <div>
                 <p className="mb-3 text-base text-[var(--color-text-global)]">Enter the service charge or interest earned, if necessary</p>
-                <div className="flex flex-wrap gap-6">
+                <div className="flex flex-col gap-6">
                   <div className="flex flex-wrap items-end gap-6">
                     <div className="w-44">
                       <InputField label="Date" type="date" value={serviceChargeDate} onChange={(e) => setServiceChargeDate(e.target.value)} />
