@@ -250,7 +250,7 @@ export function ReconcilePage() {
 
             <div>
               <p className="mb-3 text-base text-[var(--color-text-global)]">Add the following information*</p>
-              <div className="flex flex-wrap items-end gap-6">
+              <div className="flex flex-wrap items-start gap-6">
                 <div className="w-40">
                   <p className="mb-1 text-sm font-semibold text-[var(--color-text-global)]">Beginning balance</p>
                   <p className="flex h-9 items-center text-sm text-[var(--color-text-primary)]">{formatPlain(beginningBalance)}</p>
@@ -287,7 +287,7 @@ export function ReconcilePage() {
               <div>
                 <p className="mb-3 text-base text-[var(--color-text-global)]">Enter the service charge or interest earned, if necessary</p>
                 <div className="flex flex-col gap-6">
-                  <div className="flex flex-wrap items-end gap-6">
+                  <div className="flex flex-wrap items-start gap-6">
                     <div className="w-44">
                       <InputField label="Date" type="date" value={serviceChargeDate} onChange={(e) => setServiceChargeDate(e.target.value)} />
                     </div>
@@ -305,7 +305,7 @@ export function ReconcilePage() {
                       />
                     </div>
                   </div>
-                  <div className="flex flex-wrap items-end gap-6">
+                  <div className="flex flex-wrap items-start gap-6">
                     <div className="w-44">
                       <InputField label="Date" type="date" value={interestEarnedDate} onChange={(e) => setInterestEarnedDate(e.target.value)} />
                     </div>
@@ -330,7 +330,7 @@ export function ReconcilePage() {
             {adjustmentKind === "financeCharge" ? (
               <div>
                 <p className="mb-3 text-base text-[var(--color-text-global)]">Enter the finance charge, if necessary</p>
-                <div className="flex flex-wrap items-end gap-6">
+                <div className="flex flex-wrap items-start gap-6">
                   <div className="w-44">
                     <InputField label="Date" type="date" value={serviceChargeDate} onChange={(e) => setServiceChargeDate(e.target.value)} />
                   </div>
