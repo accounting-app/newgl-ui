@@ -126,9 +126,31 @@ export function ReconcilePage() {
   const [statementEndingBalance, setStatementEndingBalance] = useState("");
   const [statementEndingDate, setStatementEndingDate] = useState("");
 
+  // Matches QBO: while a required field is focused, show a short
+  // description of what it's for; once it loses focus, if it's still
+  // empty, that description is replaced by a real validation error
+  // (border + icon), not shown at all otherwise.
+  const [focusedField, setFocusedField] = useState<"endingBalance" | "endingDate" | null>(null);
+  const [touchedFields, setTouchedFields] = useState<Set<"endingBalance" | "endingDate">>(new Set());
+  function handleFieldBlur(field: "endingBalance" | "endingDate") {
+    setFocusedField(null);
+    setTouchedFields((current) => new Set(current).add(field));
+  }
+
   const useStatementLabel = selectedAccount ? isBankOrCreditCardCategory(selectedAccount.category) : true;
   const endingBalanceLabel = useStatementLabel ? "Statement ending balance" : "Ending balance";
   const endingDateLabel = useStatementLabel ? "Statement ending date" : "Ending date";
+
+  const endingBalanceHint = focusedField === "endingBalance" ? "This amount is the ending balance from your bank statement." : undefined;
+  const endingBalanceError =
+    focusedField !== "endingBalance" && touchedFields.has("endingBalance") && statementEndingBalance.trim() === ""
+      ? `${endingBalanceLabel} is required. Enter an amount.`
+      : undefined;
+  const endingDateHint = focusedField === "endingDate" ? "This date is the ending date from your bank statement." : undefined;
+  const endingDateError =
+    focusedField !== "endingDate" && touchedFields.has("endingDate") && !statementEndingDate
+      ? `${endingDateLabel} is required. Enter a date in the format mm/dd/yyyy.`
+      : undefined;
   const adjustmentKind = selectedAccount ? getReconcileAdjustmentKind(selectedAccount.category) : "none";
   const expenseAccountOptions = useMemo(
     () => accounts.filter((a) => a.category === "EXPENSE" || a.category === "OTHER_EXPENSE").map((a) => ({ value: a.id, label: a.name })),
@@ -234,10 +256,29 @@ export function ReconcilePage() {
                   <p className="flex h-9 items-center text-sm text-[var(--color-text-primary)]">{formatPlain(beginningBalance)}</p>
                 </div>
                 <div className="w-40">
-                  <NumberField label={endingBalanceLabel} currency placeholder="0.00" value={statementEndingBalance} onChange={(e) => setStatementEndingBalance(e.target.value)} />
+                  <NumberField
+                    label={endingBalanceLabel}
+                    currency
+                    placeholder="0.00"
+                    value={statementEndingBalance}
+                    onChange={(e) => setStatementEndingBalance(e.target.value)}
+                    onFocus={() => setFocusedField("endingBalance")}
+                    onBlur={() => handleFieldBlur("endingBalance")}
+                    hint={endingBalanceHint}
+                    error={endingBalanceError}
+                  />
                 </div>
                 <div className="w-44">
-                  <InputField label={endingDateLabel} type="date" value={statementEndingDate} onChange={(e) => setStatementEndingDate(e.target.value)} />
+                  <InputField
+                    label={endingDateLabel}
+                    type="date"
+                    value={statementEndingDate}
+                    onChange={(e) => setStatementEndingDate(e.target.value)}
+                    onFocus={() => setFocusedField("endingDate")}
+                    onBlur={() => handleFieldBlur("endingDate")}
+                    hint={endingDateHint}
+                    error={endingDateError}
+                  />
                 </div>
               </div>
             </div>

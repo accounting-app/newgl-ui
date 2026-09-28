@@ -1,5 +1,6 @@
 import { forwardRef, useId } from "react";
 import type { InputHTMLAttributes } from "react";
+import { AlertCircle, AlertTriangle } from "lucide-react";
 import { INPUT_BASE_CLASSES, INPUT_SIZE_CLASSES } from "@/components/ui/input-field";
 import type { InputFieldSize } from "@/components/ui/input-field";
 
@@ -42,7 +43,9 @@ export const NumberField = forwardRef<HTMLInputElement, NumberFieldProps>(functi
         aria-invalid={error ? true : undefined}
         className={`${INPUT_BASE_CLASSES} ${INPUT_SIZE_CLASSES[size]} ${
           align === "right" ? "text-right" : "text-left"
-        } ${currency ? "pl-6" : ""} ${className}`.trim()}
+        } ${currency ? "pl-6" : ""} ${
+          error ? "border-[var(--color-negative)] bg-[var(--color-negative-subtle-hover)] focus-visible:border-[var(--color-negative)] focus-visible:shadow-[0_0_0_1px_var(--color-negative)]" : ""
+        } ${className}`.trim()}
       />
     </div>
   );
@@ -54,13 +57,20 @@ export const NumberField = forwardRef<HTMLInputElement, NumberFieldProps>(functi
   return (
     <div className="flex flex-col gap-1">
       {label ? (
-        <label htmlFor={inputId} className="text-xs text-[var(--color-icon-secondary)]">
+        <label
+          htmlFor={inputId}
+          className={`flex items-center gap-1 text-xs ${error ? "font-medium text-[var(--color-negative)]" : "text-[var(--color-icon-secondary)]"}`}
+        >
+          {error ? <AlertCircle className="h-3.5 w-3.5" aria-hidden="true" /> : null}
           {label}
         </label>
       ) : null}
       {input}
       {error ? (
-        <p className="text-xs text-[var(--color-negative)]">{error}</p>
+        <p className="flex items-start gap-1 text-xs text-[var(--color-negative)]">
+          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+          <span>{error}</span>
+        </p>
       ) : hint ? (
         <p className="text-xs text-[var(--color-icon-secondary)]">{hint}</p>
       ) : null}
