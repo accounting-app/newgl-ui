@@ -292,6 +292,25 @@ export function isBankOrCreditCardCategory(category: Account["category"]): boole
   return BANK_OR_CREDIT_CARD_CATEGORIES.has(category);
 }
 
+const CREDIT_NORMAL_CATEGORIES = new Set<Account["category"]>([
+  "CREDIT_CARD",
+  "OTHER_CURRENT_LIABILITY",
+  "LONG_TERM_LIABILITY",
+  "EQUITY",
+  "ACCOUNTS_PAYABLE"
+]);
+
+/**
+ * Credit-normal accounts (cards, liabilities, equity) carry a balance on
+ * the credit side: a register entry's "payment" column (credit) RAISES the
+ * balance and its "deposit" column (debit) lowers it -- the reverse of a
+ * bank account. Reconcile has to do its math in these natural terms, the
+ * same ones the statement uses.
+ */
+export function isCreditNormalCategory(category: Account["category"]): boolean {
+  return CREDIT_NORMAL_CATEGORIES.has(category);
+}
+
 export type ReconcileAdjustmentKind = "none" | "serviceChargeAndInterest" | "financeCharge";
 
 /**

@@ -12,7 +12,13 @@ import { Select } from "@/components/ui/select";
 import { createClient } from "@/lib/supabase/client";
 import { useCompany } from "@/lib/company/company-provider";
 import { getServiceContainer } from "@/lib/services/service-container-v2";
-import { listReconciliations, listReconciliationsForAccount, type Reconciliation } from "@/lib/services/reconciliation-service";
+import {
+  getReconciliationSetup,
+  listReconciliations,
+  listReconciliationsForAccount,
+  type Reconciliation,
+  type ReconciliationSetup
+} from "@/lib/services/reconciliation-service";
 import { ACCOUNT_CATEGORY_LABELS } from "@/constants/ui";
 import {
   getReconcileAdjustmentKind,
@@ -120,14 +126,18 @@ export function ReconcilePage() {
   }, [reconcilableAccounts, accountId]);
   const selectedAccount = accounts.find((a) => a.id === accountId);
 
-  const [previousReconciliation, setPreviousReconciliation] = useState<Reconciliation | null>(null);
+  // The beginning balance is what the books say is already reconciled
+  // (opening balance + every reconciled transaction), not the last
+  // statement's typed-in balance -- the server derives it from the ledger.
+  const [setup, setSetup] = useState<ReconciliationSetup | null>(null);
   useEffect(() => {
     if (!accountId) return;
-    listReconciliationsForAccount(accountId)
-      .then((list) => setPreviousReconciliation(list[0] ?? null))
-      .catch(() => setPreviousReconciliation(null));
+    setSetup(null);
+    getReconciliationSetup(accountId)
+      .then(setSetup)
+      .catch(() => setSetup(null));
   }, [accountId]);
-  const beginningBalance = previousReconciliation?.statementEndingBalance ?? 0;
+  const beginningBalance = setup?.beginningBalance ?? 0;
 
   const [statementEndingBalance, setStatementEndingBalance] = useState("");
   const [statementEndingDate, setStatementEndingDate] = useState("");
@@ -200,7 +210,7 @@ export function ReconcilePage() {
     if (!accountId || !statementEndingDate || statementEndingBalance.trim() === "") return;
 
     const params = new URLSearchParams({
-      statementStartDate: previousReconciliation?.statementEndingDate ?? (selectedAccount ? selectedAccount.createdAt.slice(0, 10) : statementEndingDate),
+      statementStartDate: setup?.lastStatementEndingDate ?? (selectedAccount ? selectedAccount.createdAt.slice(0, 10) : statementEndingDate),
       statementEndingDate,
       statementEndingBalance,
       statementBeginningBalance: String(beginningBalance)
@@ -256,13 +266,20 @@ export function ReconcilePage() {
 
             <div>
               <p className="text-base text-[var(--color-text-global)]">Add the following information*</p>
-              {previousReconciliation ? (
-                <Link href={`/all-apps/reconcile/report/${previousReconciliation.id}`} className="mb-3 inline-block text-xs text-[var(--color-link-action)] hover:underline">
-                  Last statement ending date {previousReconciliation.statementEndingDate}
+              {setup?.lastReconciliationId && setup.lastStatementEndingDate ? (
+                <Link href={`/all-apps/reconcile/report/${setup.lastReconciliationId}`} className="mb-3 inline-block text-xs text-[var(--color-link-action)] hover:underline">
+                  Last statement ending date {setup.lastStatementEndingDate}
                 </Link>
               ) : (
                 <div className="mb-3" />
               )}
+              {setup && !setup.beginningBalanceMatchesLastStatement ? (
+                <p role="alert" className="mb-3 max-w-xl rounded border border-[var(--color-warning-border)] bg-[var(--color-warning-bg)] px-3 py-2 text-xs text-[var(--color-warning-text)]">
+                  Your beginning balance ({formatPlain(setup.beginningBalance)}) doesn&apos;t match the ending balance of your last reconciled statement (
+                  {formatPlain(setup.lastStatementEndingBalance ?? 0)}). A transaction that was already reconciled has since been changed, voided, or un-reconciled.
+                  Review the last reconciliation report before continuing.
+                </p>
+              ) : null}
               <div className="flex flex-wrap items-start gap-6">
                 <div className="w-40">
                   <p className="mb-1 text-sm font-semibold text-[var(--color-text-global)]">Beginning balance</p>

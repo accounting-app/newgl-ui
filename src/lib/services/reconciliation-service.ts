@@ -37,6 +37,21 @@ export type ReconciliationDetail = Reconciliation & {
   unclearedTotal: number;
   registerBalance: number;
   unclearedEntries: ReconciliationEntry[];
+  normalBalance: "DEBIT" | "CREDIT";
+  // Computed from the ledger on its own, so isBalanced is a real proof:
+  // statement balance +/- uncleared items must equal the books exactly.
+  bookBalance: number;
+  adjustedBankBalance: number;
+  isBalanced: boolean;
+};
+
+export type ReconciliationSetup = {
+  normalBalance: "DEBIT" | "CREDIT";
+  beginningBalance: number;
+  lastStatementEndingDate: string | null;
+  lastStatementEndingBalance: number | null;
+  lastReconciliationId: string | null;
+  beginningBalanceMatchesLastStatement: boolean;
 };
 
 export type FinishReconciliationInput = {
@@ -80,6 +95,11 @@ export async function finishReconciliation(accountId: string, input: FinishRecon
     }
     throw error;
   }
+}
+
+/** What the setup screen needs: the ledger-derived beginning balance and the last statement. */
+export function getReconciliationSetup(accountId: string): Promise<ReconciliationSetup> {
+  return request<ReconciliationSetup>(BASE_API_URL, `/accounts/${accountId}/reconciliation-setup`);
 }
 
 /** History-by-account tab. */

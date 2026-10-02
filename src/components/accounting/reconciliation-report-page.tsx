@@ -22,7 +22,8 @@ import type { Account } from "@/modules/accounting/domain/models";
 
 function formatMoney(value: number | null): string {
   if (value === null) return "";
-  return value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  // Negating a zero total yields -0, which would print as "-0.00".
+  return (value === 0 ? 0 : value).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 function EntryGroup({ title, entries, amountOf }: { title: string; entries: ReconciliationEntry[]; amountOf: (entry: ReconciliationEntry) => number | null }) {
@@ -154,6 +155,21 @@ export function ReconciliationReportPage({ reconciliationId }: { reconciliationI
 
   const payments = detail.entries.filter((entry) => (entry.payment ?? 0) > 0);
   const deposits = detail.entries.filter((entry) => (entry.deposit ?? 0) > 0);
+
+  // Everything below is in the account's NATURAL balance terms. For a bank
+  // account the "payment" column lowers the balance; for a credit card or
+  // liability it is a charge that raises it, and "deposit" lowers it.
+  const creditNormal = detail.normalBalance === "CREDIT";
+  const naturalOf = (entry: ReconciliationEntry) => (creditNormal ? (entry.payment ?? 0) - (entry.deposit ?? 0) : (entry.deposit ?? 0) - (entry.payment ?? 0));
+  const increasesCleared = creditNormal ? detail.paymentsTotal : detail.depositsTotal;
+  const increasesClearedCount = creditNormal ? detail.paymentsCount : detail.depositsCount;
+  const decreasesCleared = creditNormal ? detail.depositsTotal : detail.paymentsTotal;
+  const decreasesClearedCount = creditNormal ? detail.depositsCount : detail.paymentsCount;
+  const increasesLabel = creditNormal ? "Charges and cash advances" : "Deposits and other credits";
+  const decreasesLabel = creditNormal ? "Payments and other credits" : "Checks and payments";
+  const unclearedIncreases = detail.unclearedEntries.reduce((sum, entry) => sum + Math.max(naturalOf(entry), 0), 0);
+  const unclearedDecreases = detail.unclearedEntries.reduce((sum, entry) => sum + Math.max(-naturalOf(entry), 0), 0);
+  const proofDifference = detail.adjustedBankBalance - detail.bookBalance;
   const unclearedDeposits = detail.unclearedEntries.filter((entry) => (entry.deposit ?? 0) > 0);
   const unclearedPayments = detail.unclearedEntries.filter((entry) => (entry.payment ?? 0) > 0);
 
@@ -219,20 +235,24 @@ export function ReconciliationReportPage({ reconciliationId }: { reconciliationI
           <div className="grid grid-cols-2 gap-y-1 text-sm">
             <p className="text-[var(--color-text-primary)]">Statement beginning balance</p>
             <p className="text-right text-[var(--color-text-global)]">{formatMoney(detail.statementBeginningBalance)}</p>
-            <p className="text-[var(--color-text-primary)]">Checks and payments cleared ({detail.paymentsCount})</p>
-            <p className="text-right text-[var(--color-text-global)]">{formatMoney(-detail.paymentsTotal)}</p>
-            <p className="text-[var(--color-text-primary)]">Deposits and other credits cleared ({detail.depositsCount})</p>
-            <p className="text-right text-[var(--color-text-global)]">{formatMoney(detail.depositsTotal)}</p>
+            <p className="text-[var(--color-text-primary)]">
+              {decreasesLabel} cleared ({decreasesClearedCount})
+            </p>
+            <p className="text-right text-[var(--color-text-global)]">{formatMoney(-decreasesCleared)}</p>
+            <p className="text-[var(--color-text-primary)]">
+              {increasesLabel} cleared ({increasesClearedCount})
+            </p>
+            <p className="text-right text-[var(--color-text-global)]">{formatMoney(increasesCleared)}</p>
             {detail.serviceChargeAmount !== null ? (
               <>
-                <p className="text-[var(--color-text-primary)]">Service charge</p>
-                <p className="text-right text-[var(--color-text-global)]">{formatMoney(-detail.serviceChargeAmount)}</p>
+                <p className="text-[var(--color-text-primary)]">{creditNormal ? "Finance charge" : "Service charge"}</p>
+                <p className="text-right text-[var(--color-text-global)]">{formatMoney(creditNormal ? detail.serviceChargeAmount : -detail.serviceChargeAmount)}</p>
               </>
             ) : null}
             {detail.interestEarnedAmount !== null ? (
               <>
                 <p className="text-[var(--color-text-primary)]">Interest earned</p>
-                <p className="text-right text-[var(--color-text-global)]">{formatMoney(detail.interestEarnedAmount)}</p>
+                <p className="text-right text-[var(--color-text-global)]">{formatMoney(creditNormal ? -detail.interestEarnedAmount : detail.interestEarnedAmount)}</p>
               </>
             ) : null}
             {detail.discrepancyAdjustmentAmount !== null ? (
@@ -244,23 +264,43 @@ export function ReconciliationReportPage({ reconciliationId }: { reconciliationI
             <p className="border-t border-[var(--color-divider-tertiary)] pt-1 font-medium text-[var(--color-text-global)]">Statement ending balance</p>
             <p className="border-t border-[var(--color-divider-tertiary)] pt-1 text-right font-medium text-[var(--color-text-global)]">{formatMoney(detail.statementEndingBalance)}</p>
           </div>
-          <div className="mt-3 grid grid-cols-2 gap-y-1 text-sm">
-            <p className="text-[var(--color-text-primary)]">Uncleared transactions as of {detail.statementEndingDate}</p>
-            <p className="text-right text-[var(--color-text-global)]">{formatMoney(detail.unclearedTotal)}</p>
-            <p className="text-[var(--color-text-primary)]">Register balance as of {detail.statementEndingDate}</p>
-            <p className="text-right text-[var(--color-text-global)]">{formatMoney(detail.registerBalance)}</p>
+          <p className="mb-2 mt-6 text-sm font-semibold text-[var(--color-text-global)]">Bank vs. book balance as of {detail.statementEndingDate}</p>
+          <div className="grid grid-cols-2 gap-y-1 text-sm">
+            <p className="text-[var(--color-text-primary)]">Balance per bank statement</p>
+            <p className="text-right text-[var(--color-text-global)]">{formatMoney(detail.statementEndingBalance)}</p>
+            <p className="text-[var(--color-text-primary)]">
+              {creditNormal ? "Add: uncleared charges and cash advances" : "Add: deposits in transit (uncleared deposits and credits)"}
+            </p>
+            <p className="text-right text-[var(--color-text-global)]">{formatMoney(unclearedIncreases)}</p>
+            <p className="text-[var(--color-text-primary)]">
+              {creditNormal ? "Less: uncleared payments and credits" : "Less: outstanding checks (uncleared checks and payments)"}
+            </p>
+            <p className="text-right text-[var(--color-text-global)]">{formatMoney(-unclearedDecreases)}</p>
+            <p className="border-t border-[var(--color-divider-tertiary)] pt-1 font-medium text-[var(--color-text-global)]">Adjusted bank balance</p>
+            <p className="border-t border-[var(--color-divider-tertiary)] pt-1 text-right font-medium text-[var(--color-text-global)]">{formatMoney(detail.adjustedBankBalance)}</p>
+            <p className="mt-2 text-[var(--color-text-primary)]">Balance per books (register)</p>
+            <p className="mt-2 text-right text-[var(--color-text-global)]">{formatMoney(detail.bookBalance)}</p>
+            <p className="border-t border-[var(--color-divider-tertiary)] pt-1 font-medium text-[var(--color-text-global)]">Difference</p>
+            <p className={`border-t border-[var(--color-divider-tertiary)] pt-1 text-right font-medium ${detail.isBalanced ? "text-[var(--color-positive)]" : "text-[var(--color-negative)]"}`}>
+              {formatMoney(proofDifference)}
+            </p>
           </div>
+          <p className={`mt-2 text-xs ${detail.isBalanced ? "text-[var(--color-positive)]" : "text-[var(--color-negative)]"}`}>
+            {detail.isBalanced
+              ? "The bank and the books agree once the uncleared items are accounted for."
+              : "The bank and the books do NOT agree. A transaction that was already reconciled has likely been changed, voided, or un-reconciled since this statement."}
+          </p>
         </div>
 
         <p className="mb-2 text-sm font-semibold text-[var(--color-text-global)]">Details</p>
-        <EntryGroup title="Checks and payments cleared" entries={payments} amountOf={(entry) => entry.payment} />
-        <EntryGroup title="Deposits and other credits cleared" entries={deposits} amountOf={(entry) => entry.deposit} />
+        <EntryGroup title={`${creditNormal ? increasesLabel : decreasesLabel} cleared`} entries={payments} amountOf={(entry) => entry.payment} />
+        <EntryGroup title={`${creditNormal ? decreasesLabel : increasesLabel} cleared`} entries={deposits} amountOf={(entry) => entry.deposit} />
 
         {!hideAdditionalInfo && detail.unclearedEntries.length > 0 ? (
           <div className="mt-6 border-t border-[var(--color-divider-tertiary)] pt-4">
             <p className="mb-2 text-sm font-semibold text-[var(--color-text-global)]">Additional Information</p>
-            <EntryGroup title={`Uncleared deposits and other credits as of ${detail.statementEndingDate}`} entries={unclearedDeposits} amountOf={(entry) => entry.deposit} />
-            <EntryGroup title={`Uncleared checks and payments as of ${detail.statementEndingDate}`} entries={unclearedPayments} amountOf={(entry) => entry.payment} />
+            <EntryGroup title={`Uncleared ${creditNormal ? decreasesLabel : increasesLabel} as of ${detail.statementEndingDate}`.replace(/^Uncleared (.)/, (_m, c: string) => `Uncleared ${c.toLowerCase()}`)} entries={unclearedDeposits} amountOf={(entry) => entry.deposit} />
+            <EntryGroup title={`Uncleared ${creditNormal ? increasesLabel : decreasesLabel} as of ${detail.statementEndingDate}`.replace(/^Uncleared (.)/, (_m, c: string) => `Uncleared ${c.toLowerCase()}`)} entries={unclearedPayments} amountOf={(entry) => entry.payment} />
           </div>
         ) : null}
       </section>

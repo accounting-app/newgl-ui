@@ -11,6 +11,7 @@ import { Modal } from "@/components/ui/modal";
 import { useToast } from "@/components/ui/toast/toast-context";
 import { getServiceContainer } from "@/lib/services/service-container-v2";
 import { finishReconciliation, ReconciliationOutOfBalanceError } from "@/lib/services/reconciliation-service";
+import { isCreditNormalCategory } from "@/modules/accounting/presentation/transaction-type-policy";
 import type { Account, RegisterEntry } from "@/modules/accounting/domain/models";
 
 function formatMoney(value: number): string {
@@ -19,11 +20,15 @@ function formatMoney(value: number): string {
 
 type EntryTab = "payments" | "deposits" | "all";
 
-const TAB_LABEL: Record<EntryTab, string> = {
-  payments: "Payments",
-  deposits: "Deposits",
-  all: "All"
-};
+// The register's "payment" column is the CREDIT side and "deposit" the
+// DEBIT side. For a bank account those read as payments/deposits, but for
+// a credit card or liability the credit side is a charge that raises the
+// balance and the debit side a payment that lowers it.
+function tabLabel(tab: EntryTab, creditNormal: boolean): string {
+  if (tab === "all") return "All";
+  if (tab === "payments") return creditNormal ? "Charges" : "Payments";
+  return creditNormal ? "Payments" : "Deposits";
+}
 
 /**
  * The real matching workspace, reached from the setup form in
@@ -68,10 +73,14 @@ export function ReconciliationSessionPage({ accountId }: { accountId: string }) 
     Promise.all([services.accountService.getAccountById(accountId), services.registerService.listRegisterEntries(accountId)])
       .then(([loadedAccount, allEntries]) => {
         if (cancelled) return;
-        const inRange = allEntries.filter((entry) => entry.status === "POSTED" && (!statementEndingDate || entry.date <= statementEndingDate));
+        // Already-reconciled (R) transactions are part of the beginning
+        // balance; listing them here would count them a second time.
+        const inRange = allEntries.filter(
+          (entry) => entry.status === "POSTED" && entry.reconcileStatus !== "R" && (!statementEndingDate || entry.date <= statementEndingDate)
+        );
         setAccount(loadedAccount);
         setEntries(inRange);
-        setPendingCleared(new Set(inRange.filter((entry) => entry.reconcileStatus === "C" || entry.reconcileStatus === "R").map((entry) => entry.transactionId)));
+        setPendingCleared(new Set(inRange.filter((entry) => entry.reconcileStatus === "C").map((entry) => entry.transactionId)));
       })
       .catch(() => {
         if (!cancelled) toast({ variant: "error", title: "Couldn't load this account's register" });
@@ -101,7 +110,14 @@ export function ReconciliationSessionPage({ accountId }: { accountId: string }) 
     return { paymentsTotal: payments, depositsTotal: deposits };
   }, [entries, pendingCleared]);
 
-  const clearedBalance = beginningBalance - paymentsTotal + depositsTotal;
+  // Natural-balance math, the same terms the statement uses: whatever
+  // raises the account's balance is added, whatever lowers it subtracted.
+  const creditNormal = account ? isCreditNormalCategory(account.category) : false;
+  const decreasesTotal = creditNormal ? depositsTotal : paymentsTotal;
+  const increasesTotal = creditNormal ? paymentsTotal : depositsTotal;
+  const decreasesLabel = "Payments";
+  const increasesLabel = creditNormal ? "Charges" : "Deposits";
+  const clearedBalance = beginningBalance - decreasesTotal + increasesTotal;
   const difference = statementEndingBalance - clearedBalance;
   const isBalanced = Math.abs(difference) < 0.005;
 
@@ -202,13 +218,13 @@ export function ReconciliationSessionPage({ accountId }: { accountId: string }) 
           </div>
           <span className="text-[var(--color-text-primary)]">-</span>
           <div>
-            <p className="text-xs uppercase tracking-wide text-[var(--color-text-primary)]">Payments</p>
-            <p className="text-sm text-[var(--color-text-global)]">{formatMoney(paymentsTotal)}</p>
+            <p className="text-xs uppercase tracking-wide text-[var(--color-text-primary)]">{decreasesLabel}</p>
+            <p className="text-sm text-[var(--color-text-global)]">{formatMoney(decreasesTotal)}</p>
           </div>
           <span className="text-[var(--color-text-primary)]">+</span>
           <div>
-            <p className="text-xs uppercase tracking-wide text-[var(--color-text-primary)]">Deposits</p>
-            <p className="text-sm text-[var(--color-text-global)]">{formatMoney(depositsTotal)}</p>
+            <p className="text-xs uppercase tracking-wide text-[var(--color-text-primary)]">{increasesLabel}</p>
+            <p className="text-sm text-[var(--color-text-global)]">{formatMoney(increasesTotal)}</p>
           </div>
         </div>
 
@@ -251,7 +267,7 @@ export function ReconciliationSessionPage({ accountId }: { accountId: string }) 
                 tab === t ? "bg-[var(--color-container-background-primary)] text-[var(--color-text-global)] shadow-sm" : "text-[var(--color-text-primary)]"
               }`}
             >
-              {TAB_LABEL[t]}
+              {tabLabel(t, creditNormal)}
             </button>
           ))}
         </div>
@@ -270,8 +286,8 @@ export function ReconciliationSessionPage({ accountId }: { accountId: string }) 
               <th className="border-l-custom px-2 pb-[5px] pt-2 text-left align-middle">Account</th>
               <th className="border-l-custom px-2 pb-[5px] pt-2 text-left align-middle">Payee</th>
               <th className="border-l-custom px-2 pb-[5px] pt-2 text-left align-middle">Memo</th>
-              <th className="border-l-custom px-2 pb-[5px] pt-2 text-right align-middle">Payment</th>
-              <th className="border-l-custom px-2 pb-[5px] pt-2 text-right align-middle">Deposit</th>
+              <th className="border-l-custom px-2 pb-[5px] pt-2 text-right align-middle">{creditNormal ? "Charge" : "Payment"}</th>
+              <th className="border-l-custom px-2 pb-[5px] pt-2 text-right align-middle">{creditNormal ? "Payment" : "Deposit"}</th>
               <th className="border-l-custom px-2 pb-[5px] pt-2 text-center align-middle">Cleared</th>
             </tr>
           </thead>
