@@ -1,22 +1,32 @@
 "use client";
 
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { HelpCircle, Printer, Share } from "lucide-react";
+import { ChevronDown, HelpCircle, Printer, Share } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { IconButton } from "@/components/ui/icon-button";
 import { InputField } from "@/components/ui/input-field";
 import { NumberField } from "@/components/ui/number-field";
+import { DropdownMenu } from "@/components/ui/dropdown-menu";
+import { Modal } from "@/components/ui/modal";
 import { Select } from "@/components/ui/select";
+import { useToast } from "@/components/ui/toast/toast-context";
 import { createClient } from "@/lib/supabase/client";
 import { useCompany } from "@/lib/company/company-provider";
 import { getServiceContainer } from "@/lib/services/service-container-v2";
 import {
+  deleteReconciliationAttachment,
+  discardReconciliationDraft,
+  downloadReconciliationAttachment,
   getReconciliationSetup,
+  listReconciliationAttachments,
   listReconciliations,
   listReconciliationsForAccount,
+  undoReconciliation,
+  uploadReconciliationAttachment,
   type Reconciliation,
+  type ReconciliationAttachment,
   type ReconciliationSetup
 } from "@/lib/services/reconciliation-service";
 import { ACCOUNT_CATEGORY_LABELS } from "@/constants/ui";
@@ -87,6 +97,9 @@ export function ReconcilePage() {
   const { activeCompany } = useCompany();
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { toast } = useToast();
+  const [undoTarget, setUndoTarget] = useState<Reconciliation | null>(null);
+  const [undoing, setUndoing] = useState(false);
   const services = useMemo(() => getServiceContainer(), []);
   const [accounts, setAccounts] = useState<Account[]>([]);
   useEffect(() => {
@@ -185,6 +198,7 @@ export function ReconcilePage() {
 
   const [historyRecords, setHistoryRecords] = useState<Reconciliation[]>([]);
   const [historyHydrated, setHistoryHydrated] = useState(false);
+  const [historyReloadKey, setHistoryReloadKey] = useState(0);
   useEffect(() => {
     if (!accountId) return;
     setHistoryHydrated(false);
@@ -192,7 +206,68 @@ export function ReconcilePage() {
       .then(setHistoryRecords)
       .catch(() => setHistoryRecords([]))
       .finally(() => setHistoryHydrated(true));
-  }, [accountId]);
+  }, [accountId, historyReloadKey]);
+
+  const [attachments, setAttachments] = useState<ReconciliationAttachment[]>([]);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [attachTargetId, setAttachTargetId] = useState<string | null>(null);
+  const [discardingDraft, setDiscardingDraft] = useState(false);
+  useEffect(() => {
+    if (!accountId) return;
+    listReconciliationAttachments(accountId)
+      .then(setAttachments)
+      .catch(() => setAttachments([]));
+  }, [accountId, historyReloadKey]);
+
+  async function handleAttachFile(file: File | undefined) {
+    const reconciliationId = attachTargetId;
+    setAttachTargetId(null);
+    if (!file || !reconciliationId) return;
+    try {
+      await uploadReconciliationAttachment(reconciliationId, file);
+      setHistoryReloadKey((key) => key + 1);
+    } catch (error) {
+      toast({ variant: "error", title: error instanceof Error ? error.message : "Couldn't attach that file" });
+    }
+  }
+
+  async function handleRemoveAttachment(attachment: ReconciliationAttachment) {
+    try {
+      await deleteReconciliationAttachment(attachment.id);
+      setHistoryReloadKey((key) => key + 1);
+    } catch (error) {
+      toast({ variant: "error", title: error instanceof Error ? error.message : "Couldn't remove that file" });
+    }
+  }
+
+  async function handleStartOver() {
+    if (!window.confirm("Start over? Your saved progress for this account will be discarded.")) return;
+    setDiscardingDraft(true);
+    try {
+      await discardReconciliationDraft(accountId);
+      setSetup((current) => (current ? { ...current, draft: null } : current));
+    } catch (error) {
+      toast({ variant: "error", title: error instanceof Error ? error.message : "Couldn't discard the saved progress" });
+    } finally {
+      setDiscardingDraft(false);
+    }
+  }
+
+  async function handleConfirmUndo() {
+    if (!undoTarget) return;
+    setUndoing(true);
+    try {
+      await undoReconciliation(undoTarget.id);
+      toast({ variant: "success", title: `Reconciliation for ${undoTarget.statementEndingDate} was undone` });
+      setUndoTarget(null);
+      setHistoryReloadKey((key) => key + 1);
+      getReconciliationSetup(accountId).then(setSetup).catch(() => undefined);
+    } catch (error) {
+      toast({ variant: "error", title: error instanceof Error ? error.message : "Couldn't undo this reconciliation" });
+    } finally {
+      setUndoing(false);
+    }
+  }
 
   const [summaryRecords, setSummaryRecords] = useState<Reconciliation[]>([]);
   const [summaryHydrated, setSummaryHydrated] = useState(false);
@@ -264,7 +339,23 @@ export function ReconcilePage() {
               </div>
             </div>
 
-            <div>
+            {setup?.draft ? (
+              <div className="flex flex-col items-start gap-4 rounded-lg border border-[var(--color-divider-tertiary)] p-4">
+                <p className="text-sm text-[var(--color-text-primary)]">
+                  You have a reconciliation in progress for the statement ending {setup.draft.statementEndingDate} ({formatMoney(setup.draft.statementEndingBalance)}).
+                </p>
+                <div className="flex gap-3">
+                  <Button type="button" onClick={() => router.push(`/all-apps/reconcile/session/${accountId}?resume=1`)}>
+                    Resume reconciling
+                  </Button>
+                  <Button type="button" variant="secondary" onClick={handleStartOver} disabled={discardingDraft}>
+                    Start over
+                  </Button>
+                </div>
+              </div>
+            ) : null}
+
+            <div className={setup?.draft ? "hidden" : undefined}>
               <p className="text-base text-[var(--color-text-global)]">Add the following information*</p>
               {setup?.lastReconciliationId && setup.lastStatementEndingDate ? (
                 <Link href={`/all-apps/reconcile/report/${setup.lastReconciliationId}`} className="mb-3 inline-block text-xs text-[var(--color-link-action)] hover:underline">
@@ -277,7 +368,11 @@ export function ReconcilePage() {
                 <p role="alert" className="mb-3 max-w-xl rounded border border-[var(--color-warning-border)] bg-[var(--color-warning-bg)] px-3 py-2 text-xs text-[var(--color-warning-text)]">
                   Your beginning balance ({formatPlain(setup.beginningBalance)}) doesn&apos;t match the ending balance of your last reconciled statement (
                   {formatPlain(setup.lastStatementEndingBalance ?? 0)}). A transaction that was already reconciled has since been changed, voided, or un-reconciled.
-                  Review the last reconciliation report before continuing.
+                  See the{" "}
+                  <Link href={`/all-apps/reconcile/discrepancies/${accountId}`} className="underline">
+                    reconciliation discrepancy report
+                  </Link>{" "}
+                  for what changed before continuing.
                 </p>
               ) : null}
               <div className="flex flex-wrap items-start gap-6">
@@ -381,7 +476,7 @@ export function ReconcilePage() {
               </div>
             ) : null}
 
-            <div>
+            <div className={setup?.draft ? "hidden" : undefined}>
               <Button type="submit" disabled={statementEndingBalance.trim() === "" || !statementEndingDate}>
                 Start reconciling
               </Button>
@@ -473,6 +568,13 @@ export function ReconcilePage() {
             </div>
           </div>
 
+          {accountId ? (
+            <p className="mb-2 text-sm">
+              <Link href={`/all-apps/reconcile/discrepancies/${accountId}`} className="text-[var(--color-link-action)] hover:underline">
+                Reconciliation discrepancy report
+              </Link>
+            </p>
+          ) : null}
           <div className="tw-override overflow-auto rounded-lg border border-[var(--color-divider-tertiary)]">
             <table className="w-full min-w-[1000px] border-collapse text-sm">
               <thead className="header-table text-left uppercase tracking-wide">
@@ -513,11 +615,49 @@ export function ReconcilePage() {
                       <td className="border-l border-l-dotted border-l-[var(--color-divider-tertiary)] p-2 align-top text-right text-[13px] text-[var(--color-text-primary)]">
                         {record.discrepancyAdjustmentAmount !== null ? formatMoney(record.discrepancyAdjustmentAmount) : "0.00"}
                       </td>
-                      <td className="border-l border-l-dotted border-l-[var(--color-divider-tertiary)] p-2 align-top text-[13px] text-[var(--color-text-primary)]">--</td>
+                      <td className="border-l border-l-dotted border-l-[var(--color-divider-tertiary)] p-2 align-top text-[13px] text-[var(--color-text-primary)]">
+                        {attachments
+                          .filter((attachment) => attachment.reconciliationId === record.id)
+                          .map((attachment) => (
+                            <div key={attachment.id} className="flex items-center gap-2">
+                              <button type="button" onClick={() => downloadReconciliationAttachment(attachment).catch(() => toast({ variant: "error", title: "Couldn't download that file" }))} className="text-[var(--color-link-action)] hover:underline">
+                                {attachment.fileName}
+                              </button>
+                              <button type="button" aria-label={`Remove ${attachment.fileName}`} onClick={() => handleRemoveAttachment(attachment)} className="text-xs text-[var(--color-text-disabled)] hover:text-[var(--color-text-global)]">
+                                ×
+                              </button>
+                            </div>
+                          ))}
+                        <button type="button" onClick={() => {
+                          setAttachTargetId(record.id);
+                          fileInputRef.current?.click();
+                        }} className="text-[var(--color-link-action)] hover:underline">
+                          Attach
+                        </button>
+                      </td>
                       <td className="border-l border-l-dotted border-l-[var(--color-divider-tertiary)] p-2 align-top text-right">
-                        <Link href={`/all-apps/reconcile/report/${record.id}`} className="text-sm font-medium text-[var(--color-link-action)] hover:underline">
-                          View report
-                        </Link>
+                        <div className="inline-flex items-center gap-1">
+                          <Link href={`/all-apps/reconcile/report/${record.id}`} className="text-sm font-medium text-[var(--color-link-action)] hover:underline">
+                            View report
+                          </Link>
+                          <DropdownMenu
+                            trigger={(triggerProps) => (
+                              <button
+                                type="button"
+                                aria-label="More report actions"
+                                {...triggerProps}
+                                className="rounded p-1 text-[var(--color-link-action)] hover:bg-[var(--color-action-passive-subtle-hover)]"
+                              >
+                                <ChevronDown className="h-4 w-4" aria-hidden="true" />
+                              </button>
+                            )}
+                            items={[
+                              { label: "Print report", onSelect: () => router.push(`/all-apps/reconcile/report/${record.id}?print=1`) },
+                              // Only the most recent session can be undone (rows are newest first).
+                              ...(record.id === historyRecords[0]?.id ? [{ label: "Undo", onSelect: () => setUndoTarget(record) }] : [])
+                            ]}
+                          />
+                        </div>
                       </td>
                     </tr>
                   ))
@@ -527,6 +667,31 @@ export function ReconcilePage() {
           </div>
         </>
       ) : null}
+      <input
+        type="file"
+        className="hidden"
+        ref={fileInputRef}
+        onChange={(event) => {
+          handleAttachFile(event.target.files?.[0]);
+          event.target.value = "";
+        }}
+      />
+
+      <Modal open={undoTarget !== null} onClose={() => setUndoTarget(null)} title="Undo this reconciliation?" size="sm">
+        <p className="mb-3 text-sm text-[var(--color-text-primary)]">
+          This removes the reconciliation for the statement ending {undoTarget?.statementEndingDate}. Its transactions go back to unreconciled, and any
+          service charge, interest or adjustment entry that was added with it is removed.
+        </p>
+        <p className="mb-6 text-sm text-[var(--color-text-primary)]">You can reconcile the same statement again afterwards.</p>
+        <div className="flex justify-end gap-2">
+          <Button variant="secondary" onClick={() => setUndoTarget(null)}>
+            Cancel
+          </Button>
+          <Button onClick={handleConfirmUndo} disabled={undoing}>
+            {undoing ? "Undoing…" : "Undo reconciliation"}
+          </Button>
+        </div>
+      </Modal>
     </>
   );
 }

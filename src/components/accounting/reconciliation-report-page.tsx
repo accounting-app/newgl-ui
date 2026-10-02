@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { HelpCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -96,6 +96,8 @@ function Breadcrumb() {
  */
 export function ReconciliationReportPage({ reconciliationId }: { reconciliationId: string }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const shouldPrint = searchParams.get("print") === "1";
   const services = useMemo(() => getServiceContainer(), []);
   const [userName, setUserName] = useState<string | null>(null);
   const [accountName, setAccountName] = useState<string | null>(null);
@@ -126,6 +128,13 @@ export function ReconciliationReportPage({ reconciliationId }: { reconciliationI
       })
       .catch(() => setError(true));
   }, [reconciliationId, services]);
+
+  // "Print report" in History by account opens this page with ?print=1.
+  useEffect(() => {
+    if (!shouldPrint || !detail || !accountName) return;
+    const timer = window.setTimeout(() => window.print(), 300);
+    return () => window.clearTimeout(timer);
+  }, [shouldPrint, detail, accountName]);
 
   const reconcilableAccounts = useMemo(() => accounts.filter((a) => isRegisterAccountCategory(a.category)), [accounts]);
   const groupedAccountOptions = useMemo(

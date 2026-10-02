@@ -1,5 +1,5 @@
 import { BASE_API_URL } from "@/configuration";
-import { request } from "@/lib/services/http-service-container";
+import { getAccessToken, request } from "@/lib/services/http-service-container";
 
 export type Reconciliation = {
   id: string;
@@ -52,6 +52,7 @@ export type ReconciliationSetup = {
   lastStatementEndingBalance: number | null;
   lastReconciliationId: string | null;
   beginningBalanceMatchesLastStatement: boolean;
+  draft: { statementEndingDate: string; statementEndingBalance: number } | null;
 };
 
 export type FinishReconciliationInput = {
@@ -115,4 +116,99 @@ export function listReconciliations(): Promise<Reconciliation[]> {
 /** The printable Reconciliation Report behind "View report". */
 export function getReconciliation(reconciliationId: string): Promise<ReconciliationDetail> {
   return request<ReconciliationDetail>(BASE_API_URL, `/reconciliations/${reconciliationId}`);
+}
+
+export type ReconciliationDiscrepancy = {
+  reconciliationId: string;
+  statementEndingDate: string;
+  transactionId: string;
+  change: "DELETED" | "UNRECONCILED" | "AMOUNT_CHANGED" | "DATE_CHANGED";
+  date: string | null;
+  refNumber: string | null;
+  payee: string | null;
+  reconciledAmount: number | null;
+  currentAmount: number | null;
+  reconciledDate: string | null;
+};
+
+/** Undo the most recent reconciliation for an account (History by account -> View report -> Undo). */
+export function undoReconciliation(reconciliationId: string): Promise<{ undone: true; accountId: string }> {
+  return request(BASE_API_URL, `/reconciliations/${reconciliationId}/undo`, { method: "POST" });
+}
+
+/** The Reconciliation Discrepancy report: reconciled transactions changed, deleted or un-reconciled afterwards. */
+export function listReconciliationDiscrepancies(accountId: string): Promise<ReconciliationDiscrepancy[]> {
+  return request<ReconciliationDiscrepancy[]>(BASE_API_URL, `/accounts/${accountId}/reconciliation-discrepancies`);
+}
+
+export type ReconciliationDraft = {
+  statementStartDate: string;
+  statementEndingDate: string;
+  statementEndingBalance: number;
+  serviceCharge: { amount: number; date: string; expenseAccountId: string } | null;
+  interestEarned: { amount: number; date: string; incomeAccountId: string } | null;
+  clearedTransactionIds: string[];
+  updatedAt: string;
+};
+
+/** "Save for later" / "Resume reconciling": one in-progress reconciliation per account. */
+export function getReconciliationDraft(accountId: string): Promise<ReconciliationDraft | null> {
+  return request<ReconciliationDraft | null>(BASE_API_URL, `/accounts/${accountId}/reconciliation-draft`);
+}
+
+export function saveReconciliationDraft(accountId: string, draft: Omit<ReconciliationDraft, "updatedAt">): Promise<ReconciliationDraft> {
+  return request<ReconciliationDraft>(BASE_API_URL, `/accounts/${accountId}/reconciliation-draft`, { method: "PUT", body: JSON.stringify(draft) });
+}
+
+export function discardReconciliationDraft(accountId: string): Promise<{ deleted: boolean }> {
+  return request(BASE_API_URL, `/accounts/${accountId}/reconciliation-draft`, { method: "DELETE" });
+}
+
+export type ReconciliationAttachment = {
+  id: string;
+  reconciliationId: string;
+  fileName: string;
+  contentType: string;
+  sizeBytes: number;
+  createdAt: string;
+};
+
+export function listReconciliationAttachments(accountId: string): Promise<ReconciliationAttachment[]> {
+  return request<ReconciliationAttachment[]>(BASE_API_URL, `/accounts/${accountId}/reconciliation-attachments`);
+}
+
+/** Attach the bank statement file to a finished reconciliation (multipart, so not through the JSON request helper). */
+export async function uploadReconciliationAttachment(reconciliationId: string, file: File): Promise<ReconciliationAttachment> {
+  const token = await getAccessToken();
+  const form = new FormData();
+  form.append("file", file);
+  const response = await fetch(`${BASE_API_URL}/reconciliations/${reconciliationId}/attachments`, {
+    method: "POST",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: form
+  });
+  if (!response.ok) {
+    const payload = (await response.json().catch(() => ({}))) as { error?: string };
+    throw new Error(payload.error ?? `Upload failed (${response.status})`);
+  }
+  return (await response.json()) as ReconciliationAttachment;
+}
+
+/** Download needs the auth header, so it can't be a plain link: fetch, then hand the browser the blob. */
+export async function downloadReconciliationAttachment(attachment: ReconciliationAttachment): Promise<void> {
+  const token = await getAccessToken();
+  const response = await fetch(`${BASE_API_URL}/reconciliation-attachments/${attachment.id}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {}
+  });
+  if (!response.ok) throw new Error(`Download failed (${response.status})`);
+  const url = URL.createObjectURL(await response.blob());
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = attachment.fileName;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+export function deleteReconciliationAttachment(attachmentId: string): Promise<{ deleted: boolean }> {
+  return request(BASE_API_URL, `/reconciliation-attachments/${attachmentId}`, { method: "DELETE" });
 }

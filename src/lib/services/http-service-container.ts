@@ -103,6 +103,7 @@ export async function getAccessToken(): Promise<string | null> {
 
 export async function request<T>(baseUrl: string, path: string, init?: RequestInit): Promise<T> {
   const accessToken = await getAccessToken();
+  const confirmedReconciled = new Headers(init?.headers).get("X-Confirm-Reconciled") === "true";
 
   const response = await fetch(`${baseUrl}${path}`, {
     ...init,
@@ -130,6 +131,14 @@ export async function request<T>(baseUrl: string, path: string, init?: RequestIn
     let extra: Record<string, unknown> | undefined;
     try {
       const payload = (await response.json()) as ApiError & Record<string, unknown>;
+      // Changing a reconciled transaction is a warning, not a lock (same as
+      // QBO): ask once, and on "OK" repeat the same request confirmed.
+      if (response.status === 409 && payload.code === "RECONCILED_TRANSACTION" && !confirmedReconciled && typeof window !== "undefined") {
+        if (window.confirm(typeof payload.error === "string" ? payload.error : "This transaction has been reconciled. Continue?")) {
+          return request<T>(baseUrl, path, { ...init, headers: { ...(init?.headers ?? {}), "X-Confirm-Reconciled": "true" } });
+        }
+        throw new Error("Change cancelled -- the transaction is reconciled.");
+      }
       if (typeof payload.error === "string") message = payload.error;
       else if (payload.error?.message) message = payload.error.message;
       // Some routes put extra structured detail alongside `error` (e.g. a
