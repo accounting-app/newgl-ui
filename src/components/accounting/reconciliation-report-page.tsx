@@ -222,7 +222,7 @@ export function ReconciliationReportPage({ reconciliationId }: { reconciliationI
         </label>
       </div>
 
-      <section className="report-print-card mx-auto w-full max-w-[840px] rounded border border-[var(--color-divider-tertiary)] bg-[var(--color-container-background-primary)] p-5 shadow-sm">
+      <section className="report-print-card w-full rounded border border-[var(--color-divider-tertiary)] bg-[var(--color-container-background-primary)] p-5 shadow-sm">
         <div className="mb-4 flex justify-end">
           <Button variant="secondary" size="sm" className="no-print" onClick={() => window.print()}>
             Print
@@ -273,6 +273,14 @@ export function ReconciliationReportPage({ reconciliationId }: { reconciliationI
             <p className="border-t border-[var(--color-divider-tertiary)] pt-1 font-medium text-[var(--color-text-global)]">Statement ending balance</p>
             <p className="border-t border-[var(--color-divider-tertiary)] pt-1 text-right font-medium text-[var(--color-text-global)]">{formatMoney(detail.statementEndingBalance)}</p>
           </div>
+          <div className="mt-6 grid grid-cols-2 gap-y-1 text-sm">
+            <p className="text-[var(--color-text-primary)]">Uncleared transactions as of {detail.statementEndingDate}</p>
+            <p className="text-right text-[var(--color-text-global)]">{formatMoney(unclearedIncreases - unclearedDecreases)}</p>
+            <p className="text-[var(--color-text-primary)]">Register balance as of {detail.statementEndingDate}</p>
+            <p className="text-right text-[var(--color-text-global)]">{formatMoney(detail.registerBalance)}</p>
+          </div>
+          {hideAdditionalInfo ? null : (
+            <>
           <p className="mb-2 mt-6 text-sm font-semibold text-[var(--color-text-global)]">Bank vs. book balance as of {detail.statementEndingDate}</p>
           <div className="grid grid-cols-2 gap-y-1 text-sm">
             <p className="text-[var(--color-text-primary)]">Balance per bank statement</p>
@@ -299,6 +307,8 @@ export function ReconciliationReportPage({ reconciliationId }: { reconciliationI
               ? "The bank and the books agree once the uncleared items are accounted for."
               : "The bank and the books do NOT agree. A transaction that was already reconciled has likely been changed, voided, or un-reconciled since this statement."}
           </p>
+            </>
+          )}
         </div>
 
         <p className="mb-2 text-sm font-semibold text-[var(--color-text-global)]">Details</p>
