@@ -48,7 +48,7 @@ function EntryGroup({ title, entries, amountOf }: { title: string; entries: Reco
           {entries.map((entry) => (
             <tr key={entry.transactionId} className="border-b border-[var(--color-divider-tertiary)]">
               <td className="px-3 py-1 text-[var(--color-text-primary)]">{entry.date}</td>
-              <td className="px-3 py-1 text-[var(--color-text-primary)]">{entry.transactionType}</td>
+              <td className="px-3 py-1 text-[var(--color-text-primary)]">{(entry.transactionType ?? "").toLowerCase().split("_").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ")}</td>
               <td className="px-3 py-1 text-[var(--color-text-primary)]">{entry.refNumber}</td>
               <td className="px-3 py-1 text-[var(--color-text-global)]">{entry.payee}</td>
               <td className="px-3 py-1 text-right text-[var(--color-text-global)]">{formatMoney(amountOf(entry))}</td>
