@@ -67,7 +67,7 @@ export type InlineEntryEditorInput = {
 
 export function nextReconcileStatus(current: ReconcileStatus): ReconcileStatus {
   if (current === "") return "C";
-  if (current === "C") return "R";
+  // "R" is only ever set by finishing a reconciliation, never by hand.
   return "";
 }
 
