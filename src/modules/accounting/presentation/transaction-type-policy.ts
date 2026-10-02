@@ -279,6 +279,90 @@ export function isRegisterAccountCategory(category: Account["category"]): boolea
   return REGISTER_ACCOUNT_CATEGORIES.has(category);
 }
 
+const BANK_OR_CREDIT_CARD_CATEGORIES = new Set<Account["category"]>(["BANK", "CREDIT_CARD"]);
+
+/**
+ * Reconcile's setup form calls the ending-balance/date fields "Statement
+ * ending balance"/"Statement ending date" for Bank and Credit Card
+ * accounts, and just "Ending balance"/"Ending date" for everything else --
+ * matches QBO's own wording exactly (confirmed against its Reconcile
+ * screen for each account category).
+ */
+export function isBankOrCreditCardCategory(category: Account["category"]): boolean {
+  return BANK_OR_CREDIT_CARD_CATEGORIES.has(category);
+}
+
+const CREDIT_NORMAL_CATEGORIES = new Set<Account["category"]>([
+  "CREDIT_CARD",
+  "OTHER_CURRENT_LIABILITY",
+  "LONG_TERM_LIABILITY",
+  "EQUITY",
+  "ACCOUNTS_PAYABLE"
+]);
+
+/**
+ * Credit-normal accounts (cards, liabilities, equity) carry a balance on
+ * the credit side: a register entry's "payment" column (credit) RAISES the
+ * balance and its "deposit" column (debit) lowers it -- the reverse of a
+ * bank account. Reconcile has to do its math in these natural terms, the
+ * same ones the statement uses.
+ */
+export function isCreditNormalCategory(category: Account["category"]): boolean {
+  return CREDIT_NORMAL_CATEGORIES.has(category);
+}
+
+export type ReconcileAdjustmentKind = "none" | "serviceChargeAndInterest" | "financeCharge";
+
+/**
+ * Which optional adjustment mini-form Reconcile's setup screen shows,
+ * per account category -- matches QBO's own behavior exactly, confirmed
+ * against screenshots of each category's real setup screen:
+ * - Bank: no adjustment form at all.
+ * - Credit Card / Other Current Liability / Long-term Liability: a single
+ *   "finance charge" field (date + amount + expense account) -- these are
+ *   liabilities, so any adjustment can only ever be a charge against them,
+ *   never earned interest.
+ * - Other Current Asset / Fixed Asset: the fuller "service charge or
+ *   interest earned" form (both a charge-side and an earn-side row) --
+ *   these are assets, so a statement adjustment could go either way.
+ * - Equity: no adjustment form at all.
+ */
+export function getReconcileAdjustmentKind(category: Account["category"]): ReconcileAdjustmentKind {
+  switch (category) {
+    case "OTHER_CURRENT_ASSET":
+    case "FIXED_ASSET":
+      return "serviceChargeAndInterest";
+    case "CREDIT_CARD":
+    case "OTHER_CURRENT_LIABILITY":
+    case "LONG_TERM_LIABILITY":
+      return "financeCharge";
+    default:
+      return "none";
+  }
+}
+
+// Matches QBO's own Reconcile account picker: grouped by category in this
+// order, not a flat list -- getAccountHierarchy() groups by parent/child,
+// not category, so this is its own small grouping helper.
+const RECONCILE_CATEGORY_ORDER: Account["category"][] = [
+  "BANK",
+  "OTHER_CURRENT_ASSET",
+  "FIXED_ASSET",
+  "CREDIT_CARD",
+  "OTHER_CURRENT_LIABILITY",
+  "LONG_TERM_LIABILITY",
+  "EQUITY"
+];
+
+export function groupAccountsByCategory<T extends { category: Account["category"] }>(
+  accounts: T[]
+): Array<{ category: Account["category"]; accounts: T[] }> {
+  return RECONCILE_CATEGORY_ORDER.map((category) => ({
+    category,
+    accounts: accounts.filter((account) => account.category === category)
+  })).filter((group) => group.accounts.length > 0);
+}
+
 export function isAccountFieldDisabledForTransactionType(
   transactionTypeId: BankRegisterTransactionTypeId
 ): boolean {

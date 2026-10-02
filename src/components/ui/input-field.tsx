@@ -1,5 +1,6 @@
 import { forwardRef, useId } from "react";
 import type { InputHTMLAttributes } from "react";
+import { AlertCircle, AlertTriangle } from "lucide-react";
 
 export type InputFieldSize = "sm" | "md" | "lg";
 
@@ -48,7 +49,9 @@ export const InputField = forwardRef<HTMLInputElement, InputFieldProps>(function
       id={inputId}
       ref={ref}
       aria-invalid={error ? true : undefined}
-      className={`${BASE_CLASSES} ${SIZE_CLASSES[size]} ${className}`.trim()}
+      className={`${BASE_CLASSES} ${SIZE_CLASSES[size]} ${
+        error ? "border-[var(--color-negative)] bg-[var(--color-negative-subtle-hover)] focus-visible:border-[var(--color-negative)] focus-visible:shadow-[0_0_0_1px_var(--color-negative)]" : ""
+      } ${className}`.trim()}
     />
   );
 
@@ -61,13 +64,20 @@ export const InputField = forwardRef<HTMLInputElement, InputFieldProps>(function
   return (
     <div className="flex flex-col gap-1">
       {label ? (
-        <label htmlFor={inputId} className="text-xs text-[var(--color-icon-secondary)]">
+        <label
+          htmlFor={inputId}
+          className={`flex items-center gap-1 whitespace-nowrap text-xs ${error ? "font-medium text-[var(--color-negative)]" : "text-[var(--color-icon-secondary)]"}`}
+        >
+          {error ? <AlertCircle className="h-3.5 w-3.5" aria-hidden="true" /> : null}
           {label}
         </label>
       ) : null}
       {input}
       {error ? (
-        <p className="text-xs text-[var(--color-negative)]">{error}</p>
+        <p className="flex items-start gap-1 text-xs text-[var(--color-negative)]">
+          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+          <span>{error}</span>
+        </p>
       ) : hint ? (
         <p className="text-xs text-[var(--color-icon-secondary)]">{hint}</p>
       ) : null}

@@ -18,12 +18,3 @@ export type PendingBankTxn = {
   status: PendingTxnStatus;
   createdAt: string;
 };
-
-export type ReconciliationRecord = {
-  id: string;
-  accountId: string;
-  statementEndingDate: string;
-  statementEndingBalance: number;
-  beginningBalance: number;
-  completedAt: string;
-};

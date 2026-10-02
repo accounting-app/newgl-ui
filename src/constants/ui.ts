@@ -3,6 +3,11 @@ import type { Account, RegisterEntry } from "@/modules/accounting/domain/models"
 
 export const DEFAULT_TOP_HEADER_USER_NAME = "John Doe";
 
+// Wording matches QBO's own Chart of Accounts "Type" column exactly --
+// QBO pluralizes these four ("Other Current Assets", "Fixed Assets",
+// "Other Current Liabilities", "Long-term Liabilities") even when
+// labeling a single account's type, e.g. "Cash on hand ... Bank" but
+// "Inventory Asset ... Other Current Assets".
 export const ACCOUNT_CATEGORY_LABELS: Record<Account["category"], string> = {
   ACCOUNTS_PAYABLE: "Accounts Payable",
   ACCOUNTS_RECEIVABLE: "Accounts Receivable",
@@ -10,11 +15,11 @@ export const ACCOUNT_CATEGORY_LABELS: Record<Account["category"], string> = {
   CREDIT_CARD: "Credit Card",
   EQUITY: "Equity",
   EXPENSE: "Expense",
-  FIXED_ASSET: "Fixed Asset",
+  FIXED_ASSET: "Fixed Assets",
   INCOME: "Income",
-  LONG_TERM_LIABILITY: "Long Term Liability",
-  OTHER_CURRENT_ASSET: "Other Current Asset",
-  OTHER_CURRENT_LIABILITY: "Other Current Liability",
+  LONG_TERM_LIABILITY: "Long-term Liabilities",
+  OTHER_CURRENT_ASSET: "Other Current Assets",
+  OTHER_CURRENT_LIABILITY: "Other Current Liabilities",
   OTHER_EXPENSE: "Other Expense",
   OTHER_INCOME: "Other Income"
 };
