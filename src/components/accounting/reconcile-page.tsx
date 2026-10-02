@@ -9,6 +9,7 @@ import { IconButton } from "@/components/ui/icon-button";
 import { InputField } from "@/components/ui/input-field";
 import { NumberField } from "@/components/ui/number-field";
 import { DropdownMenu } from "@/components/ui/dropdown-menu";
+import { requestConfirmation } from "@/components/ui/confirm-dialog";
 import { Modal } from "@/components/ui/modal";
 import { Select } from "@/components/ui/select";
 import { useToast } from "@/components/ui/toast/toast-context";
@@ -241,7 +242,12 @@ export function ReconcilePage() {
   }
 
   async function handleStartOver() {
-    if (!window.confirm("Start over? Your saved progress for this account will be discarded.")) return;
+    const confirmed = await requestConfirmation({
+      title: "Start over?",
+      message: "Your saved progress for this account will be discarded.",
+      confirmLabel: "Start over"
+    });
+    if (!confirmed) return;
     setDiscardingDraft(true);
     try {
       await discardReconciliationDraft(accountId);

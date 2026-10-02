@@ -1,4 +1,5 @@
 import { BASE_API_URL } from "@/configuration";
+import { requestConfirmation } from "@/components/ui/confirm-dialog";
 import { createClient } from "@/lib/supabase/client";
 import type {
   Account,
@@ -134,7 +135,11 @@ export async function request<T>(baseUrl: string, path: string, init?: RequestIn
       // Changing a reconciled transaction is a warning, not a lock (same as
       // QBO): ask once, and on "OK" repeat the same request confirmed.
       if (response.status === 409 && payload.code === "RECONCILED_TRANSACTION" && !confirmedReconciled && typeof window !== "undefined") {
-        if (window.confirm(typeof payload.error === "string" ? payload.error : "This transaction has been reconciled. Continue?")) {
+        if (await requestConfirmation({
+            title: "This transaction has been reconciled",
+            message: typeof payload.error === "string" ? payload.error : "Changing it can make your reconciliation reports out of balance. Continue?",
+            confirmLabel: "Change anyway"
+          })) {
           return request<T>(baseUrl, path, { ...init, headers: { ...(init?.headers ?? {}), "X-Confirm-Reconciled": "true" } });
         }
         throw new Error("Change cancelled -- the transaction is reconciled.");

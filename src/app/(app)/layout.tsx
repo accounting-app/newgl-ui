@@ -3,6 +3,7 @@ import { AppShell } from "@/components/layout/app-shell";
 import { OnboardingGate } from "@/components/onboarding/onboarding-gate";
 import { TenantProvider } from "@/lib/tenant/tenant-provider";
 import { CompanyProvider } from "@/lib/company/company-provider";
+import { ConfirmDialogHost } from "@/components/ui/confirm-dialog";
 import { ToastProvider } from "@/components/ui/toast/toast-provider";
 
 type AppGroupLayoutProps = Readonly<{
@@ -23,6 +24,7 @@ export default function AppGroupLayout({ children }: AppGroupLayoutProps) {
         <OnboardingGate>
           <CompanyProvider>
             <AppShell>{children}</AppShell>
+            <ConfirmDialogHost />
           </CompanyProvider>
         </OnboardingGate>
       </TenantProvider>
