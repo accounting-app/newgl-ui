@@ -46,7 +46,15 @@ export default function SignupPage() {
 
     try {
       const supabase = createClient();
-      const { data, error: signUpError } = await supabase.auth.signUp({ email, password });
+      const { data, error: signUpError } = await supabase.auth.signUp({
+        email,
+        password,
+        // Without this Supabase falls back to the project's Site URL, so the
+        // confirmation link lands on /login?code=... and the code is never
+        // exchanged for a session. It must also be in the project's
+        // Redirect URLs allow-list.
+        options: { emailRedirectTo: `${window.location.origin}/auth/callback` }
+      });
 
       if (signUpError) {
         setError(signUpError.message);
