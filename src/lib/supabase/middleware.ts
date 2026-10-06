@@ -6,7 +6,7 @@ import { NextResponse, type NextRequest } from "next/server";
 // session. "/dev" is the design-system reference (/dev/ui-kit) -- no user
 // data, no auth needed, and it 404s outside development regardless (see
 // src/app/dev/ui-kit/page.tsx).
-const PUBLIC_PATHS = ["/login", "/signup", "/auth/callback", "/dev"];
+const PUBLIC_PATHS = ["/login", "/signup", "/auth/callback", "/auth/confirm", "/dev"];
 
 export async function updateSession(request: NextRequest) {
   let response = NextResponse.next({ request });
