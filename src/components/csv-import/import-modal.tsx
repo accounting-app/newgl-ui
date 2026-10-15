@@ -523,7 +523,7 @@ export function ImportModal({
         transactionCount={selectedSubmittableCount}
         isSubmitting={isSubmitting}
         onCancel={() => setIsConfirmDialogOpen(false)}
-        onConfirm={handleConfirmedSubmit}
+        onConfirm={() => handleConfirmedSubmit()}
       />
     </div>
   );
