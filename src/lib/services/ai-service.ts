@@ -1,6 +1,6 @@
 import { BASE_API_URL } from "@/configuration";
 import { request } from "@/lib/services/http-service-container";
-import type { ColumnMapping } from "@/modules/accounting/domain/csv-import";
+import type { AmountColumnsMode, ColumnMapping, DateFormatOption } from "@/modules/accounting/domain/csv-import";
 import type { Tenant } from "@/lib/tenant/tenant-provider";
 
 // Keys newgl-ai returns -- matches newgl-ai's COLUMN_MAPPING_TARGET_FIELDS,
@@ -9,30 +9,57 @@ type BackendColumnMapping = Partial<
   Record<"transactionDate" | "payee" | "memo" | "amount" | "referenceNumber", number | null>
 >;
 
+type BackendLayout = {
+  hasHeaderRow: boolean | null;
+  amountColumnsMode: AmountColumnsMode | null;
+  dateFormat: DateFormatOption | null;
+  debitColumn: number | null;
+  creditColumn: number | null;
+};
+
 type ColumnMappingResponse = {
   mapping: BackendColumnMapping;
+  layout?: BackendLayout;
   usage: { actions: number; inputTokens: number; outputTokens: number };
   keySource: "platform" | "byok";
 };
 
-// AI never suggests debitColumn/creditColumn -- those only exist for the
-// two-column amount mode, which the target field list doesn't cover
-// (AI_INTEGRATION_PLAN.md Part 7, feature #1).
-export async function suggestColumnMapping(
-  csvHeader: string[],
-  sampleRows: string[][]
-): Promise<Partial<ColumnMapping>> {
+export type ColumnMappingSuggestion = {
+  mapping: Partial<ColumnMapping>;
+  // Each property is null when the AI wasn't confident -- keep the user's current choice then.
+  format: {
+    hasHeaderRow: boolean | null;
+    amountColumnsMode: AmountColumnsMode | null;
+    dateFormat: DateFormatOption | null;
+  };
+};
+
+// `rows` are the first raw rows of the file (the AI sees up to 4), header or
+// not -- it decides whether row 0 is a header, so the caller must not
+// pre-slice one off.
+export async function suggestColumnMapping(rows: string[][]): Promise<ColumnMappingSuggestion> {
+  const [first = [], ...rest] = rows.slice(0, 4);
   const result = await request<ColumnMappingResponse>(BASE_API_URL, "/ai/column-mapping", {
     method: "POST",
-    body: JSON.stringify({ csvHeader, sampleRows: sampleRows.slice(0, 3) })
+    body: JSON.stringify({ csvHeader: first, sampleRows: rest.length > 0 ? rest : [first] })
   });
 
+  const layout = result.layout;
   return {
-    dateColumn: result.mapping.transactionDate ?? null,
-    payeeColumn: result.mapping.payee ?? null,
-    descriptionColumn: result.mapping.memo ?? null,
-    amountColumn: result.mapping.amount ?? null,
-    referenceColumn: result.mapping.referenceNumber ?? null
+    mapping: {
+      dateColumn: result.mapping.transactionDate ?? null,
+      payeeColumn: result.mapping.payee ?? null,
+      descriptionColumn: result.mapping.memo ?? null,
+      amountColumn: result.mapping.amount ?? null,
+      debitColumn: layout?.debitColumn ?? null,
+      creditColumn: layout?.creditColumn ?? null,
+      referenceColumn: result.mapping.referenceNumber ?? null
+    },
+    format: {
+      hasHeaderRow: layout?.hasHeaderRow ?? null,
+      amountColumnsMode: layout?.amountColumnsMode ?? null,
+      dateFormat: layout?.dateFormat ?? null
+    }
   };
 }
 
