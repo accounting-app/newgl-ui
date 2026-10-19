@@ -16,7 +16,7 @@ import { useTenant } from "@/lib/tenant/tenant-provider";
 import { getServiceContainer } from "@/lib/services/service-container-v2";
 import { findMatchingRule } from "@/lib/accounting/bank-rules";
 import { findDuplicateTransaction, findExclusionMatch } from "@/lib/accounting/feed-dedup";
-import { buildReviewRows, getColumnLabels, tokenizeCsvText } from "@/modules/accounting/domain/parse-csv";
+import { buildReviewRows, detectDateFormat, getColumnLabels, tokenizeCsvText } from "@/modules/accounting/domain/parse-csv";
 import { learnPayeeRules, suggestCategorization, suggestColumnMapping } from "@/lib/services/ai-service";
 import {
   clearCsvImportSession,
@@ -212,16 +212,28 @@ export function ImportModal({
     setIsSuggestingMapping(true);
     setSuggestMappingError(null);
     try {
-      const csvHeader = getColumnLabels(rawRows, formatOptions.hasHeaderRow);
-      const dataRows = formatOptions.hasHeaderRow ? rawRows.slice(1) : rawRows;
-      const suggestion = await suggestColumnMapping(csvHeader, dataRows.slice(0, 3));
-      setMapping((current) => ({
-        ...current,
-        ...suggestion,
-        // The AI never suggests these -- only relevant in DEBIT_CREDIT mode,
-        // which isn't one of its target fields.
-        ...(formatOptions.amountColumnsMode === "DEBIT_CREDIT" ? { amountColumn: current.amountColumn } : {})
-      }));
+      const { mapping: suggested, format } = await suggestColumnMapping(rawRows);
+
+      const hasHeaderRow = format.hasHeaderRow ?? formatOptions.hasHeaderRow;
+      const amountColumnsMode = format.amountColumnsMode ?? formatOptions.amountColumnsMode;
+      const dataRows = hasHeaderRow ? rawRows.slice(1) : rawRows;
+      // The AI only saw 3 rows; check its date format against every row.
+      const dateColumn = suggested.dateColumn ?? null;
+      const dateFormat =
+        (dateColumn !== null
+          ? detectDateFormat(dataRows.map((row) => row[dateColumn] ?? ""), format.dateFormat ?? formatOptions.dateFormat)
+          : format.dateFormat) ?? formatOptions.dateFormat;
+
+      setFormatOptions((current) => ({ ...current, hasHeaderRow, amountColumnsMode, dateFormat }));
+      setMapping({
+        ...EMPTY_COLUMN_MAPPING,
+        ...suggested,
+        // Only one amount layout applies at a time; clear the other so the
+        // continue button doesn't validate against a stale column.
+        amountColumn: amountColumnsMode === "SINGLE" ? (suggested.amountColumn ?? null) : null,
+        debitColumn: amountColumnsMode === "DEBIT_CREDIT" ? (suggested.debitColumn ?? null) : null,
+        creditColumn: amountColumnsMode === "DEBIT_CREDIT" ? (suggested.creditColumn ?? null) : null
+      });
     } catch (err) {
       setSuggestMappingError(err instanceof Error ? err.message : "Could not suggest a mapping right now.");
     } finally {

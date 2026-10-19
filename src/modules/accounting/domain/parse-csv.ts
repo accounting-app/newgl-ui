@@ -1,3 +1,4 @@
+import { DATE_FORMAT_OPTIONS } from "@/modules/accounting/domain/csv-import";
 import type { ColumnMapping, DateFormatOption, FormatOptions, ParsedCsvRow, SignConvention } from "@/modules/accounting/domain/csv-import";
 
 export function splitCsvLine(line: string): string[] {
@@ -91,6 +92,28 @@ export function parseDateWithFormat(raw: string, format: DateFormatOption): stri
     date.getUTCFullYear() === values.y && date.getUTCMonth() === values.m - 1 && date.getUTCDate() === values.d;
   if (!isReal) return null;
   return `${String(values.y).padStart(4, "0")}-${String(values.m).padStart(2, "0")}-${String(values.d).padStart(2, "0")}`;
+}
+
+/**
+ * Picks the date format that parses the most values in a column. Used to
+ * double-check the AI's guess against every row (it only sees 3): a format
+ * under which every value is a real calendar date beats one it merely
+ * "looks like". Returns `preferred` when it ties for best, so an ambiguous
+ * column (e.g. all days <= 12) keeps the AI's choice.
+ */
+export function detectDateFormat(values: string[], preferred: DateFormatOption | null): DateFormatOption | null {
+  const nonEmpty = values.map((value) => value.trim()).filter((value) => value !== "");
+  if (nonEmpty.length === 0) return preferred;
+  let best: DateFormatOption | null = null;
+  let bestScore = 0;
+  for (const format of DATE_FORMAT_OPTIONS) {
+    const score = nonEmpty.filter((value) => parseDateWithFormat(value, format) !== null).length;
+    if (score > bestScore || (score === bestScore && score > 0 && format === preferred)) {
+      best = format;
+      bestScore = score;
+    }
+  }
+  return best;
 }
 
 export function parseAmount(raw: string): number | null {
