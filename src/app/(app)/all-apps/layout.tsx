@@ -42,14 +42,19 @@ const SUBMENU_OPEN_KEY = "newgl:all-apps-submenu-open";
 // unavailable (private window, blocked site data), so every access is
 // guarded and the page just falls back to "closed". The stored value is
 // read after mount, not during render, so server and first client render agree.
-function useSubmenuOpen(): [boolean, (open: boolean) => void] {
+function useSubmenuOpen(): [boolean, (open: boolean) => void, boolean] {
   const [open, setOpen] = useState(false);
+  // Transitions only switch on after the stored value has been applied, so a
+  // remembered "open" doesn't visibly slide in on every page load.
+  const [animate, setAnimate] = useState(false);
   useEffect(() => {
     try {
       setOpen(window.localStorage.getItem(SUBMENU_OPEN_KEY) === "1");
     } catch {
       // keep the closed default
     }
+    const timer = window.setTimeout(() => setAnimate(true), 50);
+    return () => window.clearTimeout(timer);
   }, []);
   function update(next: boolean) {
     setOpen(next);
@@ -59,31 +64,42 @@ function useSubmenuOpen(): [boolean, (open: boolean) => void] {
       // not persisted, still works for this visit
     }
   }
-  return [open, update];
+  return [open, update, animate];
 }
 
 export default function AllAppsLayout({ children }: AllAppsLayoutProps) {
-  const [submenuOpen, setSubmenuOpen] = useSubmenuOpen();
+  const [submenuOpen, setSubmenuOpen, animate] = useSubmenuOpen();
+  const motion = animate ? "transition-all duration-300 ease-out motion-reduce:transition-none" : "";
   return (
     <div className="flex h-full min-h-0">
-      {submenuOpen ? (
-        <Suspense fallback={null}>
-          <AllAppsSidebar onCollapse={() => setSubmenuOpen(false)} />
-        </Suspense>
-      ) : null}
-      <div className={`relative min-w-0 flex-1 overflow-y-auto bg-[var(--color-container-background-accent)] p-5 ${submenuOpen ? "" : "pl-12"}`}>
-        {/* Floating toggle, next to the main menu, only while the sub menu is closed. */}
-        {!submenuOpen ? (
-          <button
-            type="button"
-            onClick={() => setSubmenuOpen(true)}
-            aria-label="Show sub menu"
-            title="Show sub menu"
-            className="absolute left-0 top-4 z-10 flex h-8 w-8 items-center justify-center rounded-r-lg border border-l-0 border-[var(--color-divider-tertiary)] bg-[var(--color-container-background-primary)] text-[var(--color-icon-secondary)] shadow-md hover:text-[var(--color-text-global)]"
-          >
-            <PanelLeftOpen className="h-4 w-4" aria-hidden="true" />
-          </button>
-        ) : null}
+      {/* The sidebar stays mounted so it can slide: the wrapper animates its
+          width (pushing the content) while the aside inside slides left. */}
+      <div
+        className={`shrink-0 overflow-hidden ${motion} ${submenuOpen ? "w-64" : "w-0"}`}
+        aria-hidden={!submenuOpen}
+        inert={!submenuOpen}
+      >
+        <div className={`h-full w-64 ${motion} ${submenuOpen ? "translate-x-0" : "-translate-x-full"}`}>
+          <Suspense fallback={null}>
+            <AllAppsSidebar onCollapse={() => setSubmenuOpen(false)} />
+          </Suspense>
+        </div>
+      </div>
+      <div className={`relative min-w-0 flex-1 overflow-y-auto bg-[var(--color-container-background-accent)] p-5 ${motion} ${submenuOpen ? "" : "pl-12"}`}>
+        {/* Floating toggle: slides out to the left when the sub menu opens
+            and back in from the left when it closes. */}
+        <button
+          type="button"
+          onClick={() => setSubmenuOpen(true)}
+          aria-label="Show sub menu"
+          title="Show sub menu"
+          tabIndex={submenuOpen ? -1 : 0}
+          className={`absolute left-0 top-4 z-10 flex h-8 w-8 items-center justify-center rounded-r-lg border border-l-0 border-[var(--color-divider-tertiary)] bg-[var(--color-container-background-primary)] text-[var(--color-icon-secondary)] shadow-md hover:text-[var(--color-text-global)] ${motion} ${
+            submenuOpen ? "pointer-events-none -translate-x-full opacity-0" : "translate-x-0 opacity-100"
+          }`}
+        >
+          <PanelLeftOpen className="h-4 w-4" aria-hidden="true" />
+        </button>
         {children}
       </div>
     </div>
