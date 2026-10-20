@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { ChevronDown, ChevronUp, Landmark, MessageSquarePlus, Pencil, Plus, Printer, RefreshCw, Search, Settings, Share, TriangleAlert } from "lucide-react";
+import { AddAccountModal } from "@/components/bank-register/add-account-modal";
 import { QuickAddMenu } from "@/components/bank-register/register-header-actions";
 import { Button } from "@/components/ui/button";
 import { IconButton } from "@/components/ui/icon-button";
@@ -14,11 +15,18 @@ import { useCompany } from "@/lib/company/company-provider";
 import { companyScopedKey, localId, useLocalCollection } from "@/lib/local-store/use-local-collection";
 import type { PendingBankTxn, PendingTxnStatus } from "@/lib/local-store/accounting-types";
 import { useVendors } from "@/lib/hooks/use-vendors";
+import { listReconciliationsForAccount } from "@/lib/services/reconciliation-service";
 import { getServiceContainer } from "@/lib/services/service-container-v2";
 import { ACCOUNT_CATEGORY_LABELS } from "@/constants/ui";
 import { DEBIT_NORMAL_CATEGORIES } from "@/modules/accounting/domain/accounting-reports";
 import { isRegisterAccountCategory } from "@/modules/accounting/presentation/transaction-type-policy";
 import type { Account, Transaction } from "@/modules/accounting/domain/models";
+
+// YYYY-MM-DD -> MM/DD/YYYY (the date format QBO shows), without a timezone round trip.
+function formatDisplayDate(isoDate: string): string {
+  const [year, month, day] = isoDate.split("-");
+  return `${month}/${day}/${year}`;
+}
 
 function formatMoney(value: number): string {
   return value.toLocaleString("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -58,8 +66,9 @@ export function BankTransactionsPage() {
   const services = useMemo(() => getServiceContainer(), []);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [postedTransactions, setPostedTransactions] = useState<Transaction[]>([]);
+  const reloadAccounts = () => services.accountService.listAccounts().then(setAccounts).catch(() => setAccounts([]));
   useEffect(() => {
-    services.accountService.listAccounts().then(setAccounts).catch(() => setAccounts([]));
+    void reloadAccounts();
     services.transactionService.listTransactions({ status: "POSTED" }).then(setPostedTransactions).catch(() => setPostedTransactions([]));
   }, [services]);
 
@@ -67,6 +76,12 @@ export function BankTransactionsPage() {
   const [selectedAccountId, setSelectedAccountId] = useState("");
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const [accountSearch, setAccountSearch] = useState("");
+  // "Hide account cards" collapses the dropdown's cards to a plain name list.
+  const [showAccountCards, setShowAccountCards] = useState(true);
+  const [editingAccount, setEditingAccount] = useState<Account | null>(null);
+  // Newest completed reconciliation's statement ending date for the selected
+  // account (RightTool's red "Last Reconciled" note); null = never reconciled.
+  const [lastReconciledDate, setLastReconciledDate] = useState<string | null>(null);
   const accountMenuRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!accountMenuOpen) return;
@@ -89,6 +104,22 @@ export function BankTransactionsPage() {
     if (!selectedAccountId && bankAccounts.length > 0) setSelectedAccountId(bankAccounts[0].id);
   }, [bankAccounts, selectedAccountId]);
   const selectedAccount = accounts.find((a) => a.id === selectedAccountId);
+  useEffect(() => {
+    if (!selectedAccountId) return;
+    let cancelled = false;
+    listReconciliationsForAccount(selectedAccountId)
+      .then((list) => {
+        if (cancelled) return;
+        const newest = list.map((r) => r.statementEndingDate).sort().at(-1);
+        setLastReconciledDate(newest ?? null);
+      })
+      .catch(() => {
+        if (!cancelled) setLastReconciledDate(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedAccountId]);
 
   const txnsKey = activeCompany ? companyScopedKey(activeCompany.name, "pending-bank-txns") : null;
   const { items: allTxns, hydrated, add, update, remove } = useLocalCollection<PendingBankTxn>(
@@ -316,7 +347,7 @@ export function BankTransactionsPage() {
       </div>
 
       {/* Account header row */}
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+      <div className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-2">
         <div className="relative" ref={accountMenuRef}>
           <button
             type="button"
@@ -334,8 +365,8 @@ export function BankTransactionsPage() {
             )}
           </button>
           {accountMenuOpen ? (
-            <div className="absolute left-0 top-full z-20 mt-2 w-[560px] max-w-[90vw] rounded-lg border border-[var(--color-divider-tertiary)] bg-[var(--color-container-background-primary)] p-3 shadow-lg">
-              <div className="relative mb-2">
+            <div className="absolute left-0 top-full z-20 mt-2 w-[460px] max-w-[90vw] rounded-md border border-[var(--color-divider-tertiary)] bg-[var(--color-container-background-primary)] p-3 shadow-lg">
+              <div className="relative">
                 <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--color-icon-secondary)]" aria-hidden="true" />
                 <input
                   autoFocus
@@ -343,51 +374,89 @@ export function BankTransactionsPage() {
                   value={accountSearch}
                   onChange={(e) => setAccountSearch(e.target.value)}
                   placeholder="Search by account name"
-                  className="h-10 w-full rounded-lg border-2 border-[var(--override-focus)] bg-[var(--color-input-background)] pl-9 pr-3 text-sm text-[var(--color-input-text)] outline-none placeholder:text-[var(--color-text-disabled)]"
+                  className="h-10 w-full rounded-md border-2 border-[var(--override-focus)] bg-[var(--color-input-background)] pl-9 pr-3 text-sm text-[var(--color-input-text)] outline-none placeholder:text-[var(--color-text-disabled)]"
                 />
               </div>
-              <div className="mt-2 max-h-72 overflow-y-auto">
+              <button
+                type="button"
+                onClick={() => setShowAccountCards((v) => !v)}
+                className="mt-2 px-1 text-sm font-semibold text-[var(--color-link-action)] hover:underline"
+              >
+                {showAccountCards ? "Hide account cards" : "Show account cards"}
+              </button>
+              <div className="mt-2 max-h-80 space-y-2 overflow-y-auto">
                 {filteredBankAccounts.length === 0 ? (
                   <p className="px-1 py-3 text-sm text-[var(--color-text-disabled)]">No accounts match "{accountSearch}".</p>
                 ) : (
-                  filteredBankAccounts.map((a) => (
-                    <button
-                      key={a.id}
-                      type="button"
-                      onClick={() => {
-                        setSelectedAccountId(a.id);
-                        setAccountMenuOpen(false);
-                        setAccountSearch("");
-                      }}
-                      className="flex w-full items-start gap-3 rounded-lg px-2 py-2.5 text-left hover:bg-[var(--color-action-passive-subtle-hover)]"
-                    >
-                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--color-ui-primary)] text-white">
-                        <Landmark className="h-4 w-4" aria-hidden="true" />
-                      </span>
-                      <span className="min-w-0 flex-1">
-                        <span className="flex items-center gap-2">
-                          <span className="font-semibold text-[var(--color-text-global)]">{a.name}</span>
-                          <Link
-                            href="/all-apps/chart-of-accounts"
-                            onClick={(e) => e.stopPropagation()}
-                            aria-label={`Edit ${a.name} in Chart of Accounts`}
-                            className="text-[var(--color-icon-secondary)] hover:text-[var(--color-text-global)]"
+                  filteredBankAccounts.map((a) => {
+                    const pending = pendingCountByAccount.get(a.id) ?? 0;
+                    const select = () => {
+                      setSelectedAccountId(a.id);
+                      setAccountMenuOpen(false);
+                      setAccountSearch("");
+                    };
+                    if (!showAccountCards) {
+                      return (
+                        <button
+                          key={a.id}
+                          type="button"
+                          onClick={select}
+                          className="flex w-full items-center gap-3 rounded-md px-2 py-2 text-left text-sm font-semibold text-[var(--color-text-global)] hover:bg-[var(--color-action-passive-subtle-hover)]"
+                        >
+                          <Landmark className="h-4 w-4 text-[var(--color-ui-primary)]" aria-hidden="true" />
+                          {a.name}
+                        </button>
+                      );
+                    }
+                    return (
+                      <div
+                        key={a.id}
+                        className={`flex items-start gap-3 rounded-md border border-[var(--color-divider-tertiary)] p-3 ${
+                          a.id === selectedAccountId ? "bg-[var(--color-container-background-accent)]" : ""
+                        }`}
+                      >
+                        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--color-ui-primary)] text-white">
+                          <Landmark className="h-5 w-5" aria-hidden="true" />
+                        </span>
+                        <div className="min-w-0 flex-1 text-sm text-[var(--color-text-global)]">
+                          <button type="button" onClick={select} className="block text-left font-semibold underline">
+                            {a.name}
+                            {a.subtype ? ` - ${a.subtype}` : ""}
+                          </button>
+                          <button type="button" onClick={select} className="mt-0.5 block text-left underline">
+                            Bank balance: {formatMoney(a.currentBalance)}
+                          </button>
+                          <button type="button" onClick={select} className="mt-0.5 block text-left underline">
+                            {pending} Transaction{pending === 1 ? "" : "s"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingAccount(a);
+                              setAccountMenuOpen(false);
+                            }}
+                            className="mt-3 block text-left font-medium text-[var(--color-link-action)] underline"
                           >
-                            <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
-                          </Link>
-                        </span>
-                        <span className="block text-sm text-[var(--color-text-primary)]">Bank balance: {formatMoney(a.currentBalance)}</span>
-                        <span className="block text-sm text-[var(--color-text-primary)]">
-                          {pendingCountByAccount.get(a.id) ?? 0} pending transaction{(pendingCountByAccount.get(a.id) ?? 0) === 1 ? "" : "s"}
-                        </span>
-                      </span>
-                    </button>
-                  ))
+                            Edit account details
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })
                 )}
               </div>
             </div>
           ) : null}
         </div>
+        {/* RightTool's note: when this account was last reconciled; opens that account's reconciliation history. */}
+        {selectedAccount ? (
+          <Link
+            href={`/all-apps/reconcile?accountId=${encodeURIComponent(selectedAccount.id)}&view=history`}
+            className="text-sm text-[var(--color-negative)] hover:underline"
+          >
+            {lastReconciledDate ? `Last Reconciled: ${formatDisplayDate(lastReconciledDate)}` : "Never reconciled"} [{selectedAccount.name}]
+          </Link>
+        ) : null}
       </div>
 
       {/* Balance summary card */}
@@ -589,6 +658,20 @@ export function BankTransactionsPage() {
           </tbody>
         </table>
       </div>
+      <AddAccountModal
+        open={editingAccount !== null}
+        accounts={accounts}
+        editingAccount={editingAccount}
+        onClose={() => setEditingAccount(null)}
+        onSave={async () => {
+          throw new Error("Creating accounts isn't available from Bank transactions.");
+        }}
+        onUpdate={async (accountId, input) => {
+          await services.accountService.updateAccount(accountId, { name: input.name, subtype: input.subtype });
+          toast({ variant: "success", title: "Account updated" });
+          await reloadAccounts();
+        }}
+      />
     </>
   );
 }
