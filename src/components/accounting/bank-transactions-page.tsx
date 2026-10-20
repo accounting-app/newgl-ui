@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { ChevronDown, ChevronUp, Landmark, MessageSquarePlus, Pencil, Plus, Printer, RefreshCw, Search, Settings, Share, TriangleAlert } from "lucide-react";
+import { QuickAddMenu } from "@/components/bank-register/register-header-actions";
 import { Button } from "@/components/ui/button";
 import { IconButton } from "@/components/ui/icon-button";
 import { InputField } from "@/components/ui/input-field";
@@ -287,7 +288,32 @@ export function BankTransactionsPage() {
 
   return (
     <>
-      <h1 className="mb-6 text-2xl font-semibold text-[var(--color-text-global)]">Bank transactions</h1>
+      {/* Title left; Give feedback over the "+ Expense" quick-add and Link
+          account buttons, top right (QBO's current layout). */}
+      <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
+        <h1 className="text-2xl font-semibold text-[var(--color-text-global)]">Bank transactions</h1>
+        <div className="flex flex-col items-end gap-3">
+          <button
+            type="button"
+            disabled
+            className="flex cursor-not-allowed items-center gap-1.5 text-sm font-medium text-[var(--color-text-disabled)]"
+          >
+            <MessageSquarePlus className="h-4 w-4" aria-hidden="true" />
+            Give feedback
+          </button>
+          <div className="flex items-center gap-2">
+            <QuickAddMenu />
+            <div className="flex overflow-hidden rounded-lg">
+              <Button className="rounded-r-none" disabled title="No bank feed integration yet">
+                Link account
+              </Button>
+              <Button className="rounded-l-none border-l border-l-white/20 px-2" disabled aria-label="More options">
+                <ChevronDown className="h-4 w-4" aria-hidden="true" />
+              </Button>
+            </div>
+          </div>
+        </div>
+      </div>
 
       {/* Account header row */}
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -361,24 +387,6 @@ export function BankTransactionsPage() {
               </div>
             </div>
           ) : null}
-        </div>
-        <div className="flex items-center gap-4">
-          <button
-            type="button"
-            disabled
-            className="flex items-center gap-1.5 text-sm font-medium text-[var(--color-text-disabled)] cursor-not-allowed"
-          >
-            <MessageSquarePlus className="h-4 w-4" aria-hidden="true" />
-            Give feedback
-          </button>
-          <div className="flex overflow-hidden rounded-lg">
-            <Button className="rounded-r-none" disabled title="No bank feed integration yet">
-              Link account
-            </Button>
-            <Button className="rounded-l-none border-l border-l-white/20 px-2" disabled aria-label="More options">
-              <ChevronDown className="h-4 w-4" aria-hidden="true" />
-            </Button>
-          </div>
         </div>
       </div>
 
