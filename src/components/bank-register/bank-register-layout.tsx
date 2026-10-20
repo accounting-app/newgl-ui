@@ -8,6 +8,7 @@ import { RegisterTable } from "@/components/bank-register/register-table";
 import { getRegisterTitle } from "@/components/bank-register/register-title";
 import type { SelectFieldOption } from "@/components/bank-register/select-field";
 import { ImportModal } from "@/components/csv-import/import-modal";
+import { RegisterHeaderActions } from "@/components/bank-register/register-header-actions";
 import { JournalEntryModal } from "@/components/bank-register/journal-entry-modal";
 import { ACCOUNT_CATEGORY_LABELS, DEFAULT_TOP_HEADER_USER_NAME } from "@/constants/ui";
 import { loadCsvImportSession } from "@/modules/accounting/domain/csv-import-session";
@@ -42,6 +43,8 @@ function BankRegisterLayoutInner() {
     cycleDraftReconcileStatus,
     cycleReconcileStatus,
     deleteRegisterEntryInline,
+    batchUpdateRegisterEntries,
+    batchDeleteRegisterEntries,
     selectTransactionType,
     saveDraftTransaction,
     updateRegisterEntryInline,
@@ -142,7 +145,8 @@ function BankRegisterLayoutInner() {
               />
             </div>
 
-            <div className="space-y-3 text-right">
+            <div className="space-y-3 pb-3 text-right">
+              {selectedAccountId ? <RegisterHeaderActions accountId={selectedAccountId} /> : null}
               <div>
                 <p className="balance-label tracking-wide">Ending Balance</p>
                 <p className="balance-amount">
@@ -172,6 +176,9 @@ function BankRegisterLayoutInner() {
           onDraftReconcileCycle={cycleDraftReconcileStatus}
           onUpdateEntry={updateRegisterEntryInline}
           onDeleteEntry={deleteRegisterEntryInline}
+          onBatchUpdate={batchUpdateRegisterEntries}
+          onBatchDelete={batchDeleteRegisterEntries}
+          registerAccountId={selectedAccountId}
           onCycleReconcileStatus={cycleReconcileStatus}
           accountOptions={accountOptions}
           accounts={accounts}

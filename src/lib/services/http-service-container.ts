@@ -24,6 +24,7 @@ import type {
 import type {
   AccountService,
   BankRuleService,
+  BatchRegisterEntryUpdate,
   ExcludedFeedRowService,
   LedgerService,
   RegisterService,
@@ -297,6 +298,20 @@ export class HttpRegisterService implements RegisterService {
     return request(this.baseUrl, `/register/${entryId}`, {
       method: "PATCH",
       body: JSON.stringify(input)
+    });
+  }
+
+  batchUpdateRegisterEntries(updates: BatchRegisterEntryUpdate[]): Promise<RegisterEntry[]> {
+    return request(this.baseUrl, "/register/batch-update", {
+      method: "POST",
+      body: JSON.stringify({ updates })
+    });
+  }
+
+  batchDeleteRegisterEntries(entryIds: string[]): Promise<RegisterEntry[]> {
+    return request(this.baseUrl, "/register/batch-delete", {
+      method: "POST",
+      body: JSON.stringify({ entryIds })
     });
   }
 

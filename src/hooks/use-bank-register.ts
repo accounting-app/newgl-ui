@@ -21,6 +21,7 @@ import {
   toDomainTransactionType
 } from "@/modules/accounting/presentation/transaction-type-policy";
 import { generateNextRefNumber } from "@/modules/accounting/domain/accounting-reports";
+import type { BatchRegisterEntryUpdate } from "@/modules/accounting/application/contracts";
 import { nextAccountCode } from "@/lib/accounting/next-account-code";
 import type {
   BankRegisterTransactionTypeId,
@@ -633,6 +634,22 @@ export function useBankRegister() {
     [refreshAccounts, refreshEntries, services.registerService]
   );
 
+  const batchUpdateRegisterEntries = useCallback(
+    async (updates: BatchRegisterEntryUpdate[]) => {
+      await services.registerService.batchUpdateRegisterEntries(updates);
+      await Promise.all([refreshEntries(), refreshAccounts()]);
+    },
+    [refreshAccounts, refreshEntries, services.registerService]
+  );
+
+  const batchDeleteRegisterEntries = useCallback(
+    async (entryIds: string[]) => {
+      await services.registerService.batchDeleteRegisterEntries(entryIds);
+      await Promise.all([refreshEntries(), refreshAccounts()]);
+    },
+    [refreshAccounts, refreshEntries, services.registerService]
+  );
+
   return {
     accounts,
     entries,
@@ -656,6 +673,8 @@ export function useBankRegister() {
     cycleReconcileStatus,
     deleteRegisterEntryInline,
     updateRegisterEntryInline,
+    batchUpdateRegisterEntries,
+    batchDeleteRegisterEntries,
     selectTransactionType,
     saveDraftTransaction,
     selectTransaction,

@@ -5,9 +5,11 @@ type TablePaginationProps = {
   start: number;
   end: number;
   onPageChange: (page: number) => void;
+  /** RightTool's "Back To Top" -- shown next to the bottom pagination, where a long page has been scrolled. */
+  onBackToTop?: () => void;
 };
 
-export function TablePagination({ totalItems, currentPage, totalPages, start, end, onPageChange }: TablePaginationProps) {
+export function TablePagination({ totalItems, currentPage, totalPages, start, end, onPageChange, onBackToTop }: TablePaginationProps) {
   const hasPages = totalItems > 0 && totalPages > 0;
 
   const buttonBaseClass = "text-sm transition-colors disabled:cursor-not-allowed disabled:text-[var(--color-text-disabled)]";
@@ -22,7 +24,12 @@ export function TablePagination({ totalItems, currentPage, totalPages, start, en
   const atLastPage = !hasPages || currentPage >= totalPages;
 
   return (
-    <div className="m-0 mb-5 flex justify-end px-[5px] py-0">
+    <div className="m-0 mb-5 flex items-center justify-end gap-4 px-[5px] py-0">
+      {onBackToTop ? (
+        <button type="button" className="inline-flex h-8 items-center rounded-full border border-transparent bg-transparent px-3 text-sm font-semibold text-[var(--color-text-primary)] transition-colors hover:bg-[var(--color-action-passive-subtle-hover)]" onClick={onBackToTop}>
+          Back To Top
+        </button>
+      ) : null}
       <div className="flex flex-wrap items-center gap-2 text-sm text-[var(--color-text-primary)]">
         <span>Go to:</span>
         {/* Not a control -- clicking the current page number is a no-op by
