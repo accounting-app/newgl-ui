@@ -136,8 +136,12 @@ export function ReconcilePage() {
 
   const [accountId, setAccountId] = useState("");
   useEffect(() => {
-    if (!accountId && reconcilableAccounts.length > 0) setAccountId(reconcilableAccounts[0].id);
-  }, [reconcilableAccounts, accountId]);
+    if (accountId || reconcilableAccounts.length === 0) return;
+    // Chart of accounts' per-account "Reconcile" deep-links here with
+    // ?accountId=...; anything unknown/non-reconcilable falls back to the first.
+    const requestedId = searchParams.get("accountId");
+    setAccountId(reconcilableAccounts.find((a) => a.id === requestedId)?.id ?? reconcilableAccounts[0].id);
+  }, [reconcilableAccounts, accountId, searchParams]);
   const selectedAccount = accounts.find((a) => a.id === accountId);
 
   // The beginning balance is what the books say is already reconciled

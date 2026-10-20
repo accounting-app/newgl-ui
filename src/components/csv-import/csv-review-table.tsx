@@ -242,7 +242,7 @@ export function CsvReviewTable({
                       <p className="mt-0.5 text-[11px] text-[var(--color-icon-secondary)]">
                         Looks like a duplicate ·{" "}
                         <Link
-                          href={`/register?account=${mainAccountId}&tx=${duplicateMatches.get(row.clientRowId)?.id}`}
+                          href={`/register?accountId=${mainAccountId}&tx=${duplicateMatches.get(row.clientRowId)?.id}`}
                           target="_blank"
                           className="text-[var(--color-link-text)] hover:underline"
                         >

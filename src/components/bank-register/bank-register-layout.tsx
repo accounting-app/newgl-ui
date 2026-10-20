@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { AccountSelector } from "@/components/bank-register/account-selector";
 import { RegisterTable } from "@/components/bank-register/register-table";
@@ -69,14 +70,16 @@ function BankRegisterLayoutInner() {
   }, [selectedAccountId]);
 
   // Deep-link from the Chart of Accounts page ("View register" per account):
-  // /register?account=<id>. Applied once accounts have loaded and the id is
-  // real -- gated on a ref (not just the URL) so a later account refresh
-  // (e.g. after saving a transaction) can't re-fire this and silently
-  // override an account the user has since switched to in the dropdown.
+  // /register?accountId=<id>, the same shape as QBO's app/register?accountId=.
+  // The older ?account=<id> is still accepted as an alias. Applied once
+  // accounts have loaded and the id is real -- gated on a ref (not just the
+  // URL) so a later account refresh (e.g. after saving a transaction) can't
+  // re-fire this and silently override an account the user has since
+  // switched to in the dropdown.
   const appliedAccountParamRef = useRef(false);
   useEffect(() => {
     if (appliedAccountParamRef.current || accounts.length === 0) return;
-    const accountParam = searchParams.get("account");
+    const accountParam = searchParams.get("accountId") ?? searchParams.get("account");
     if (accountParam && accounts.some((a) => a.id === accountParam)) {
       setSelectedAccountId(accountParam);
     }
@@ -107,26 +110,48 @@ function BankRegisterLayoutInner() {
 
   return (
     <main className="tw-override main bg-[var(--color-container-background-primary)] text-sm text-[var(--color-text-primary)]">
-      <header className="header mb-4 space-y-4">
-        <div className="w-full flex flex-wrap items-center justify-between gap-4">
-          <div className="">
-            <h1 className="page-title">{registerTitle}</h1>
-            <AccountSelector
-              accounts={registerAccounts}
-              selectedAccountId={selectedAccountId}
-              onChange={setSelectedAccountId}
-            />
-          </div>
+      <header className="header mb-4">
+        {/* .header is a flex row, so the breadcrumb and the title block share
+            one column wrapper to stack the breadcrumb above the title. */}
+        <div className="w-full space-y-4">
+          {/* The register has no entry point of its own (QBO has none either):
+              it's reached from Bank transactions' "Go to bank register" or
+              Chart of accounts' "View register", and this path -- plus "Back To
+              Banking" -- is how you retrace that route. */}
+          <nav aria-label="Breadcrumb" className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-sm text-[var(--color-text-primary)]">
+            <Link href="/all-apps/bank-transactions" className="hover:text-[var(--color-link-action)] hover:underline">
+              Accounting
+            </Link>
+            <span aria-hidden="true">/</span>
+            <Link href="/all-apps/chart-of-accounts" className="hover:text-[var(--color-link-action)] hover:underline">
+              Chart of accounts
+            </Link>
+            <span aria-hidden="true">/</span>
+            <span aria-current="page">{registerTitle}</span>
+            <Link href="/all-apps/bank-transactions" className="ml-3 font-medium text-[var(--color-link-action)] hover:underline">
+              &lt; Back To Banking
+            </Link>
+          </nav>
+          <div className="w-full flex flex-wrap items-center justify-between gap-4">
+            <div className="">
+              <h1 className="page-title">{registerTitle}</h1>
+              <AccountSelector
+                accounts={registerAccounts}
+                selectedAccountId={selectedAccountId}
+                onChange={setSelectedAccountId}
+              />
+            </div>
 
-          <div className="space-y-3 text-right">
-            <div>
-              <p className="balance-label tracking-wide">Ending Balance</p>
-              <p className="balance-amount">
-                {generalBalance.toLocaleString("en-US", {
-                  style: "currency",
-                  currency: "USD"
-                })}
-              </p>
+            <div className="space-y-3 text-right">
+              <div>
+                <p className="balance-label tracking-wide">Ending Balance</p>
+                <p className="balance-amount">
+                  {generalBalance.toLocaleString("en-US", {
+                    style: "currency",
+                    currency: "USD"
+                  })}
+                </p>
+              </div>
             </div>
           </div>
         </div>

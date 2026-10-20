@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import Link from "next/link";
 import { ChevronDown, ChevronRight, MessageSquarePlus, Pencil, Printer, Settings } from "lucide-react";
 import { AddAccountModal } from "@/components/bank-register/add-account-modal";
 import { Button } from "@/components/ui/button";
@@ -17,7 +18,7 @@ import { buildRollupHierarchyRows, filterCollapsed } from "@/lib/accounting/acco
 import type { HierarchyRow } from "@/lib/accounting/account-hierarchy";
 import { nextAccountCode } from "@/lib/accounting/next-account-code";
 import type { Account } from "@/modules/accounting/domain/models";
-import { AccountRegisterView } from "@/components/settings/account-register-view";
+import { accountHasRegister } from "@/modules/accounting/presentation/transaction-type-policy";
 
 const CATEGORY_OPTIONS = ACCOUNT_ROOT_GROUPS.flatMap((group) =>
   [...group.categories].map((category) => ({ value: category, label: ACCOUNT_CATEGORY_LABELS[category] }))
@@ -39,12 +40,6 @@ export function ChartOfAccountsPage() {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-
-  // Chart of Accounts and the account register are one screen with two
-  // internal views (like Reconcile's Reconcile/Summary/History) -- "View
-  // register" switches into a read-only ledger for that account without
-  // navigating to (or touching) the real /register.
-  const [registerAccountId, setRegisterAccountId] = useState<string | null>(null);
 
   // "New account" / "Edit account" -- the same QBO-style side panel the
   // Register's own "+ Add new" account picker uses (add-account-modal.tsx),
@@ -272,17 +267,6 @@ export function ChartOfAccountsPage() {
     }
   }
 
-  if (registerAccountId) {
-    return (
-      <AccountRegisterView
-        accountId={registerAccountId}
-        accounts={accounts}
-        onBack={() => setRegisterAccountId(null)}
-        onChangeAccount={setRegisterAccountId}
-      />
-    );
-  }
-
   return (
     <>
       <h1 className="mb-4 text-2xl font-semibold text-[var(--color-text-global)]">Chart of accounts</h1>
@@ -428,7 +412,6 @@ export function ChartOfAccountsPage() {
                     accountByName={section.accountByName}
                     collapsedNames={collapsedNames}
                     onToggleCollapse={toggleCollapse}
-                    onViewRegister={setRegisterAccountId}
                     onEdit={startEdit}
                     onCreateSubaccount={startSubaccount}
                     onMakeInactive={handleArchive}
@@ -464,7 +447,6 @@ function SectionRows({
   accountByName,
   collapsedNames,
   onToggleCollapse,
-  onViewRegister,
   onEdit,
   onCreateSubaccount,
   onMakeInactive,
@@ -478,7 +460,6 @@ function SectionRows({
   accountByName: Map<string, Account>;
   collapsedNames: Set<string>;
   onToggleCollapse: (fullName: string) => void;
-  onViewRegister: (accountId: string) => void;
   onEdit: (account: Account) => void;
   onCreateSubaccount: (account: Account) => void;
   onMakeInactive: (account: Account) => void;
@@ -538,7 +519,6 @@ function SectionRows({
               {account ? (
                 <AccountRowActions
                   account={account}
-                  onViewRegister={() => onViewRegister(account.id)}
                   onEdit={() => onEdit(account)}
                   onCreateSubaccount={() => onCreateSubaccount(account)}
                   onMakeInactive={() => onMakeInactive(account)}
@@ -553,20 +533,29 @@ function SectionRows({
   );
 }
 
-// "View register" as a text link plus a chevron opening the rest of QBO's
-// per-account menu. Link account/Run report are honestly disabled (no bank
-// feed, no report engine wired to a single account yet); Edit, Create
-// subaccount, and Make inactive are real.
+// Per-account actions, mirroring QBO's Chart of accounts. The primary link
+// depends on the account: accounts with a register (balance-sheet accounts
+// except Retained Earnings) get "View register" -- which opens the real
+// interactive register at /register?accountId=... -- and everything else
+// gets "Run report", exactly as QBO does. "Link account" and the
+// register-side "Run report" are honestly disabled (no bank feed, no
+// single-account report for balance-sheet accounts yet); Edit, Reconcile,
+// Create subaccount, and Make inactive are real.
+const PROFIT_AND_LOSS_CATEGORIES = new Set<Account["category"]>(["INCOME", "EXPENSE", "OTHER_INCOME", "OTHER_EXPENSE"]);
+const BANK_FEED_CATEGORIES = new Set<Account["category"]>(["BANK", "CREDIT_CARD"]);
+
+const MENU_ITEM_CLASS =
+  "block w-full px-3 py-1.5 text-left text-[13px] text-[var(--color-text-global)] hover:bg-[var(--color-action-passive-subtle-hover)]";
+const DISABLED_MENU_ITEM_CLASS = "block w-full cursor-not-allowed px-3 py-1.5 text-left text-[13px] text-[var(--color-text-disabled)]";
+
 function AccountRowActions({
   account,
-  onViewRegister,
   onEdit,
   onCreateSubaccount,
   onMakeInactive,
   busy
 }: {
   account: Account;
-  onViewRegister: () => void;
   onEdit: () => void;
   onCreateSubaccount: () => void;
   onMakeInactive: () => void;
@@ -591,36 +580,64 @@ function AccountRowActions({
     };
   }, [open]);
 
+  const hasRegister = accountHasRegister(account);
+  // P&L Detail already filters by account name, which is the closest thing to
+  // QBO's single-account "Run report" we have for income/expense accounts.
+  const reportHref = PROFIT_AND_LOSS_CATEGORIES.has(account.category) ? `/reports/pl-detail?account=${encodeURIComponent(account.name)}` : null;
+  const primaryLinkClass = `font-medium text-[var(--color-link-action)] hover:underline ${busy ? "pointer-events-none opacity-60" : ""}`;
+
   return (
     <div className="relative inline-flex items-center justify-end gap-1 text-[13px]" ref={ref}>
-      <button type="button" onClick={onViewRegister} disabled={busy} className="font-medium text-[var(--color-link-action)] hover:underline disabled:cursor-not-allowed disabled:opacity-60">
-        View register
-      </button>
+      {hasRegister ? (
+        <Link href={`/register?accountId=${account.id}`} aria-disabled={busy} className={primaryLinkClass}>
+          View register
+        </Link>
+      ) : reportHref ? (
+        <Link href={reportHref} aria-disabled={busy} className={primaryLinkClass}>
+          Run report
+        </Link>
+      ) : (
+        <span title="Not available yet" className="cursor-not-allowed font-medium text-[var(--color-text-disabled)]">
+          Run report
+        </span>
+      )}
       <button type="button" onClick={() => setOpen((v) => !v)} aria-label="More actions" disabled={busy} className="text-[var(--color-icon-secondary)]">
         <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
       </button>
       {open ? (
         <div className="absolute right-0 top-full z-10 mt-1 w-56 rounded-lg border border-[var(--color-divider-tertiary)] bg-[var(--color-container-background-primary)] py-1 text-left shadow-lg">
-          <button type="button" disabled title="No bank feed integration yet" className="block w-full cursor-not-allowed px-3 py-1.5 text-left text-[13px] text-[var(--color-text-disabled)]">
-            Link account
-          </button>
+          {BANK_FEED_CATEGORIES.has(account.category) ? (
+            <button type="button" disabled title="No bank feed integration yet" className={DISABLED_MENU_ITEM_CLASS}>
+              Link account
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={() => {
               onEdit();
               setOpen(false);
             }}
-            className="block w-full px-3 py-1.5 text-left text-[13px] text-[var(--color-text-global)] hover:bg-[var(--color-action-passive-subtle-hover)]"
+            className={MENU_ITEM_CLASS}
           >
             Edit
           </button>
+          {hasRegister ? (
+            <>
+              <button type="button" disabled title="Not available yet" className={DISABLED_MENU_ITEM_CLASS}>
+                Run report
+              </button>
+              <Link href={`/all-apps/reconcile?accountId=${account.id}`} onClick={() => setOpen(false)} className={MENU_ITEM_CLASS}>
+                Reconcile
+              </Link>
+            </>
+          ) : null}
           <button
             type="button"
             onClick={() => {
               onCreateSubaccount();
               setOpen(false);
             }}
-            className="block w-full px-3 py-1.5 text-left text-[13px] text-[var(--color-text-global)] hover:bg-[var(--color-action-passive-subtle-hover)]"
+            className={MENU_ITEM_CLASS}
           >
             Create subaccount
           </button>
@@ -630,12 +647,9 @@ function AccountRowActions({
               onMakeInactive();
               setOpen(false);
             }}
-            className="block w-full px-3 py-1.5 text-left text-[13px] text-[var(--color-text-global)] hover:bg-[var(--color-action-passive-subtle-hover)]"
+            className={MENU_ITEM_CLASS}
           >
             Make inactive (won't reduce usage)
-          </button>
-          <button type="button" disabled title="Not available yet" className="block w-full cursor-not-allowed px-3 py-1.5 text-left text-[13px] text-[var(--color-text-disabled)]">
-            Run report
           </button>
         </div>
       ) : null}

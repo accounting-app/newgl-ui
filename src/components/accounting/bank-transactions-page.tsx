@@ -413,7 +413,10 @@ export function BankTransactionsPage() {
             </button>
           ))}
         </div>
-        <Link href="/register" className="text-sm font-medium text-[var(--color-link-action)] hover:underline">
+        <Link
+          href={selectedAccountId ? `/register?accountId=${selectedAccountId}` : "/register"}
+          className="text-sm font-medium text-[var(--color-link-action)] hover:underline"
+        >
           Go to bank register
         </Link>
       </div>
