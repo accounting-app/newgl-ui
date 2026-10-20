@@ -3,22 +3,23 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import type { ComponentType } from "react";
-import { BookOpen, Building2, FilePlus2, PlusCircle, Upload, Wallet } from "lucide-react";
+import { BookOpen, Building2, Upload } from "lucide-react";
 import { DashboardMetrics } from "@/components/home/dashboard-metrics";
 import { ALL_APPS_CATEGORIES } from "@/constants/apps";
 import type { AppNavItem } from "@/constants/apps";
 import { createClient } from "@/lib/supabase/client";
 
 // Modeled after QuickBooks Online's dashboard top nav (a horizontal row of
-// product-area pills) -- Register and Reports are their own top-level rail
-// items, added here explicitly since they aren't part of the All apps menu
-// at all. Everything else is one pill per All apps CATEGORY (Accounting,
+// product-area pills) -- Reports is its own top-level rail item, added here
+// explicitly since it isn't part of the All apps categories at all. There is
+// deliberately no Register pill: the register has no entry point of its own
+// (it's reached from Bank transactions / Chart of accounts). Everything else
+// is one pill per All apps CATEGORY (Accounting,
 // Expenses & Bills, ...), not one per individual sub-page -- exploding
 // every category's items out flat made this row a dozen-plus pills long
 // and impossible to scan. Each category pill goes to its first item, same
 // destination clicking the category heading itself in All apps goes to.
 const NAV_PILLS: AppNavItem[] = [
-  { label: "Register", href: "/register", icon: Wallet },
   { label: "Reports", href: "/reports", icon: BookOpen },
   ...ALL_APPS_CATEGORIES.filter((category) => !category.locked && category.items.length > 0).map((category) => ({
     label: category.label,
@@ -34,8 +35,9 @@ type CreateActionItem = {
 };
 
 const CREATE_ACTIONS: CreateActionItem[] = [
-  { label: "Add Check", href: "/register", icon: PlusCircle },
-  { label: "New Journal Entry", href: "/register", icon: FilePlus2 },
+  // "Add Check" / "New Journal Entry" used to link to the bare /register.
+  // Hidden for now -- the register is reached from Bank transactions /
+  // Chart of accounts, and where these shortcuts should land is still open.
   { label: "Add an account", href: "/all-apps/chart-of-accounts", icon: Building2 },
   { label: "Bulk paste import", href: "/settings/ledger?bulkPaste=1", icon: Upload }
 ];

@@ -112,6 +112,70 @@ export const ALL_APPS_CATEGORIES: AppCategory[] = [
   }
 ];
 
+// QBO's side rail lists Accounting, Expenses and Sales directly, followed by
+// a single "More apps" entry holding every other category. These three ids
+// are the ones promoted onto the rail (in rail order); `railLabel` is the
+// short label QBO shows under the icon (the full category label -- "Expenses
+// & Bills", "Sales & Get Paid" -- doesn't fit there). Each rail item lands on
+// the category's first item, the same destination clicking the category
+// heading in the /all-apps sidebar goes to.
+export const PRIMARY_NAV_CATEGORIES: ReadonlyArray<{ id: string; railLabel: string }> = [
+  { id: "accounting", railLabel: "Accounting" },
+  { id: "expenses-bills", railLabel: "Expenses" },
+  { id: "sales-get-paid", railLabel: "Sales" }
+];
+
+const PRIMARY_NAV_CATEGORY_IDS = new Set(PRIMARY_NAV_CATEGORIES.map((entry) => entry.id));
+
+/** Everything that is NOT promoted onto the rail -- the "More apps" menu. */
+export const MORE_APPS_CATEGORIES: AppCategory[] = ALL_APPS_CATEGORIES.filter((category) => !PRIMARY_NAV_CATEGORY_IDS.has(category.id));
+
+/** The path part of an item href ("/x/y?jobId=team" -> "/x/y"). */
+function hrefPath(href: string): string {
+  return href.split("?")[0];
+}
+
+function itemQueryMatches(href: string, searchParams: URLSearchParams | null): boolean {
+  const query = href.split("?")[1];
+  // No query on the item, or the caller has no query to compare against
+  // (e.g. the pre-hydration fallback render): the path alone decides.
+  if (!query || !searchParams) return true;
+  return [...new URLSearchParams(query)].every(([key, value]) => searchParams.get(key) === value);
+}
+
+/**
+ * Which app category the current URL belongs to, for the side rail's active
+ * state. Two passes: an exact page match first (including the item's own
+ * query, so Team's `Contractors?jobId=team` and Expenses'
+ * `Contractors?jobId=expenses` -- same path -- resolve to different
+ * categories), then the longest listed parent path, for pages that live
+ * under a listed item without being listed themselves (e.g.
+ * /all-apps/reconcile/session under Reconcile). Pages outside /all-apps
+ * return null -- the caller decides what those belong to.
+ */
+export function getActiveAppCategoryId(pathname: string, searchParams: URLSearchParams | null): string | null {
+  for (const category of ALL_APPS_CATEGORIES) {
+    const exact = category.items.some(
+      (item) => !item.locked && hrefPath(item.href) === pathname && itemQueryMatches(item.href, searchParams)
+    );
+    if (exact) return category.id;
+  }
+
+  let bestId: string | null = null;
+  let bestLength = -1;
+  for (const category of ALL_APPS_CATEGORIES) {
+    for (const item of category.items) {
+      if (item.locked) continue;
+      const path = hrefPath(item.href);
+      if (pathname.startsWith(`${path}/`) && path.length > bestLength) {
+        bestId = category.id;
+        bestLength = path.length;
+      }
+    }
+  }
+  return bestId;
+}
+
 // Settings (the bottom-pinned rail icon) -- AI, Billing, Organization, and
 // anything else about the account/preferences/users rather than the books
 // themselves. Ledger lives here (not /all-apps) since it's a file-manager

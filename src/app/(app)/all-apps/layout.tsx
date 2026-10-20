@@ -4,8 +4,7 @@ import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { Suspense, useState, type ReactNode } from "react";
 import { ChevronDown, Gem } from "lucide-react";
-import { ALL_APPS_CATEGORIES } from "@/constants/apps";
-import type { AppCategory } from "@/constants/apps";
+import { ALL_APPS_CATEGORIES, getActiveAppCategoryId } from "@/constants/apps";
 
 type AllAppsLayoutProps = Readonly<{
   children: ReactNode;
@@ -24,10 +23,6 @@ function isItemActive(href: string, pathname: string, searchParams: URLSearchPar
   if (pathname !== itemPath) return false;
   if (!itemQuery) return true;
   return [...new URLSearchParams(itemQuery)].every(([key, value]) => searchParams.get(key) === value);
-}
-
-function categoryContainsPath(category: AppCategory, pathname: string, searchParams: URLSearchParams): boolean {
-  return category.items.some((item) => !item.locked && isItemActive(item.href, pathname, searchParams));
 }
 
 // Same accordion-sidebar pattern as Settings (src/app/(app)/settings/layout.tsx),
@@ -55,8 +50,22 @@ export default function AllAppsLayout({ children }: AllAppsLayoutProps) {
 function AllAppsSidebar() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const initiallyOpen = ALL_APPS_CATEGORIES.find((c) => categoryContainsPath(c, pathname, searchParams))?.id ?? ALL_APPS_CATEGORIES[0]?.id ?? null;
-  const [openId, setOpenId] = useState<string | null>(initiallyOpen);
+  const activeCategoryId = getActiveAppCategoryId(pathname, searchParams);
+  const [openId, setOpenId] = useState<string | null>(activeCategoryId ?? ALL_APPS_CATEGORIES[0]?.id ?? null);
+
+  // This layout stays mounted while you move between /all-apps pages, so the
+  // initial state above only covers the first load. Landing on another
+  // category -- e.g. clicking Sales on the side rail while Expenses is open
+  // here -- must open that category too. Tracked during render (React's
+  // "adjust state when a prop changes" pattern) rather than in an effect, so
+  // there's no frame showing the wrong section open. Manually collapsing or
+  // expanding a section is untouched: this only fires when the active
+  // category itself changes.
+  const [syncedCategoryId, setSyncedCategoryId] = useState(activeCategoryId);
+  if (activeCategoryId !== syncedCategoryId) {
+    setSyncedCategoryId(activeCategoryId);
+    if (activeCategoryId) setOpenId(activeCategoryId);
+  }
 
   return (
     <aside className="flex h-full w-64 shrink-0 flex-col overflow-y-auto border-r border-[var(--color-divider-tertiary)] bg-[var(--color-container-background-primary)] px-2 py-6">

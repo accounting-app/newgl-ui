@@ -442,17 +442,13 @@ export function DashboardMetrics() {
             <ul className="flex flex-col divide-y divide-[var(--color-container-background-secondary)]">
               {bankAccounts.slice(0, 4).map((account) => (
                 <li key={account.id} className="flex items-center justify-between py-1.5 text-sm">
-                  <Link href={`/register?account=${account.id}`} className="truncate text-[var(--color-text-primary)] hover:underline">
-                    {account.name}
-                  </Link>
+                  <span className="truncate text-[var(--color-text-primary)]">{account.name}</span>
                   <span className="text-[var(--color-text-global)]">{formatMoney(account.currentBalance)}</span>
                 </li>
               ))}
               {creditCardAccounts.slice(0, 2).map((account) => (
                 <li key={account.id} className="flex items-center justify-between py-1.5 text-sm">
-                  <Link href={`/register?account=${account.id}`} className="truncate text-[var(--color-text-primary)] hover:underline">
-                    {account.name}
-                  </Link>
+                  <span className="truncate text-[var(--color-text-primary)]">{account.name}</span>
                   <span className="text-[var(--color-text-global)]">{formatMoney(account.currentBalance)}</span>
                 </li>
               ))}
@@ -460,9 +456,6 @@ export function DashboardMetrics() {
                 <li className="py-1.5 text-sm text-[var(--color-text-disabled)]">No bank accounts yet.</li>
               ) : null}
             </ul>
-            <Link href="/register" className="mt-3 inline-block text-xs text-[var(--color-link-action)] hover:underline">
-              Go to registers
-            </Link>
           </Card>
         )}
       </div>
