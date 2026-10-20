@@ -127,12 +127,17 @@ export function useBankRegister() {
   const refreshAccounts = useCallback(async () => {
     const accountList = await services.accountService.listAccounts();
     setAccounts(accountList);
-    if (!selectedAccountId && accountList.length > 0) {
+    if (accountList.length > 0) {
       const firstRegisterAccount =
         accountList.find((account) => isRegisterAccountCategory(account.category)) ?? accountList[0];
-      setSelectedAccountId(firstRegisterAccount.id);
+      // Functional update, not a read of selectedAccountId: this call can still
+      // be in flight (React runs effects twice in dev, and ledger events
+      // trigger more) when a deep link like /register?accountId=... has
+      // already picked an account, and a stale closure that saw "no
+      // selection" would overwrite that pick with the default.
+      setSelectedAccountId((current) => current || firstRegisterAccount.id);
     }
-  }, [selectedAccountId, services.accountService]);
+  }, [services.accountService]);
 
   const refreshEntries = useCallback(async () => {
     if (!selectedAccountId) {
