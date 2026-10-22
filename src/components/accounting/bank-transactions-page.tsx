@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
-import { ChevronDown, ChevronUp, Landmark, MessageSquarePlus, Pencil, Plus, Printer, RefreshCw, Search, Settings, Share, TriangleAlert } from "lucide-react";
+import { ChevronDown, ChevronUp, CreditCard, Landmark, MessageSquarePlus, Pencil, Plus, Printer, RefreshCw, Search, Settings, Share, TriangleAlert } from "lucide-react";
 import { AddAccountModal } from "@/components/bank-register/add-account-modal";
 import { QuickAddMenu } from "@/components/bank-register/register-header-actions";
 import { Button } from "@/components/ui/button";
@@ -26,6 +26,16 @@ import type { Account, Transaction } from "@/modules/accounting/domain/models";
 function formatDisplayDate(isoDate: string): string {
   const [year, month, day] = isoDate.split("-");
   return `${month}/${day}/${year}`;
+}
+
+// QBO's transaction counts cap at "99+".
+function formatTxnCount(count: number): string {
+  return count > 99 ? "99+" : count.toLocaleString("en-US");
+}
+
+function AccountKindIcon({ account, className }: { account: Account; className?: string }) {
+  const Icon = account.category === "CREDIT_CARD" ? CreditCard : Landmark;
+  return <Icon className={className} aria-hidden="true" />;
 }
 
 function formatMoney(value: number): string {
@@ -203,12 +213,15 @@ export function BankTransactionsPage() {
     [accountTxns, realPostedRows, locallyPostedRows]
   );
 
-  // The card's date: the newest posted activity on this account.
-  const latestPostedDate = useMemo(
-    () => [...realPostedRows, ...locallyPostedRows].map((row) => row.date).sort().at(-1) ?? null,
-    [realPostedRows, locallyPostedRows]
-  );
-  const postedTotal = useMemo(() => selectedAccount?.currentBalance ?? 0, [selectedAccount]);
+  const latestDateByAccount = useMemo(() => {
+    const dates = new Map<string, string>();
+    const note = (accountId: string, date: string) => {
+      if (date > (dates.get(accountId) ?? "")) dates.set(accountId, date);
+    };
+    postedTransactions.forEach((txn) => txn.postings.forEach((p) => note(p.accountId, txn.transactionDate)));
+    allTxns.filter((t) => t.status === "POSTED").forEach((t) => note(t.accountId, t.date));
+    return dates;
+  }, [postedTransactions, allTxns]);
 
   const expenseAccountOptions = useMemo(
     () =>
@@ -382,56 +395,72 @@ export function BankTransactionsPage() {
                   className="h-10 w-full rounded-md border-2 border-[var(--override-focus)] bg-[var(--color-input-background)] pl-9 pr-3 text-sm text-[var(--color-input-text)] outline-none placeholder:text-[var(--color-text-disabled)]"
                 />
               </div>
-              <button
-                type="button"
-                onClick={() => setShowAccountCards((v) => !v)}
-                className="mt-2 px-1 text-sm font-semibold text-[var(--color-link-action)] hover:underline"
-              >
-                {showAccountCards ? "Hide account cards" : "Show account cards"}
-              </button>
-              <div className="mt-2 max-h-80 space-y-2 overflow-y-auto">
+              <div className="mt-2 flex items-center justify-between px-1 text-sm font-medium text-[var(--color-link-action)]">
+                <button type="button" onClick={() => setShowAccountCards((v) => !v)} className="hover:underline">
+                  {showAccountCards ? "Hide account cards" : "Show account cards"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => toast({ variant: "info", title: "Reordering accounts isn't available yet" })}
+                  className="hover:underline"
+                >
+                  Reorder accounts
+                </button>
+              </div>
+              <div className="mt-2 max-h-96 overflow-y-auto">
                 {filteredBankAccounts.length === 0 ? (
                   <p className="px-1 py-3 text-sm text-[var(--color-text-disabled)]">No accounts match "{accountSearch}".</p>
                 ) : (
                   filteredBankAccounts.map((a) => {
                     const pending = pendingCountByAccount.get(a.id) ?? 0;
-                    const select = () => {
-                      setSelectedAccountId(a.id);
-                      setAccountMenuOpen(false);
-                      setAccountSearch("");
-                    };
+                    const latest = latestDateByAccount.get(a.id);
+                    const isSelected = a.id === selectedAccountId;
                     return (
                       <div
                         key={a.id}
-                        className={`flex items-start gap-3 rounded-md border border-[var(--color-divider-tertiary)] p-3 ${
-                          a.id === selectedAccountId ? "bg-[var(--color-container-background-accent)]" : ""
+                        className={`group flex items-start gap-3 rounded-md px-3 py-3 hover:bg-[var(--color-action-passive-subtle-hover)] ${
+                          isSelected ? "bg-[var(--color-container-background-accent)]" : ""
                         }`}
                       >
-                        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--color-ui-primary)] text-white">
-                          <Landmark className="h-5 w-5" aria-hidden="true" />
-                        </span>
-                        <div className="min-w-0 flex-1 text-sm text-[var(--color-text-global)]">
-                          <button type="button" onClick={select} className="block text-left font-semibold underline">
-                            {a.name}
-                            {a.subtype ? ` - ${a.subtype}` : ""}
-                          </button>
-                          <button type="button" onClick={select} className="mt-0.5 block text-left underline">
-                            Bank balance: {formatMoney(a.currentBalance)}
-                          </button>
-                          <button type="button" onClick={select} className="mt-0.5 block text-left underline">
-                            {pending} Transaction{pending === 1 ? "" : "s"}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setEditingAccount(a);
-                              setAccountMenuOpen(false);
-                            }}
-                            className="mt-3 block text-left font-medium text-[var(--color-link-action)] underline"
-                          >
-                            Edit account details
-                          </button>
-                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedAccountId(a.id);
+                            setAccountMenuOpen(false);
+                            setAccountSearch("");
+                          }}
+                          className="flex min-w-0 flex-1 items-start gap-3 text-left"
+                        >
+                          <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[var(--color-ui-primary)] text-white">
+                            <AccountKindIcon account={a} className="h-5 w-5" />
+                          </span>
+                          <span className="min-w-0 flex-1 text-sm text-[var(--color-text-global)]">
+                            <span className="block truncate font-semibold">
+                              {a.name}
+                              {a.subtype ? ` - ${a.subtype}` : ""}
+                            </span>
+                            <span className="mt-0.5 block">Bank balance: {formatMoney(0)}</span>
+                            <span className="mt-0.5 flex items-center justify-between gap-3">
+                              <span>
+                                {formatTxnCount(pending)} Transaction{pending === 1 ? "" : "s"}
+                              </span>
+                              {latest ? <span className="text-xs text-[var(--color-text-primary)]">{formatDisplayDate(latest)}</span> : null}
+                            </span>
+                          </span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingAccount(a);
+                            setAccountMenuOpen(false);
+                          }}
+                          aria-label={`Edit ${a.name}`}
+                          className={`mt-1 text-[var(--color-icon-secondary)] hover:text-[var(--color-text-global)] ${
+                            isSelected ? "" : "opacity-0 focus:opacity-100 group-hover:opacity-100"
+                          }`}
+                        >
+                          <Pencil className="h-4 w-4" aria-hidden="true" />
+                        </button>
                       </div>
                     );
                   })
@@ -446,40 +475,71 @@ export function BankTransactionsPage() {
             href={`/all-apps/reconcile?accountId=${encodeURIComponent(selectedAccount.id)}&view=history`}
             className="text-sm text-[var(--color-negative)] hover:underline"
           >
-            {lastReconciledDate ? `Last Reconciled: ${formatDisplayDate(lastReconciledDate)}` : "Never reconciled"} [{selectedAccount.name}]
+            {lastReconciledDate ? `Last Reconciled: ${formatDisplayDate(lastReconciledDate)}` : "Last Reconcile Not Found"} [{selectedAccount.name}]
           </Link>
         ) : null}
       </div>
 
-      {/* Balance summary card */}
-      {showAccountCards && selectedAccount ? (
-        <div className="mb-4 w-[300px] rounded-lg border-2 border-[var(--color-ui-primary)] bg-[var(--color-container-background-primary)] p-4">
-          <div className="mb-2 flex items-center justify-between gap-6">
-            <span className="text-sm text-[var(--color-text-primary)]">{selectedAccount.name}</span>
-            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[var(--color-icon-secondary)] text-xs font-semibold text-white">
-              {tabCounts.PENDING}
-            </span>
-          </div>
-          <div className="flex items-center justify-between gap-3">
-            <p className="text-xl font-semibold text-[var(--color-text-global)]">Bank: {formatMoney(0)}</p>
-            <button
-              type="button"
-              onClick={() => setEditingAccount(selectedAccount)}
-              aria-label={`Edit ${selectedAccount.name}`}
-              className="text-[var(--color-icon-secondary)] hover:text-[var(--color-text-global)]"
-            >
-              <Pencil className="h-4 w-4" aria-hidden="true" />
-            </button>
-          </div>
-          <div className="mt-2 flex items-center justify-between gap-3 text-sm text-[var(--color-text-primary)]">
-            <span>Posted: {formatMoney(postedTotal)}</span>
-            {latestPostedDate ? (
-              <span className="flex items-center gap-1.5 text-xs">
-                <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
-                {formatDisplayDate(latestPostedDate)}
-              </span>
-            ) : null}
-          </div>
+      {/* Account cards: three show at once, the rest scroll sideways. */}
+      {showAccountCards && bankAccounts.length > 0 ? (
+        <div className="mb-4 flex snap-x gap-4 overflow-x-auto pb-2 pt-5">
+          {bankAccounts.map((a) => {
+            const isSelected = a.id === selectedAccountId;
+            const pending = pendingCountByAccount.get(a.id) ?? 0;
+            const latest = latestDateByAccount.get(a.id);
+            return (
+              <div key={a.id} className="relative w-[calc((100%-2rem)/3)] min-w-[260px] shrink-0 snap-start">
+                <span className="absolute -top-4 right-1 text-xs text-[var(--color-negative)]">{a.code}</span>
+                <div
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => setSelectedAccountId(a.id)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      setSelectedAccountId(a.id);
+                    }
+                  }}
+                  aria-pressed={isSelected}
+                  className={`cursor-pointer rounded-lg border bg-[var(--color-container-background-primary)] p-4 ${
+                    isSelected ? "border-2 border-[var(--color-ui-primary)]" : "border-[var(--color-divider-tertiary)] hover:border-[var(--color-icon-secondary)]"
+                  }`}
+                >
+                  <div className="mb-2 flex items-center justify-between gap-4">
+                    <span className="truncate text-sm text-[var(--color-text-primary)]">{a.name}</span>
+                    <span className="flex h-6 min-w-6 shrink-0 items-center justify-center rounded-full bg-[var(--color-icon-secondary)] px-1.5 text-xs font-semibold text-white">
+                      {formatTxnCount(pending)}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-xl font-semibold text-[var(--color-text-global)]">Bank: {formatMoney(0)}</p>
+                    {isSelected ? (
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setEditingAccount(a);
+                        }}
+                        aria-label={`Edit ${a.name}`}
+                        className="text-[var(--color-icon-secondary)] hover:text-[var(--color-text-global)]"
+                      >
+                        <Pencil className="h-4 w-4" aria-hidden="true" />
+                      </button>
+                    ) : null}
+                  </div>
+                  <div className="mt-2 flex items-center justify-between gap-3 text-sm text-[var(--color-text-primary)]">
+                    <span>Posted: {formatMoney(a.currentBalance)}</span>
+                    {latest ? (
+                      <span className="flex items-center gap-1.5 text-xs">
+                        <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
+                        {formatDisplayDate(latest)}
+                      </span>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
         </div>
       ) : null}
 
