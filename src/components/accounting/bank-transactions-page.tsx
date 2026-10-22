@@ -29,7 +29,7 @@ function formatDisplayDate(isoDate: string): string {
 }
 
 const CARDS_COLLAPSED_COUNT = 3;
-const CELL = "border-l border-[var(--color-divider-tertiary)] p-3 align-middle text-[14px]";
+const CELL = "border-l border-[var(--color-divider-tertiary)] px-3 py-[3px] align-middle text-[13px] leading-tight";
 const PAGE_SIZE = 50;
 
 type DatePreset = "all" | "30d" | "month" | "year";
@@ -427,40 +427,41 @@ export function BankTransactionsPage() {
 
   return (
     <>
-      {/* Title left; Give feedback over the "+ Expense" quick-add and Link
-          account buttons, top right (QBO's current layout). */}
-      <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
+      {/* QBO's header: breadcrumb with Give feedback on the right, then the
+          title with the quick-add and Link account buttons on the right. */}
+      <div className="mb-1 flex items-center justify-between gap-3 text-sm text-[var(--color-text-primary)]">
+        <nav aria-label="Breadcrumb" className="flex items-center gap-1.5">
+          <span>Accounting</span>
+          <span aria-hidden="true">/</span>
+          <span aria-current="page">Bank transactions</span>
+        </nav>
+        <button type="button" disabled className="flex cursor-not-allowed items-center gap-1.5 font-medium text-[var(--color-text-disabled)]">
+          <MessageSquarePlus className="h-4 w-4" aria-hidden="true" />
+          Give feedback
+        </button>
+      </div>
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-semibold text-[var(--color-text-global)]">Bank transactions</h1>
-        <div className="flex flex-col items-end gap-3">
-          <button
-            type="button"
-            disabled
-            className="flex cursor-not-allowed items-center gap-1.5 text-sm font-medium text-[var(--color-text-disabled)]"
-          >
-            <MessageSquarePlus className="h-4 w-4" aria-hidden="true" />
-            Give feedback
-          </button>
-          <div className="flex items-center gap-2">
-            <QuickAddMenu />
-            <div className="flex overflow-hidden rounded-lg">
-              <Button className="rounded-r-none" disabled title="No bank feed integration yet">
-                Link account
-              </Button>
-              <Button className="rounded-l-none border-l border-l-white/20 px-2" disabled aria-label="More options">
-                <ChevronDown className="h-4 w-4" aria-hidden="true" />
-              </Button>
-            </div>
+        <div className="flex items-center gap-2">
+          <QuickAddMenu />
+          <div className="flex overflow-hidden rounded-lg">
+            <Button className="rounded-r-none" disabled title="No bank feed integration yet">
+              Link account
+            </Button>
+            <Button className="rounded-l-none border-l border-l-white/20 px-2" disabled aria-label="More options">
+              <ChevronDown className="h-4 w-4" aria-hidden="true" />
+            </Button>
           </div>
         </div>
       </div>
 
       {/* Account header row */}
-      <div className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-2">
+      <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-2">
         <div className="relative" ref={accountMenuRef}>
           <button
             type="button"
             onClick={() => setAccountMenuOpen((v) => !v)}
-            className="flex items-center gap-2.5 rounded-lg px-1 py-1 text-lg font-semibold text-[var(--color-text-global)] hover:bg-[var(--color-action-passive-subtle-hover)]"
+            className="flex items-center gap-2.5 rounded-lg px-1 py-0 text-lg font-semibold text-[var(--color-text-global)] hover:bg-[var(--color-action-passive-subtle-hover)]"
           >
             <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--color-ui-primary)] text-white">
               <Landmark className="h-4 w-4" aria-hidden="true" />
@@ -568,12 +569,23 @@ export function BankTransactionsPage() {
             {lastReconciledDate ? `Last Reconciled: ${formatDisplayDate(lastReconciledDate)}` : "Last Reconcile Not Found"} [{selectedAccount.name}]
           </Link>
         ) : null}
+        {showAccountCards && bankAccounts.length > CARDS_COLLAPSED_COUNT ? (
+          <button
+            type="button"
+            onClick={() => setCardsExpanded((v) => !v)}
+            aria-expanded={cardsExpanded}
+            className="ml-auto flex items-center gap-1 text-sm font-medium text-[var(--color-link-action)] hover:underline"
+          >
+            {cardsExpanded ? "Show fewer accounts" : `Show all ${bankAccounts.length} accounts`}
+            {cardsExpanded ? <ChevronUp className="h-4 w-4" aria-hidden="true" /> : <ChevronDown className="h-4 w-4" aria-hidden="true" />}
+          </button>
+        ) : null}
       </div>
 
       {/* Account cards: three show at once, the rest scroll sideways. */}
       {showAccountCards && bankAccounts.length > 0 ? (
-        <div className="mb-4">
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+        <div className="mb-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           {visibleCardAccounts.map((a) => {
             const isSelected = a.id === selectedAccountId;
             const pending = pendingCountByAccount.get(a.id) ?? 0;
@@ -591,18 +603,18 @@ export function BankTransactionsPage() {
                     }
                   }}
                   aria-pressed={isSelected}
-                  className={`cursor-pointer rounded-lg border bg-[var(--color-container-background-primary)] p-4 ${
+                  className={`cursor-pointer rounded-lg border bg-[var(--color-container-background-primary)] px-4 py-2.5 ${
                     isSelected ? "border-2 border-[var(--color-ui-primary)]" : "border-[var(--color-divider-tertiary)] hover:border-[var(--color-icon-secondary)]"
                   }`}
                 >
-                  <div className="mb-2 flex items-center justify-between gap-4">
+                  <div className="mb-1 flex items-center justify-between gap-4">
                     <span className="truncate text-sm text-[var(--color-text-primary)]">{a.name}</span>
                     <span className="flex h-6 min-w-6 shrink-0 items-center justify-center rounded-full bg-[var(--color-icon-secondary)] px-1.5 text-xs font-semibold text-white">
                       {formatTxnCount(pending)}
                     </span>
                   </div>
                   <div className="flex items-center justify-between gap-3">
-                    <p className="text-xl font-semibold text-[var(--color-text-global)]">Bank: {formatMoney(0)}</p>
+                    <p className="text-lg font-semibold leading-tight text-[var(--color-text-global)]">Bank: {formatMoney(0)}</p>
                     {isSelected ? (
                       <button
                         type="button"
@@ -617,7 +629,7 @@ export function BankTransactionsPage() {
                       </button>
                     ) : null}
                   </div>
-                  <div className="mt-2 flex items-center justify-between gap-3 text-sm text-[var(--color-text-primary)]">
+                  <div className="mt-1 flex items-center justify-between gap-3 text-sm text-[var(--color-text-primary)]">
                     <span>Posted: {formatMoney(a.currentBalance)}</span>
                     {latest ? (
                       <span className="flex items-center gap-1.5 text-xs">
@@ -631,22 +643,11 @@ export function BankTransactionsPage() {
             );
           })}
         </div>
-        {bankAccounts.length > CARDS_COLLAPSED_COUNT ? (
-          <button
-            type="button"
-            onClick={() => setCardsExpanded((v) => !v)}
-            aria-expanded={cardsExpanded}
-            className="mt-3 flex items-center gap-1 text-sm font-medium text-[var(--color-link-action)] hover:underline"
-          >
-            {cardsExpanded ? "Show fewer accounts" : `Show all ${bankAccounts.length} accounts`}
-            {cardsExpanded ? <ChevronUp className="h-4 w-4" aria-hidden="true" /> : <ChevronDown className="h-4 w-4" aria-hidden="true" />}
-          </button>
-        ) : null}
         </div>
       ) : null}
 
       {/* Tabs + secondary links */}
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-3">
         <div className="inline-flex gap-1 rounded-lg bg-[var(--color-container-background-accent)] p-1">
           {TABS.map(({ value, label }) => (
             <button
@@ -682,7 +683,7 @@ export function BankTransactionsPage() {
 
       {/* Toolbar + table in one bordered panel, laid out like QBO's. */}
       <div className="overflow-hidden rounded-lg border border-[var(--color-divider-tertiary)] bg-[var(--color-container-background-primary)]">
-        <div className="flex flex-wrap items-center justify-between gap-3 p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3 px-3 py-2">
           <div className="flex flex-wrap items-center gap-3">
             <div className="relative w-[320px] max-w-full">
               <InputField placeholder="Search" value={search} onChange={(e) => setSearch(e.target.value)} className="h-10 pr-10" />
@@ -756,7 +757,7 @@ export function BankTransactionsPage() {
         <div className="overflow-x-auto">
           <table className="w-full min-w-[1100px] border-collapse text-sm">
             <thead className="bg-[var(--color-container-background-accent)] text-left text-[var(--color-text-global)]">
-              <tr className="[&>th]:px-3 [&>th]:py-4 [&>th]:text-[15px] [&>th]:font-semibold">
+              <tr className="[&>th]:px-3 [&>th]:py-2.5 [&>th]:text-sm [&>th]:font-semibold">
                 <th className="w-10">
                   <input type="checkbox" disabled aria-label="Select all transactions" />
                 </th>
@@ -792,7 +793,7 @@ export function BankTransactionsPage() {
             ) : (
               pagedTxns.map((txn, index) => (
                 <tr key={txn.id} className={`border-t border-[var(--color-divider-tertiary)] hover:bg-[var(--color-table-row-hover)] ${index % 2 === 1 ? "bg-[var(--color-table-row-secondary)]" : ""}`}>
-                  <td className="p-3 align-middle">
+                  <td className="px-3 py-[3px] align-middle">
                     <input type="checkbox" disabled aria-label="Select transaction" />
                   </td>
                   <td className={`${CELL} whitespace-nowrap text-[var(--color-text-global)]`}>{formatDisplayDate(txn.date)}</td>
@@ -812,7 +813,7 @@ export function BankTransactionsPage() {
                       <Plus className="h-4 w-4" aria-hidden="true" />
                     </button>
                   </td>
-                  <td className="border-l border-[var(--color-divider-tertiary)] w-48 p-2 align-middle">
+                  <td className="border-l border-[var(--color-divider-tertiary)] w-48 px-2 py-[3px] align-middle [&_input]:h-7 [&_input]:border-transparent [&_input]:bg-transparent">
                     {tab === "PENDING" ? (
                       <Select
                         value={txn.payee ?? ""}
@@ -836,7 +837,7 @@ export function BankTransactionsPage() {
                     )}
                   </td>
                   <td className={`${CELL} text-[var(--color-text-global)]`}>Business</td>
-                  <td className="border-l border-[var(--color-divider-tertiary)] w-56 p-2 align-middle">
+                  <td className="border-l border-[var(--color-divider-tertiary)] w-56 px-2 py-[3px] align-middle [&_input]:h-7 [&_input]:border-transparent [&_input]:bg-transparent">
                     {tab === "PENDING" ? (
                       <div className="flex items-center gap-1.5">
                         {!txn.categoryAccountId ? <TriangleAlert className="h-3.5 w-3.5 shrink-0 text-[var(--color-warning-text)]" aria-hidden="true" /> : null}
@@ -874,7 +875,7 @@ export function BankTransactionsPage() {
             </tbody>
           </table>
         </div>
-        <div className="flex items-center justify-end gap-4 border-t border-[var(--color-divider-tertiary)] px-6 py-4 text-sm text-[var(--color-text-primary)]">
+        <div className="flex items-center justify-end gap-4 border-t border-[var(--color-divider-tertiary)] px-6 py-2 text-sm text-[var(--color-text-primary)]">
           <span>{pageStart}-{pageEnd} of {visibleTxns.length} items</span>
           <button type="button" aria-label="Previous page" disabled={currentPage <= 1} onClick={() => setPage(currentPage - 1)} className="disabled:text-[var(--color-text-disabled)]">
             <ChevronLeft className="h-4 w-4" aria-hidden="true" />
