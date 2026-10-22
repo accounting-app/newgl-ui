@@ -792,7 +792,7 @@ export function BankTransactionsPage() {
               </tr>
             ) : (
               pagedTxns.map((txn, index) => (
-                <tr key={txn.id} className={`h-[42px] border-t border-[var(--color-divider-tertiary)] hover:bg-[var(--color-table-row-hover)] ${index % 2 === 1 ? "bg-[var(--color-table-row-secondary)]" : ""}`}>
+                <tr key={txn.id} className={`h-[50px] border-t border-[var(--color-divider-tertiary)] hover:bg-[var(--color-table-row-hover)] ${index % 2 === 1 ? "bg-[var(--color-table-row-secondary)]" : ""}`}>
                   <td className="px-[10px] py-0 align-middle">
                     <input type="checkbox" disabled aria-label="Select transaction" />
                   </td>
