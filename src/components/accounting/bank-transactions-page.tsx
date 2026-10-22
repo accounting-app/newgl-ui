@@ -28,6 +28,8 @@ function formatDisplayDate(isoDate: string): string {
   return `${month}/${day}/${year}`;
 }
 
+const CARDS_COLLAPSED_COUNT = 3;
+
 // QBO's transaction counts cap at "99+".
 function formatTxnCount(count: number): string {
   return count > 99 ? "99+" : count.toLocaleString("en-US");
@@ -88,6 +90,8 @@ export function BankTransactionsPage() {
   const [accountSearch, setAccountSearch] = useState("");
   // "Hide account cards" (in the selector) hides the balance card under the header, not the selector's own list.
   const [showAccountCards, setShowAccountCards] = useState(true);
+  // Cards under the header: one row of three, "Show all" expands to the rest.
+  const [cardsExpanded, setCardsExpanded] = useState(false);
   const [editingAccount, setEditingAccount] = useState<Account | null>(null);
   // Newest completed reconciliation's statement ending date for the selected
   // account (RightTool's red "Last Reconciled" note); null = never reconciled.
@@ -213,6 +217,15 @@ export function BankTransactionsPage() {
     [accountTxns, realPostedRows, locallyPostedRows]
   );
 
+  // Collapsed: the first three, but the selected account is always shown
+  // (swapped into the last slot) so the highlighted card never hides.
+  const visibleCardAccounts = useMemo(() => {
+    if (cardsExpanded || bankAccounts.length <= CARDS_COLLAPSED_COUNT) return bankAccounts;
+    const first = bankAccounts.slice(0, CARDS_COLLAPSED_COUNT);
+    const selected = bankAccounts.find((a) => a.id === selectedAccountId);
+    if (selected && !first.includes(selected)) first[CARDS_COLLAPSED_COUNT - 1] = selected;
+    return first;
+  }, [bankAccounts, cardsExpanded, selectedAccountId]);
   const latestDateByAccount = useMemo(() => {
     const dates = new Map<string, string>();
     const note = (accountId: string, date: string) => {
@@ -482,14 +495,14 @@ export function BankTransactionsPage() {
 
       {/* Account cards: three show at once, the rest scroll sideways. */}
       {showAccountCards && bankAccounts.length > 0 ? (
-        <div className="mb-4 flex snap-x gap-4 overflow-x-auto pb-2 pt-5">
-          {bankAccounts.map((a) => {
+        <div className="mb-4">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {visibleCardAccounts.map((a) => {
             const isSelected = a.id === selectedAccountId;
             const pending = pendingCountByAccount.get(a.id) ?? 0;
             const latest = latestDateByAccount.get(a.id);
             return (
-              <div key={a.id} className="relative w-[calc((100%-2rem)/3)] min-w-[260px] shrink-0 snap-start">
-                <span className="absolute -top-4 right-1 text-xs text-[var(--color-negative)]">{a.code}</span>
+              <div key={a.id}>
                 <div
                   role="button"
                   tabIndex={0}
@@ -540,6 +553,18 @@ export function BankTransactionsPage() {
               </div>
             );
           })}
+        </div>
+        {bankAccounts.length > CARDS_COLLAPSED_COUNT ? (
+          <button
+            type="button"
+            onClick={() => setCardsExpanded((v) => !v)}
+            aria-expanded={cardsExpanded}
+            className="mt-3 flex items-center gap-1 text-sm font-medium text-[var(--color-link-action)] hover:underline"
+          >
+            {cardsExpanded ? "Show fewer accounts" : `Show all ${bankAccounts.length} accounts`}
+            {cardsExpanded ? <ChevronUp className="h-4 w-4" aria-hidden="true" /> : <ChevronDown className="h-4 w-4" aria-hidden="true" />}
+          </button>
+        ) : null}
         </div>
       ) : null}
 
