@@ -29,7 +29,7 @@ function formatDisplayDate(isoDate: string): string {
 }
 
 const CARDS_COLLAPSED_COUNT = 3;
-const CELL = "border-l border-[var(--color-divider-tertiary)] px-3 py-[3px] align-middle text-[13px] leading-tight";
+const CELL = "border-l border-[var(--color-divider-tertiary)] px-[10px] py-0 align-middle text-sm leading-[21px]";
 const PAGE_SIZE = 50;
 
 type DatePreset = "all" | "30d" | "month" | "year";
@@ -66,7 +66,7 @@ function FilterSelect({ value, onChange, children, icon: Icon, label, className 
         aria-label={label}
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="h-10 w-full appearance-none rounded border border-[var(--color-input-border-primary)] bg-[var(--color-input-background)] pl-3 pr-14 text-sm text-[var(--color-input-text)] focus:outline-none focus-visible:border-[var(--override-focus)]"
+        className="h-[38px] w-full appearance-none rounded border border-[var(--color-input-border-primary)] bg-[var(--color-input-background)] pl-3 pr-14 text-sm text-[var(--color-input-text)] focus:outline-none focus-visible:border-[var(--override-focus)]"
       >
         {children}
       </select>
@@ -429,7 +429,7 @@ export function BankTransactionsPage() {
     <>
       {/* QBO's header: breadcrumb with Give feedback on the right, then the
           title with the quick-add and Link account buttons on the right. */}
-      <div className="mb-1 flex items-center justify-between gap-3 text-sm text-[var(--color-text-primary)]">
+      <div className="mb-2 flex items-center justify-between gap-3 text-sm leading-[21px] text-[var(--color-text-primary)]">
         <nav aria-label="Breadcrumb" className="flex items-center gap-1.5">
           <span>Accounting</span>
           <span aria-hidden="true">/</span>
@@ -440,8 +440,8 @@ export function BankTransactionsPage() {
           Give feedback
         </button>
       </div>
-      <div className="mb-2 flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-semibold text-[var(--color-text-global)]">Bank transactions</h1>
+      <div className="mb-[22px] flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-[32px] font-normal leading-10 text-[var(--color-text-global)]">Bank transactions</h1>
         <div className="flex items-center gap-2">
           <QuickAddMenu />
           <div className="flex overflow-hidden rounded-lg">
@@ -456,12 +456,12 @@ export function BankTransactionsPage() {
       </div>
 
       {/* Account header row */}
-      <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-2">
+      <div className="mb-7 flex flex-wrap items-center gap-x-4 gap-y-2">
         <div className="relative" ref={accountMenuRef}>
           <button
             type="button"
             onClick={() => setAccountMenuOpen((v) => !v)}
-            className="flex items-center gap-2.5 rounded-lg px-1 py-0 text-lg font-semibold text-[var(--color-text-global)] hover:bg-[var(--color-action-passive-subtle-hover)]"
+            className="flex items-center gap-2.5 rounded-lg px-1 py-0 text-xl font-semibold leading-[30px] text-[var(--color-text-global)] hover:bg-[var(--color-action-passive-subtle-hover)]"
           >
             <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--color-ui-primary)] text-white">
               <Landmark className="h-4 w-4" aria-hidden="true" />
@@ -584,8 +584,8 @@ export function BankTransactionsPage() {
 
       {/* Account cards: three show at once, the rest scroll sideways. */}
       {showAccountCards && bankAccounts.length > 0 ? (
-        <div className="mb-3">
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <div className="mb-8">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           {visibleCardAccounts.map((a) => {
             const isSelected = a.id === selectedAccountId;
             const pending = pendingCountByAccount.get(a.id) ?? 0;
@@ -603,18 +603,18 @@ export function BankTransactionsPage() {
                     }
                   }}
                   aria-pressed={isSelected}
-                  className={`cursor-pointer rounded-lg border bg-[var(--color-container-background-primary)] px-4 py-2.5 ${
+                  className={`cursor-pointer rounded-lg border bg-[var(--color-container-background-primary)] px-4 py-3 ${
                     isSelected ? "border-2 border-[var(--color-ui-primary)]" : "border-[var(--color-divider-tertiary)] hover:border-[var(--color-icon-secondary)]"
                   }`}
                 >
-                  <div className="mb-1 flex items-center justify-between gap-4">
-                    <span className="truncate text-sm text-[var(--color-text-primary)]">{a.name}</span>
+                  <div className="mb-2 flex items-center justify-between gap-4">
+                    <span className="truncate text-sm leading-[21px] text-[var(--color-text-primary)]">{a.name}</span>
                     <span className="flex h-6 min-w-6 shrink-0 items-center justify-center rounded-full bg-[var(--color-icon-secondary)] px-1.5 text-xs font-semibold text-white">
                       {formatTxnCount(pending)}
                     </span>
                   </div>
                   <div className="flex items-center justify-between gap-3">
-                    <p className="text-lg font-semibold leading-tight text-[var(--color-text-global)]">Bank: {formatMoney(0)}</p>
+                    <p className="text-2xl font-semibold leading-[30px] text-[var(--color-text-global)]">Bank: {formatMoney(0)}</p>
                     {isSelected ? (
                       <button
                         type="button"
@@ -629,7 +629,7 @@ export function BankTransactionsPage() {
                       </button>
                     ) : null}
                   </div>
-                  <div className="mt-1 flex items-center justify-between gap-3 text-sm text-[var(--color-text-primary)]">
+                  <div className="mt-2 flex items-center justify-between gap-3 text-sm leading-[21px] text-[var(--color-text-primary)]">
                     <span>Posted: {formatMoney(a.currentBalance)}</span>
                     {latest ? (
                       <span className="flex items-center gap-1.5 text-xs">
@@ -647,14 +647,14 @@ export function BankTransactionsPage() {
       ) : null}
 
       {/* Tabs + secondary links */}
-      <div className="mb-2 flex flex-wrap items-center justify-between gap-3">
-        <div className="inline-flex gap-1 rounded-lg bg-[var(--color-container-background-accent)] p-1">
+      <div className="mb-8 flex flex-wrap items-center justify-between gap-3">
+        <div className="inline-flex gap-[3px] rounded-md bg-[var(--color-container-background-accent)] p-0.5">
           {TABS.map(({ value, label }) => (
             <button
               key={value}
               type="button"
               onClick={() => setTab(value)}
-              className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+              className={`h-8 rounded-[5px] px-4 text-base transition-colors ${
                 tab === value ? "bg-[var(--color-container-background-primary)] text-[var(--color-text-global)] shadow-sm" : "text-[var(--color-text-primary)] hover:text-[var(--color-text-global)]"
               }`}
             >
@@ -683,10 +683,10 @@ export function BankTransactionsPage() {
 
       {/* Toolbar + table in one bordered panel, laid out like QBO's. */}
       <div className="overflow-hidden rounded-lg border border-[var(--color-divider-tertiary)] bg-[var(--color-container-background-primary)]">
-        <div className="flex flex-wrap items-center justify-between gap-3 px-3 py-2">
+        <div className="flex flex-wrap items-center justify-between gap-3 px-4 pb-5 pt-3">
           <div className="flex flex-wrap items-center gap-3">
             <div className="relative w-[320px] max-w-full">
-              <InputField placeholder="Search" value={search} onChange={(e) => setSearch(e.target.value)} className="h-10 pr-10" />
+              <InputField placeholder="Search" value={search} onChange={(e) => setSearch(e.target.value)} className="h-[38px] pr-10" />
               <Search className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--color-icon-secondary)]" aria-hidden="true" />
             </div>
             <FilterSelect value={datePreset} onChange={(v) => setDatePreset(v as DatePreset)} icon={CalendarDays} label="Filter by date" className="w-[200px]">
@@ -757,7 +757,7 @@ export function BankTransactionsPage() {
         <div className="overflow-x-auto">
           <table className="w-full min-w-[1100px] border-collapse text-sm">
             <thead className="bg-[var(--color-container-background-accent)] text-left text-[var(--color-text-global)]">
-              <tr className="[&>th]:px-3 [&>th]:py-2.5 [&>th]:text-sm [&>th]:font-semibold">
+              <tr className="[&>th]:h-[46px] [&>th]:px-[10px] [&>th]:py-0 [&>th]:text-sm [&>th]:font-semibold">
                 <th className="w-10">
                   <input type="checkbox" disabled aria-label="Select all transactions" />
                 </th>
@@ -792,14 +792,14 @@ export function BankTransactionsPage() {
               </tr>
             ) : (
               pagedTxns.map((txn, index) => (
-                <tr key={txn.id} className={`border-t border-[var(--color-divider-tertiary)] hover:bg-[var(--color-table-row-hover)] ${index % 2 === 1 ? "bg-[var(--color-table-row-secondary)]" : ""}`}>
-                  <td className="px-3 py-[3px] align-middle">
+                <tr key={txn.id} className={`h-[42px] border-t border-[var(--color-divider-tertiary)] hover:bg-[var(--color-table-row-hover)] ${index % 2 === 1 ? "bg-[var(--color-table-row-secondary)]" : ""}`}>
+                  <td className="px-[10px] py-0 align-middle">
                     <input type="checkbox" disabled aria-label="Select transaction" />
                   </td>
-                  <td className={`${CELL} whitespace-nowrap text-[var(--color-text-global)]`}>{formatDisplayDate(txn.date)}</td>
+                  <td className={`${CELL} whitespace-nowrap font-medium text-[var(--color-text-global)]`}>{formatDisplayDate(txn.date)}</td>
                   <td className={CELL}>
                     <span className="block text-[var(--color-text-global)]">{txn.description}</span>
-                    <span className="block text-[11px] uppercase text-[var(--color-negative)]">{txn.description}</span>
+                    <span className="block text-[11px] uppercase leading-[14px] text-[var(--color-negative)]">{txn.description}</span>
                   </td>
                   <td className={`${CELL} text-right text-[var(--color-text-global)]`}>{txn.spent ? formatMoney(txn.spent) : ""}</td>
                   <td className={`${CELL} text-right text-[var(--color-text-global)]`}>{txn.received ? formatMoney(txn.received) : ""}</td>
@@ -813,7 +813,7 @@ export function BankTransactionsPage() {
                       <Plus className="h-4 w-4" aria-hidden="true" />
                     </button>
                   </td>
-                  <td className="border-l border-[var(--color-divider-tertiary)] w-48 px-2 py-[3px] align-middle [&_input]:h-7 [&_input]:border-transparent [&_input]:bg-transparent">
+                  <td className="border-l border-[var(--color-divider-tertiary)] w-48 px-2 py-0 align-middle [&_input]:h-7 [&_input]:border-transparent [&_input]:bg-transparent">
                     {tab === "PENDING" ? (
                       <Select
                         value={txn.payee ?? ""}
@@ -837,7 +837,7 @@ export function BankTransactionsPage() {
                     )}
                   </td>
                   <td className={`${CELL} text-[var(--color-text-global)]`}>Business</td>
-                  <td className="border-l border-[var(--color-divider-tertiary)] w-56 px-2 py-[3px] align-middle [&_input]:h-7 [&_input]:border-transparent [&_input]:bg-transparent">
+                  <td className="border-l border-[var(--color-divider-tertiary)] w-56 px-2 py-0 align-middle [&_input]:h-7 [&_input]:border-transparent [&_input]:bg-transparent">
                     {tab === "PENDING" ? (
                       <div className="flex items-center gap-1.5">
                         {!txn.categoryAccountId ? <TriangleAlert className="h-3.5 w-3.5 shrink-0 text-[var(--color-warning-text)]" aria-hidden="true" /> : null}
@@ -875,7 +875,7 @@ export function BankTransactionsPage() {
             </tbody>
           </table>
         </div>
-        <div className="flex items-center justify-end gap-4 border-t border-[var(--color-divider-tertiary)] px-6 py-2 text-sm text-[var(--color-text-primary)]">
+        <div className="flex items-center justify-end gap-4 border-t border-[var(--color-divider-tertiary)] px-6 py-3 text-sm text-[var(--color-text-primary)]">
           <span>{pageStart}-{pageEnd} of {visibleTxns.length} items</span>
           <button type="button" aria-label="Previous page" disabled={currentPage <= 1} onClick={() => setPage(currentPage - 1)} className="disabled:text-[var(--color-text-disabled)]">
             <ChevronLeft className="h-4 w-4" aria-hidden="true" />
