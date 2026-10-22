@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
-import { ChevronDown, ChevronUp, CreditCard, Landmark, MessageSquarePlus, Pencil, Plus, Printer, RefreshCw, Search, Settings, Share, TriangleAlert } from "lucide-react";
+import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, CreditCard, Landmark, MessageSquarePlus, Paperclip, MessageSquare, Pencil, Plus, Printer, RefreshCw, Search, Settings, Share, TriangleAlert } from "lucide-react";
 import { AddAccountModal } from "@/components/bank-register/add-account-modal";
 import { QuickAddMenu } from "@/components/bank-register/register-header-actions";
 import { Button } from "@/components/ui/button";
@@ -29,6 +29,53 @@ function formatDisplayDate(isoDate: string): string {
 }
 
 const CARDS_COLLAPSED_COUNT = 3;
+const CELL = "border-l border-[var(--color-divider-tertiary)] p-3 align-middle text-[14px]";
+const PAGE_SIZE = 50;
+
+type DatePreset = "all" | "30d" | "month" | "year";
+type StatusFilter = "all" | "categorized" | "uncategorized";
+const DATE_PRESET_LABELS: Record<DatePreset, string> = {
+  all: "All dates",
+  "30d": "Last 30 days",
+  month: "This month",
+  year: "This year"
+};
+
+// Earliest date (YYYY-MM-DD) a preset includes, or null for "all dates".
+function presetStartDate(preset: DatePreset): string | null {
+  const now = new Date();
+  const iso = (d: Date) => d.toISOString().slice(0, 10);
+  if (preset === "30d") return iso(new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000));
+  if (preset === "month") return iso(new Date(Date.UTC(now.getFullYear(), now.getMonth(), 1)));
+  if (preset === "year") return iso(new Date(Date.UTC(now.getFullYear(), 0, 1)));
+  return null;
+}
+
+// A bordered native <select> with QBO's chevron (and an optional leading icon).
+function FilterSelect({ value, onChange, children, icon: Icon, label, className = "" }: {
+  value: string;
+  onChange: (value: string) => void;
+  children: React.ReactNode;
+  icon?: typeof CalendarDays;
+  label: string;
+  className?: string;
+}) {
+  return (
+    <div className={`relative ${className}`}>
+      <select
+        aria-label={label}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="h-10 w-full appearance-none rounded border border-[var(--color-input-border-primary)] bg-[var(--color-input-background)] pl-3 pr-14 text-sm text-[var(--color-input-text)] focus:outline-none focus-visible:border-[var(--override-focus)]"
+      >
+        {children}
+      </select>
+      <span className="pointer-events-none absolute right-3 top-1/2 flex -translate-y-1/2 items-center gap-2 text-[var(--color-icon-secondary)]">
+        {Icon ? <Icon className="h-4 w-4" aria-hidden="true" /> : <ChevronDown className="h-4 w-4" aria-hidden="true" />}
+      </span>
+    </div>
+  );
+}
 
 // QBO's transaction counts cap at "99+".
 function formatTxnCount(count: number): string {
@@ -208,6 +255,36 @@ export function BankTransactionsPage() {
       ),
     [tab, realPostedRows, locallyPostedRows, stagingRowsForTab, search]
   );
+  // QBO's two filter dropdowns and page size. Filters apply on top of the
+  // tab + search above; the page resets whenever any of them change.
+  const [datePreset, setDatePreset] = useState<DatePreset>("all");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [page, setPage] = useState(1);
+  const dateFilteredTxns = useMemo(() => {
+    const from = presetStartDate(datePreset);
+    return from ? filteredTxns.filter((t) => t.date >= from) : filteredTxns;
+  }, [filteredTxns, datePreset]);
+  const statusCounts = useMemo(
+    () => ({
+      all: dateFilteredTxns.length,
+      categorized: dateFilteredTxns.filter((t) => Boolean(t.categoryAccountId || t.categoryLabel)).length,
+      uncategorized: dateFilteredTxns.filter((t) => !t.categoryAccountId && !t.categoryLabel).length
+    }),
+    [dateFilteredTxns]
+  );
+  const visibleTxns = useMemo(
+    () =>
+      statusFilter === "all"
+        ? dateFilteredTxns
+        : dateFilteredTxns.filter((t) => Boolean(t.categoryAccountId || t.categoryLabel) === (statusFilter === "categorized")),
+    [dateFilteredTxns, statusFilter]
+  );
+  const totalPages = Math.max(1, Math.ceil(visibleTxns.length / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const pageStart = visibleTxns.length === 0 ? 0 : (currentPage - 1) * PAGE_SIZE + 1;
+  const pageEnd = Math.min(currentPage * PAGE_SIZE, visibleTxns.length);
+  const pagedTxns = useMemo(() => visibleTxns.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE), [visibleTxns, currentPage]);
+  useEffect(() => setPage(1), [tab, search, datePreset, statusFilter, selectedAccountId]);
   const tabCounts = useMemo(
     () => ({
       PENDING: accountTxns.filter((t) => t.status === "PENDING").length,
@@ -584,21 +661,7 @@ export function BankTransactionsPage() {
             </button>
           ))}
         </div>
-        <Link
-          href={selectedAccountId ? `/register?accountId=${selectedAccountId}` : "/register"}
-          className="text-sm font-medium text-[var(--color-link-action)] hover:underline"
-        >
-          Go to bank register
-        </Link>
-      </div>
-
-      {/* Toolbar */}
-      <div className="mb-2 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="relative w-48">
-            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--color-icon-secondary)]" aria-hidden="true" />
-            <InputField placeholder="Search" value={search} onChange={(e) => setSearch(e.target.value)} className="pl-8" />
-          </div>
+        <div className="flex flex-wrap items-center gap-3">
           <Button variant="secondary" size="sm" onClick={() => setShowAddForm((v) => !v)}>
             <Plus className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
             {showAddForm ? "Cancel" : "Add transaction"}
@@ -609,16 +672,64 @@ export function BankTransactionsPage() {
             </Button>
           ) : null}
         </div>
-        <div className="flex items-center gap-3">
-          <span className="text-sm text-[var(--color-text-primary)]">{filteredTxns.length ? `1-${filteredTxns.length} of ${filteredTxns.length}` : "0 of 0"}</span>
-          <IconButton icon={Printer} label="Print" size="sm" />
-          <IconButton icon={Share} label="Export" size="sm" />
-          <IconButton icon={Settings} label="Settings" size="sm" />
-        </div>
+        <Link
+          href={selectedAccountId ? `/register?accountId=${selectedAccountId}` : "/register"}
+          className="text-sm font-medium text-[var(--color-link-action)] hover:underline"
+        >
+          Go to bank register
+        </Link>
       </div>
 
+      {/* Toolbar + table in one bordered panel, laid out like QBO's. */}
+      <div className="overflow-hidden rounded-lg border border-[var(--color-divider-tertiary)] bg-[var(--color-container-background-primary)]">
+        <div className="flex flex-wrap items-center justify-between gap-3 p-4">
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="relative w-[320px] max-w-full">
+              <InputField placeholder="Search" value={search} onChange={(e) => setSearch(e.target.value)} className="h-10 pr-10" />
+              <Search className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--color-icon-secondary)]" aria-hidden="true" />
+            </div>
+            <FilterSelect value={datePreset} onChange={(v) => setDatePreset(v as DatePreset)} icon={CalendarDays} label="Filter by date" className="w-[200px]">
+              {(Object.keys(DATE_PRESET_LABELS) as DatePreset[]).map((key) => (
+                <option key={key} value={key}>{DATE_PRESET_LABELS[key]}</option>
+              ))}
+            </FilterSelect>
+            <FilterSelect value={statusFilter} onChange={(v) => setStatusFilter(v as StatusFilter)} label="Filter transactions" className="w-[240px]">
+              <option value="all">All transactions ({statusCounts.all})</option>
+              <option value="categorized">Categorized ({statusCounts.categorized})</option>
+              <option value="uncategorized">Uncategorized ({statusCounts.uncategorized})</option>
+            </FilterSelect>
+          </div>
+          <div className="flex flex-wrap items-center gap-4 text-sm text-[var(--color-text-primary)]">
+            <span>{pageStart}-{pageEnd} of {visibleTxns.length}</span>
+            <span className="flex items-center gap-2">
+              <button type="button" aria-label="Previous page" disabled={currentPage <= 1} onClick={() => setPage(currentPage - 1)} className="disabled:text-[var(--color-text-disabled)]">
+                <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+              </button>
+              Page
+              <input
+                type="number"
+                min={1}
+                max={totalPages}
+                value={currentPage}
+                onChange={(event) => setPage(Math.min(totalPages, Math.max(1, Number(event.target.value) || 1)))}
+                aria-label="Page number"
+                className="h-9 w-12 rounded border border-[var(--color-input-border-primary)] bg-[var(--color-input-background)] text-center text-[var(--color-input-text)]"
+              />
+              of {totalPages}
+              <button type="button" aria-label="Next page" disabled={currentPage >= totalPages} onClick={() => setPage(currentPage + 1)} className="disabled:text-[var(--color-text-disabled)]">
+                <ChevronRight className="h-4 w-4" aria-hidden="true" />
+              </button>
+            </span>
+            <span className="flex items-center gap-3 text-[var(--color-icon-secondary)]">
+              <IconButton icon={Printer} label="Print" size="sm" />
+              <IconButton icon={Share} label="Export" size="sm" />
+              <IconButton icon={Settings} label="Settings" size="sm" />
+            </span>
+          </div>
+        </div>
+
       {showAddForm ? (
-        <div ref={addFormRef} className="mb-3 rounded-lg border border-[var(--color-divider-tertiary)] p-4">
+        <div ref={addFormRef} className="mx-4 mb-3 rounded-lg border border-[var(--color-divider-tertiary)] p-4">
           <form onSubmit={handleAdd} className="flex flex-wrap items-end gap-3">
             <div className="w-36">
               <InputField label="Date" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
@@ -642,56 +753,66 @@ export function BankTransactionsPage() {
         </div>
       ) : null}
 
-      {/* Table -- styled to match /register's table (tailwind-overrides.css
-          .header-table/.content-table classes): primary-background header
-          with a 2px bottom divider and 12px uppercase/semibold labels,
-          13px body cells with dotted column dividers, row hover using the
-          same --color-table-row-hover token. Kept as its own hand-rolled
-          <table> rather than migrated to ui/table.tsx since /register
-          itself (the style being matched here) predates and doesn't use
-          that shared component either. */}
-      <div className="tw-override overflow-auto rounded-lg border border-[var(--color-divider-tertiary)]">
-        <table className="w-full min-w-[1000px] border-collapse text-sm">
-          <thead className="header-table text-left uppercase tracking-wide">
-            <tr>
-              <th className="w-10 px-2 pb-[5px] pt-2 text-left align-middle">
-                <input type="checkbox" disabled />
-              </th>
-              <th className="border-l-custom px-2 pb-[5px] pt-2 text-left align-middle">
-                <span className="inline-flex items-center gap-1">Date <ChevronDown className="h-3 w-3" aria-hidden="true" /></span>
-              </th>
-              <th className="border-l-custom px-2 pb-[5px] pt-2 text-left align-middle">Bank description</th>
-              <th className="border-l-custom px-2 pb-[5px] pt-2 text-right align-middle">Spent</th>
-              <th className="border-l-custom px-2 pb-[5px] pt-2 text-right align-middle">Received</th>
-              <th className="border-l-custom px-2 pb-[5px] pt-2 text-left align-middle">From/To</th>
-              <th className="border-l-custom px-2 pb-[5px] pt-2 text-left align-middle">Match/Categorize</th>
-              <th className="border-l-custom px-2 pb-[5px] pt-2 text-right align-middle">Action</th>
-            </tr>
-          </thead>
-          <tbody className="content-table">
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[1100px] border-collapse text-sm">
+            <thead className="bg-[var(--color-container-background-accent)] text-left text-[var(--color-text-global)]">
+              <tr className="[&>th]:px-3 [&>th]:py-4 [&>th]:text-[15px] [&>th]:font-semibold">
+                <th className="w-10">
+                  <input type="checkbox" disabled aria-label="Select all transactions" />
+                </th>
+                <th className="w-32 border-l border-[var(--color-divider-tertiary)]">Date</th>
+                <th className="min-w-[220px] border-l border-[var(--color-divider-tertiary)]">Bank description</th>
+                <th className="w-28 border-l border-[var(--color-divider-tertiary)] text-right">Spent</th>
+                <th className="w-28 border-l border-[var(--color-divider-tertiary)] text-right">Received</th>
+                <th className="w-14 border-l border-[var(--color-divider-tertiary)] text-center" aria-label="Attachments">
+                  <Paperclip className="mx-auto h-4 w-4" aria-hidden="true" />
+                </th>
+                <th className="w-14 border-l border-[var(--color-divider-tertiary)] text-center" aria-label="Comments">
+                  <MessageSquare className="mx-auto h-4 w-4" aria-hidden="true" />
+                </th>
+                <th className="border-l border-[var(--color-divider-tertiary)]">From/To</th>
+                <th className="w-28 border-l border-[var(--color-divider-tertiary)]">Purpose</th>
+                <th className="border-l border-[var(--color-divider-tertiary)]">Match/Categorize</th>
+                <th className="w-28 border-l-2 border-[var(--color-divider-tertiary)] text-right">Action</th>
+              </tr>
+            </thead>
+            <tbody>
             {!hydrated ? (
               <tr>
-                <td colSpan={8} className="px-3 py-6 text-center text-sm text-[var(--color-text-primary)]">
+                <td colSpan={11} className="px-3 py-6 text-center text-sm text-[var(--color-text-primary)]">
                   Loading…
                 </td>
               </tr>
-            ) : filteredTxns.length === 0 ? (
+            ) : visibleTxns.length === 0 ? (
               <tr>
-                <td colSpan={8} className="px-3 py-6 text-center text-sm text-[var(--color-text-disabled)]">
+                <td colSpan={11} className="px-3 py-6 text-center text-sm text-[var(--color-text-disabled)]">
                   No {tab.toLowerCase()} transactions.
                 </td>
               </tr>
             ) : (
-              filteredTxns.map((txn) => (
-                <tr key={txn.id} className="border-t border-[var(--color-divider-tertiary)] hover:bg-[var(--color-table-row-hover)]">
-                  <td className="p-2 align-top">
-                    <input type="checkbox" disabled />
+              pagedTxns.map((txn, index) => (
+                <tr key={txn.id} className={`border-t border-[var(--color-divider-tertiary)] hover:bg-[var(--color-table-row-hover)] ${index % 2 === 1 ? "bg-[var(--color-table-row-secondary)]" : ""}`}>
+                  <td className="p-3 align-middle">
+                    <input type="checkbox" disabled aria-label="Select transaction" />
                   </td>
-                  <td className="border-l border-l-dotted border-l-[var(--color-divider-tertiary)] p-2 align-top text-[13px] text-[var(--color-text-primary)]">{txn.date}</td>
-                  <td className="border-l border-l-dotted border-l-[var(--color-divider-tertiary)] p-2 align-top text-[13px] text-[var(--color-text-primary)]">{txn.description}</td>
-                  <td className="border-l border-l-dotted border-l-[var(--color-divider-tertiary)] p-2 align-top text-right text-[13px] text-[var(--color-text-global)]">{txn.spent ? formatMoney(txn.spent) : ""}</td>
-                  <td className="border-l border-l-dotted border-l-[var(--color-divider-tertiary)] p-2 align-top text-right text-[13px] text-[var(--color-text-global)]">{txn.received ? formatMoney(txn.received) : ""}</td>
-                  <td className="border-l border-l-dotted border-l-[var(--color-divider-tertiary)] w-44 p-2 align-top">
+                  <td className={`${CELL} whitespace-nowrap text-[var(--color-text-global)]`}>{formatDisplayDate(txn.date)}</td>
+                  <td className={CELL}>
+                    <span className="block text-[var(--color-text-global)]">{txn.description}</span>
+                    <span className="block text-[11px] uppercase text-[var(--color-negative)]">{txn.description}</span>
+                  </td>
+                  <td className={`${CELL} text-right text-[var(--color-text-global)]`}>{txn.spent ? formatMoney(txn.spent) : ""}</td>
+                  <td className={`${CELL} text-right text-[var(--color-text-global)]`}>{txn.received ? formatMoney(txn.received) : ""}</td>
+                  <td className={`${CELL} text-center`}>
+                    <button type="button" disabled title="Attachments aren't available yet" className="cursor-not-allowed text-[var(--color-icon-secondary)]">
+                      <Plus className="h-4 w-4" aria-hidden="true" />
+                    </button>
+                  </td>
+                  <td className={`${CELL} text-center`}>
+                    <button type="button" disabled title="Comments aren't available yet" className="cursor-not-allowed text-[var(--color-icon-secondary)]">
+                      <Plus className="h-4 w-4" aria-hidden="true" />
+                    </button>
+                  </td>
+                  <td className="border-l border-[var(--color-divider-tertiary)] w-48 p-2 align-middle">
                     {tab === "PENDING" ? (
                       <Select
                         value={txn.payee ?? ""}
@@ -714,7 +835,8 @@ export function BankTransactionsPage() {
                       <span className="text-[13px] text-[var(--color-text-primary)]">{txn.payee || "--"}</span>
                     )}
                   </td>
-                  <td className="border-l border-l-dotted border-l-[var(--color-divider-tertiary)] w-52 p-2 align-top">
+                  <td className={`${CELL} text-[var(--color-text-global)]`}>Business</td>
+                  <td className="border-l border-[var(--color-divider-tertiary)] w-56 p-2 align-middle">
                     {tab === "PENDING" ? (
                       <div className="flex items-center gap-1.5">
                         {!txn.categoryAccountId ? <TriangleAlert className="h-3.5 w-3.5 shrink-0 text-[var(--color-warning-text)]" aria-hidden="true" /> : null}
@@ -731,7 +853,7 @@ export function BankTransactionsPage() {
                       <span className="text-[13px] text-[var(--color-text-primary)]">{txn.categoryLabel ?? "--"}</span>
                     )}
                   </td>
-                  <td className="border-l border-l-dotted border-l-[var(--color-divider-tertiary)] p-2 align-top text-right">
+                  <td className="border-l border-[var(--color-divider-tertiary)] p-2 align-middle text-right">
                     {tab === "PENDING" ? (
                       <PendingRowActions
                         txn={txn}
@@ -749,8 +871,19 @@ export function BankTransactionsPage() {
                 </tr>
               ))
             )}
-          </tbody>
-        </table>
+            </tbody>
+          </table>
+        </div>
+        <div className="flex items-center justify-end gap-4 border-t border-[var(--color-divider-tertiary)] px-6 py-4 text-sm text-[var(--color-text-primary)]">
+          <span>{pageStart}-{pageEnd} of {visibleTxns.length} items</span>
+          <button type="button" aria-label="Previous page" disabled={currentPage <= 1} onClick={() => setPage(currentPage - 1)} className="disabled:text-[var(--color-text-disabled)]">
+            <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+          </button>
+          <span className="rounded bg-[var(--color-container-background-accent)] px-2.5 py-1 font-medium text-[var(--color-text-global)]">{currentPage}</span>
+          <button type="button" aria-label="Next page" disabled={currentPage >= totalPages} onClick={() => setPage(currentPage + 1)} className="disabled:text-[var(--color-text-disabled)]">
+            <ChevronRight className="h-4 w-4" aria-hidden="true" />
+          </button>
+        </div>
       </div>
       <AddAccountModal
         open={editingAccount !== null}
