@@ -29,6 +29,7 @@
   --color-container-background-primary: #FFFFFF;
   --color-container-background-secondary: #ECEEF1;
   --color-container-background-accent: #F4F5F8;
+  --color-segmented-background: #E2E9ED;
   --color-divider-tertiary: #D4D7DC;
   --color-container-border-secondary: #BABEC5;
   --color-action-standard: #00892E;
@@ -119,6 +120,7 @@
   --color-container-background-primary: #1e2124;
   --color-container-background-secondary: #2a2d31;
   --color-container-background-accent: #25282c;
+  --color-segmented-background: #33383d;
   --color-divider-tertiary: #3c4043;
   --color-container-border-secondary: #5f6368;
   --color-container-border-primary: #5f6368;

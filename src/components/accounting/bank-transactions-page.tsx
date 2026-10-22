@@ -648,17 +648,19 @@ export function BankTransactionsPage() {
 
       {/* Tabs + secondary links */}
       <div className="mb-8 flex flex-wrap items-center justify-between gap-3">
-        <div className="inline-flex gap-[3px] rounded-md bg-[var(--color-container-background-accent)] p-0.5">
+        <div className="inline-flex gap-[3px] rounded-md bg-[var(--color-segmented-background)] p-0.5">
           {TABS.map(({ value, label }) => (
             <button
               key={value}
               type="button"
               onClick={() => setTab(value)}
-              className={`h-8 rounded-[5px] px-4 text-base transition-colors ${
+              className={`h-8 min-w-[100px] rounded-[5px] px-4 text-center text-base transition-colors ${
                 tab === value ? "bg-[var(--color-container-background-primary)] text-[var(--color-text-global)] shadow-sm" : "text-[var(--color-text-primary)] hover:text-[var(--color-text-global)]"
               }`}
             >
-              {label} {tabCounts[value] ? `(${tabCounts[value]})` : ""}
+              {/* QBO only counts Pending; Posted/Excluded stay bare. */}
+              {label}
+              {value === "PENDING" && tabCounts.PENDING ? ` (${tabCounts.PENDING})` : ""}
             </button>
           ))}
         </div>
