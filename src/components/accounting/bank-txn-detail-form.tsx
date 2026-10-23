@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRef, useState } from "react";
 import { X } from "lucide-react";
+import { BankTxnSuggestions } from "@/components/accounting/bank-txn-suggestions";
 import { Button } from "@/components/ui/button";
 import { INPUT_BASE_CLASSES } from "@/components/ui/input-field";
 import { Select } from "@/components/ui/select";
@@ -84,16 +85,20 @@ export function BankTxnDetailForm({ txn, payeeOptions, accountOptions, onChange,
           </button>
         </div>
         <div className="flex items-center gap-6">
-          <span className="flex items-center gap-2 text-sm text-[var(--color-text-primary)]">
-            Show suggestions
-            <Switch checked={showSuggestions} onChange={setShowSuggestions} label="Show suggestions" />
-          </span>
+          {!showSuggestions ? (
+            <span className="flex items-center gap-2 text-sm text-[var(--color-text-primary)]">
+              Show suggestions
+              <Switch checked={showSuggestions} onChange={setShowSuggestions} label="Show suggestions" />
+            </span>
+          ) : null}
           <button type="button" onClick={onClose} aria-label="Close" className="text-[var(--color-icon-secondary)] hover:text-[var(--color-text-global)]">
             <X className="h-5 w-5" aria-hidden="true" />
           </button>
         </div>
       </div>
 
+      <div className={showSuggestions ? "grid gap-0 lg:grid-cols-2" : ""}>
+        <div className={showSuggestions ? "pr-8" : ""}>
       <p className="text-sm text-[var(--color-text-primary)]">Full Bank Description</p>
       <button
         type="button"
@@ -102,7 +107,6 @@ export function BankTxnDetailForm({ txn, payeeOptions, accountOptions, onChange,
       >
         {txn.description}
       </button>
-      {showSuggestions ? <p className="-mt-2 mb-4 text-sm text-[var(--color-icon-secondary)]">No suggestions for this transaction yet.</p> : null}
 
       <div className="mb-5 flex flex-wrap gap-4">
         <div>
@@ -141,6 +145,15 @@ export function BankTxnDetailForm({ txn, payeeOptions, accountOptions, onChange,
           </div>
         </div>
       </div>
+      {/* QBO offers Product/Service on money-in rows (sales/deposits). */}
+      {direction === "in" ? (
+        <div className="mb-5">
+          <span className={LABEL}>Product/Service</span>
+          <div className={FIELD}>
+            <Select value="" onChange={() => undefined} options={[]} placeholder="Select product/service" allowCustomValue={false} disabled />
+          </div>
+        </div>
+      ) : null}
 
       <div className="mb-5 flex flex-wrap items-start gap-8">
         <div className="w-[545px] max-w-full">
@@ -182,6 +195,23 @@ export function BankTxnDetailForm({ txn, payeeOptions, accountOptions, onChange,
         <button type="button" onClick={onExclude} className="px-1 text-sm text-[var(--color-text-global)] hover:underline">
           Exclude
         </button>
+      </div>
+        </div>
+        {showSuggestions ? (
+          <div className="border-l border-[var(--color-divider-tertiary)] pl-8">
+            <div className="mb-4 flex items-center gap-2 text-sm text-[var(--color-text-primary)]">
+              Show suggestions
+              <Switch checked={showSuggestions} onChange={setShowSuggestions} label="Show suggestions" />
+            </div>
+            <BankTxnSuggestions
+              txn={txn}
+              accountOptions={accountOptions}
+              payeeOptions={payeeOptions}
+              onApplyAccount={(accountId) => onChange({ categoryAccountId: accountId })}
+              onApplyPayee={(name) => onChange({ payee: name })}
+            />
+          </div>
+        ) : null}
       </div>
     </div>
   );

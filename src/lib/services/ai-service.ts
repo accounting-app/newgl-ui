@@ -67,6 +67,8 @@ export type CategorizationSuggestion = {
   accountId: string | null;
   confidence: number | null;
   resolvedBy: "rule" | "ai";
+  /** One-line "why" for the suggestion; absent/null from older responses. */
+  reason?: string | null;
 };
 
 type CategorizeResponse = {
