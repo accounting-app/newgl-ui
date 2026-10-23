@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRef, useState } from "react";
 import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { INPUT_BASE_CLASSES } from "@/components/ui/input-field";
@@ -36,13 +37,34 @@ type BankTxnDetailFormProps = {
   onClose: () => void;
 };
 
-const LABEL = "mb-1 block text-sm text-[var(--color-text-primary)]";
+const LABEL = "mb-1 block text-sm leading-[21px] text-[var(--color-text-primary)]";
+// QBO's form controls are 32px tall and ~215px wide (memo ~545px); the shared
+// Select renders at 36px, so its input is trimmed inside these wrappers.
+const FIELD = "w-[215px] [&_input]:h-8";
+
+// A pill switch (role=switch) -- QBO's "Show suggestions" control.
+function Switch({ checked, onChange, label }: { checked: boolean; onChange: (checked: boolean) => void; label: string }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={label}
+      onClick={() => onChange(!checked)}
+      className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${checked ? "bg-[var(--color-ui-primary)]" : "bg-[var(--color-icon-muted)]"}`}
+    >
+      <span className={`absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${checked ? "translate-x-4" : ""}`} />
+    </button>
+  );
+}
 
 // The panel that opens under a pending row (QBO's "Categorize" form): every
 // field here edits the same staged row the table cells do, so the two stay in
 // step. Match, Split, Product/Service and Files are shown but disabled until
 // those features exist.
 export function BankTxnDetailForm({ txn, payeeOptions, accountOptions, onChange, onAddPayee, onPost, onExclude, onClose }: BankTxnDetailFormProps) {
+  const memoRef = useRef<HTMLTextAreaElement>(null);
+  const [showSuggestions, setShowSuggestions] = useState(false);
   const direction = txn.received ? "in" : "out";
   const txnTypeOptions: SelectOption[] =
     direction === "in"
@@ -51,7 +73,7 @@ export function BankTxnDetailForm({ txn, payeeOptions, accountOptions, onChange,
   const txnType = txn.txnType ?? (direction === "in" ? "Deposit" : "Expense");
 
   return (
-    <div className="border-t border-[var(--color-divider-tertiary)] bg-[var(--color-container-background-accent)] px-4 pb-5 pt-4">
+    <div className="border-t border-[var(--color-divider-tertiary)] bg-[var(--color-container-background-accent)] px-7 pb-5 pt-4">
       <div className="mb-4 flex items-start justify-between gap-4">
         <div className="inline-flex gap-0.5 rounded-md bg-[var(--color-segmented-background)] p-0.5 text-sm">
           <button type="button" disabled title="Matching to existing transactions isn't available yet" className="h-7 cursor-not-allowed rounded-[5px] px-3 text-[var(--color-text-disabled)]">
@@ -62,10 +84,10 @@ export function BankTxnDetailForm({ txn, payeeOptions, accountOptions, onChange,
           </button>
         </div>
         <div className="flex items-center gap-6">
-          <label className="flex cursor-not-allowed items-center gap-2 text-sm text-[var(--color-text-disabled)]" title="Suggestions aren't available yet">
+          <span className="flex items-center gap-2 text-sm text-[var(--color-text-primary)]">
             Show suggestions
-            <input type="checkbox" disabled role="switch" aria-label="Show suggestions" />
-          </label>
+            <Switch checked={showSuggestions} onChange={setShowSuggestions} label="Show suggestions" />
+          </span>
           <button type="button" onClick={onClose} aria-label="Close" className="text-[var(--color-icon-secondary)] hover:text-[var(--color-text-global)]">
             <X className="h-5 w-5" aria-hidden="true" />
           </button>
@@ -73,52 +95,81 @@ export function BankTxnDetailForm({ txn, payeeOptions, accountOptions, onChange,
       </div>
 
       <p className="text-sm text-[var(--color-text-primary)]">Full Bank Description</p>
-      <p className="mb-4 text-sm font-medium text-[var(--color-text-global)] underline">{txn.description}</p>
+      <button
+        type="button"
+        onClick={() => memoRef.current?.focus()}
+        className="mb-4 text-left text-sm font-medium leading-[21px] text-[var(--color-text-global)] underline"
+      >
+        {txn.description}
+      </button>
+      {showSuggestions ? <p className="-mt-2 mb-4 text-sm text-[var(--color-icon-secondary)]">No suggestions for this transaction yet.</p> : null}
 
-      <div className="mb-4 grid max-w-[760px] grid-cols-1 gap-4 sm:grid-cols-2">
+      <div className="mb-5 flex flex-wrap gap-4">
         <div>
           <span className={LABEL}>Transaction type</span>
-          <Select value={txnType} onChange={(v) => onChange({ txnType: v as PendingBankTxn["txnType"] })} options={txnTypeOptions} placeholder="Type" allowCustomValue={false} />
+          <div className={FIELD}>
+            <Select value={txnType} onChange={(v) => onChange({ txnType: v as PendingBankTxn["txnType"] })} options={txnTypeOptions} placeholder="Type" allowCustomValue={false} />
+          </div>
         </div>
         <div>
           <span className={LABEL}>Purpose</span>
-          <Select value={txn.purpose ?? "BUSINESS"} onChange={(v) => onChange({ purpose: v as PendingBankTxn["purpose"] })} options={PURPOSE_OPTIONS} placeholder="Purpose" allowCustomValue={false} />
+          <div className={FIELD}>
+            <Select value={txn.purpose ?? "BUSINESS"} onChange={(v) => onChange({ purpose: v as PendingBankTxn["purpose"] })} options={PURPOSE_OPTIONS} placeholder="Purpose" allowCustomValue={false} />
+          </div>
         </div>
       </div>
 
-      <div className="mb-4 grid max-w-[1140px] grid-cols-1 gap-4 sm:grid-cols-3">
+      <div className="mb-5 flex flex-wrap gap-4">
         <div>
           <span className={LABEL}>From/To</span>
-          <Select
-            value={txn.payee ?? ""}
-            onChange={(v) => onChange({ payee: v || undefined })}
-            options={payeeOptions}
-            placeholder={direction === "in" ? "Select customer" : "Select vendor"}
-            allowCustomValue={false}
-            onAddNew={onAddPayee}
-            addNewLabel="+ Add new"
-          />
+          <div className={FIELD}>
+            <Select
+              value={txn.payee ?? ""}
+              onChange={(v) => onChange({ payee: v || undefined })}
+              options={payeeOptions}
+              placeholder={direction === "in" ? "Select customer" : "Select vendor"}
+              allowCustomValue={false}
+              onAddNew={onAddPayee}
+              addNewLabel="+ Add new"
+            />
+          </div>
         </div>
         <div>
           <span className={LABEL}>Account</span>
-          <Select value={txn.categoryAccountId ?? ""} onChange={(v) => onChange({ categoryAccountId: v || undefined })} options={accountOptions} placeholder="Select category" allowCustomValue={false} />
+          <div className={FIELD}>
+            <Select value={txn.categoryAccountId ?? ""} onChange={(v) => onChange({ categoryAccountId: v || undefined })} options={accountOptions} placeholder="Select category" allowCustomValue={false} />
+          </div>
         </div>
-        <div>
-          <span className={LABEL}>Product/Service</span>
-          <Select value="" onChange={() => undefined} options={[]} placeholder="Select product/service" allowCustomValue={false} disabled />
-        </div>
+        {/* QBO only offers Product/Service when money comes in (a deposit/sale). */}
+        {direction === "in" ? (
+          <div>
+            <span className={LABEL}>Product/Service</span>
+            <div className={FIELD}>
+              <Select value="" onChange={() => undefined} options={[]} placeholder="Select product/service" allowCustomValue={false} disabled />
+            </div>
+          </div>
+        ) : null}
       </div>
 
       <div className="mb-5 flex flex-wrap items-start gap-8">
-        <div className="min-w-[320px] max-w-[760px] flex-1">
+        <div className="w-[545px] max-w-full">
           <label className={LABEL} htmlFor={`memo-${txn.id}`}>Memo</label>
+          <a
+            href={`https://www.google.com/search?q=${encodeURIComponent(txn.description)}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mb-1 block text-sm font-semibold leading-[21px] text-[var(--color-negative)] hover:underline"
+          >
+            Google Memo
+          </a>
           <textarea
+            ref={memoRef}
             id={`memo-${txn.id}`}
-            rows={4}
+            rows={3}
             value={txn.memo ?? ""}
             placeholder={txn.description}
             onChange={(event) => onChange({ memo: event.target.value })}
-            className={`${INPUT_BASE_CLASSES} resize-y rounded p-3 text-sm`}
+            className={`${INPUT_BASE_CLASSES} h-20 resize-y rounded px-3 py-2 text-sm`}
           />
         </div>
         <div>
@@ -130,14 +181,14 @@ export function BankTxnDetailForm({ txn, payeeOptions, accountOptions, onChange,
       </div>
 
       <div className="flex flex-wrap items-center gap-4">
-        <Button onClick={onPost}>Post</Button>
-        <Button variant="secondary" disabled title="Splitting one transaction across several categories isn't available yet">
+        <Button size="sm" onClick={onPost}>Post</Button>
+        <Button size="sm" variant="secondary" disabled title="Splitting one transaction across several categories isn't available yet">
           Split
         </Button>
-        <Link href="/all-apps/bank-rules" className="px-1 text-base text-[var(--color-text-global)] hover:underline">
+        <Link href="/all-apps/bank-rules" className="px-1 text-sm text-[var(--color-text-global)] hover:underline">
           Create rule
         </Link>
-        <button type="button" onClick={onExclude} className="px-1 text-base text-[var(--color-text-global)] hover:underline">
+        <button type="button" onClick={onExclude} className="px-1 text-sm text-[var(--color-text-global)] hover:underline">
           Exclude
         </button>
       </div>
