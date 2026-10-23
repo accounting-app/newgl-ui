@@ -2,7 +2,7 @@
 
 import { Fragment, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
-import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, CreditCard, Landmark, MessageSquarePlus, Paperclip, MessageSquare, Pencil, Plus, Printer, RefreshCw, Search, Settings, Share } from "lucide-react";
+import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, CreditCard, Landmark, MessageSquarePlus, Paperclip, MessageSquare, Pencil, Plus, Printer, RefreshCw, Search, Settings, Share, X } from "lucide-react";
 import { BankTxnDetailForm, PURPOSE_OPTIONS } from "@/components/accounting/bank-txn-detail-form";
 import { CategorySuggestionMarker, PayeeSuggestionMarker } from "@/components/accounting/bank-txn-row-suggestion";
 import { suggestionKey, useStoredSuggestions } from "@/lib/bank-txn-suggestions-store";
@@ -112,6 +112,8 @@ type DisplayRow = {
   memo?: string;
   payeeKind?: PendingBankTxn["payeeKind"];
   txnType?: PendingBankTxn["txnType"];
+  postedTransactionId?: string;
+  postedType?: string;
   /** True for local-only staging rows (deletable); false/undefined for real transactions (not something this Phase-1 screen can delete). */
   isLocal?: boolean;
 };
@@ -235,7 +237,9 @@ export function BankTransactionsPage() {
           received: increases ? ownPosting.amount : undefined,
           spent: !increases ? ownPosting.amount : undefined,
           payee: txn.payee,
-          categoryLabel: otherPostings.length > 1 ? "Split" : otherAccount?.name
+          categoryLabel: otherPostings.length > 1 ? "Split" : otherAccount?.name,
+          postedTransactionId: txn.id,
+          postedType: txn.type.charAt(0) + txn.type.slice(1).toLowerCase().replaceAll("_", " ")
         };
       })
       .sort((a, b) => b.date.localeCompare(a.date));
@@ -257,12 +261,18 @@ export function BankTransactionsPage() {
         .map((t) => ({ ...t, categoryLabel: t.categoryAccountId ? accountById.get(t.categoryAccountId)?.name : undefined, isLocal: true })),
     [accountTxns, accountById]
   );
+  // A staged row that Post turned into a real transaction would otherwise show
+  // twice (as itself and as that transaction): keep the staged one, which has Undo.
+  const postedRows = useMemo(() => {
+    const stagedIds = new Set(locallyPostedRows.map((r) => r.postedTransactionId).filter(Boolean));
+    return [...realPostedRows.filter((r) => !stagedIds.has(r.id)), ...locallyPostedRows].sort((a, b) => b.date.localeCompare(a.date));
+  }, [realPostedRows, locallyPostedRows]);
   const filteredTxns = useMemo(
     () =>
-      (tab === "POSTED" ? [...realPostedRows, ...locallyPostedRows] : stagingRowsForTab).filter(
+      (tab === "POSTED" ? postedRows : stagingRowsForTab).filter(
         (t) => search.trim() === "" || t.description.toLowerCase().includes(search.trim().toLowerCase())
       ),
-    [tab, realPostedRows, locallyPostedRows, stagingRowsForTab, search]
+    [tab, postedRows, stagingRowsForTab, search]
   );
   // QBO's two filter dropdowns and page size. Filters apply on top of the
   // tab + search above; the page resets whenever any of them change.
@@ -294,13 +304,17 @@ export function BankTransactionsPage() {
   const pageEnd = Math.min(currentPage * PAGE_SIZE, visibleTxns.length);
   const pagedTxns = useMemo(() => visibleTxns.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE), [visibleTxns, currentPage]);
   useEffect(() => setPage(1), [tab, search, datePreset, statusFilter, selectedAccountId]);
+  useEffect(() => {
+    setSelectedIds(new Set());
+    setExpandedId(null);
+  }, [tab, selectedAccountId]);
   const tabCounts = useMemo(
     () => ({
       PENDING: accountTxns.filter((t) => t.status === "PENDING").length,
-      POSTED: realPostedRows.length + locallyPostedRows.length,
+      POSTED: postedRows.length,
       EXCLUDED: accountTxns.filter((t) => t.status === "EXCLUDED").length
     }),
-    [accountTxns, realPostedRows, locallyPostedRows]
+    [accountTxns, postedRows]
   );
 
   // Collapsed: the first three, but the selected account is always shown
@@ -345,6 +359,8 @@ export function BankTransactionsPage() {
   const [addPayeePrefill, setAddPayeePrefill] = useState<{ name: string; website: string | null } | null>(null);
   const storedSuggestions = useStoredSuggestions();
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  // Ticked rows (by id) drive the bar at the bottom: Post/Exclude on Pending, Undo on Posted.
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
 
   const [showAddForm, setShowAddForm] = useState(false);
   const today = new Date().toISOString().slice(0, 10);
@@ -428,17 +444,84 @@ export function BankTransactionsPage() {
 
   // Only staged Pending rows open the Categorize form (posted rows are history).
   function canExpand(txn: DisplayRow): boolean {
-    return tab === "PENDING" && Boolean(txn.isLocal);
+    return tab === "POSTED" || (tab === "PENDING" && Boolean(txn.isLocal));
   }
   const stopRowClick = (event: React.MouseEvent) => event.stopPropagation();
 
-  function handlePost(txn: DisplayRow) {
-    if (!txn.categoryAccountId) {
-      toast({ variant: "error", title: "Select a category first" });
-      return;
+  async function refreshLedgerData() {
+    await Promise.all([
+      services.transactionService.listTransactions({ status: "POSTED" }).then(setPostedTransactions).catch(() => undefined),
+      reloadAccounts()
+    ]);
+  }
+
+  // Post creates the real ledger transaction (money in -> a deposit, money out
+  // -> an expense, against this bank account), then flips the staged row to
+  // Posted and remembers the transaction so Undo can void it. Returns whether
+  // it posted, so batch posting can count.
+  async function postRow(txn: DisplayRow, options: { quiet?: boolean } = {}): Promise<boolean> {
+    const category = txn.categoryAccountId ? accountById.get(txn.categoryAccountId) : undefined;
+    const amount = txn.received ?? txn.spent;
+    if (!category || !amount || !selectedAccountId) {
+      if (!options.quiet) toast({ variant: "error", title: "Select a category first" });
+      return false;
     }
-    update(txn.id, { status: "POSTED" });
-    toast({ variant: "success", title: "Marked posted", description: "Local-only for now -- this doesn't create a real transaction yet." });
+    const memo = txn.memo?.trim() || txn.description;
+    try {
+      let created;
+      if (txn.received) {
+        created = await services.transactionService.createDeposit({
+          transactionDate: txn.date,
+          memo,
+          payee: txn.payee,
+          accountLabel: category.name,
+          sourceAccountId: selectedAccountId,
+          postings: [
+            { accountId: selectedAccountId, type: "DEBIT", amount },
+            { accountId: category.id, type: "CREDIT", amount }
+          ]
+        });
+      } else {
+        created = await services.transactionService.createTransaction({
+          type: "EXPENSE",
+          transactionDate: txn.date,
+          memo,
+          payee: txn.payee,
+          accountLabel: category.name,
+          sourceAccountId: selectedAccountId,
+          postings: [
+            { accountId: category.id, type: "DEBIT", amount },
+            { accountId: selectedAccountId, type: "CREDIT", amount }
+          ]
+        });
+        await services.transactionService.postTransaction(created.id);
+      }
+      update(txn.id, { status: "POSTED", postedTransactionId: created.id, postedType: txn.received ? "Deposit" : "Expense" });
+      if (!options.quiet) toast({ variant: "success", title: "Transaction posted" });
+      await refreshLedgerData();
+      return true;
+    } catch (err) {
+      toast({ variant: "error", title: "Could not post this transaction", description: err instanceof Error ? err.message : undefined });
+      return false;
+    }
+  }
+
+  // Undo voids the ledger transaction Post made and puts the row back in Pending.
+  async function undoRow(txn: DisplayRow, options: { quiet?: boolean } = {}): Promise<boolean> {
+    try {
+      if (txn.postedTransactionId) await services.transactionService.voidTransaction(txn.postedTransactionId);
+      update(txn.id, { status: "PENDING", postedTransactionId: undefined, postedType: undefined });
+      if (!options.quiet) toast({ variant: "success", title: "Transaction moved back to Pending" });
+      await refreshLedgerData();
+      return true;
+    } catch (err) {
+      toast({ variant: "error", title: "Could not undo this transaction", description: err instanceof Error ? err.message : undefined });
+      return false;
+    }
+  }
+
+  function handlePost(txn: DisplayRow) {
+    void postRow(txn);
   }
 
   function handleExclude(txn: DisplayRow) {
@@ -800,21 +883,31 @@ export function BankTransactionsPage() {
             <thead className="bg-[var(--color-container-background-accent)] text-left text-[var(--color-text-global)]">
               <tr className="[&>th]:h-[46px] [&>th]:px-[10px] [&>th]:py-0 [&>th]:text-sm [&>th]:font-semibold">
                 <th className="w-10">
-                  <input type="checkbox" disabled aria-label="Select all transactions" />
+                  <input
+                    type="checkbox"
+                    aria-label="Select all transactions"
+                    checked={pagedTxns.length > 0 && pagedTxns.every((t) => selectedIds.has(t.id))}
+                    onChange={(event) => setSelectedIds(event.target.checked ? new Set(pagedTxns.map((t) => t.id)) : new Set())}
+                  />
                 </th>
-                <th className="w-32 border-l border-[var(--color-divider-tertiary)]">Date</th>
+                <th className="w-32 border-l border-[var(--color-divider-tertiary)]">
+                  Date{tab === "POSTED" ? <ChevronDown className="ml-2 inline h-3.5 w-3.5 fill-current" aria-hidden="true" /> : null}
+                </th>
                 <th className="min-w-[220px] border-l border-[var(--color-divider-tertiary)]">Bank description</th>
                 <th className="w-28 border-l border-[var(--color-divider-tertiary)] text-right">Spent</th>
                 <th className="w-28 border-l border-[var(--color-divider-tertiary)] text-right">Received</th>
-                <th className="w-14 border-l border-[var(--color-divider-tertiary)] text-center" aria-label="Attachments">
-                  <Paperclip className="mx-auto h-4 w-4" aria-hidden="true" />
-                </th>
+                {tab !== "POSTED" ? (
+                  <th className="w-14 border-l border-[var(--color-divider-tertiary)] text-center" aria-label="Attachments">
+                    <Paperclip className="mx-auto h-4 w-4" aria-hidden="true" />
+                  </th>
+                ) : null}
                 <th className="w-14 border-l border-[var(--color-divider-tertiary)] text-center" aria-label="Comments">
                   <MessageSquare className="mx-auto h-4 w-4" aria-hidden="true" />
                 </th>
                 <th className="border-l border-[var(--color-divider-tertiary)]">From/To</th>
                 <th className="w-28 border-l border-[var(--color-divider-tertiary)]">Purpose</th>
-                <th className="border-l border-[var(--color-divider-tertiary)]">Match/Categorize</th>
+                <th className="border-l border-[var(--color-divider-tertiary)]">{tab === "POSTED" ? "Match/Category" : "Match/Categorize"}</th>
+                {tab === "POSTED" ? <th className="w-44 border-l border-[var(--color-divider-tertiary)]">Transaction Posted</th> : null}
                 <th className="w-28 border-l-2 border-[var(--color-divider-tertiary)] text-right">Action</th>
               </tr>
             </thead>
@@ -836,10 +929,22 @@ export function BankTransactionsPage() {
                 <Fragment key={txn.id}>
                 <tr
                   onClick={() => canExpand(txn) && setExpandedId((current) => (current === txn.id ? null : txn.id))}
-                  className={`h-[50px] border-t border-[var(--color-divider-tertiary)] hover:bg-[var(--color-table-row-hover)] ${canExpand(txn) ? "cursor-pointer" : ""} ${index % 2 === 1 ? "bg-[var(--color-table-row-secondary)]" : ""}`}
+                  className={`h-[50px] border-t border-[var(--color-divider-tertiary)] hover:bg-[var(--color-table-row-hover)] ${canExpand(txn) ? "cursor-pointer" : ""} ${selectedIds.has(txn.id) ? "bg-[color-mix(in_srgb,var(--color-link-action)_12%,transparent)]" : index % 2 === 1 ? "bg-[var(--color-table-row-secondary)]" : ""}`}
                 >
                   <td className="px-[10px] py-0 align-middle" onClick={stopRowClick}>
-                    <input type="checkbox" disabled aria-label="Select transaction" />
+                    <input
+                      type="checkbox"
+                      aria-label="Select transaction"
+                      checked={selectedIds.has(txn.id)}
+                      onChange={() =>
+                        setSelectedIds((current) => {
+                          const next = new Set(current);
+                          if (next.has(txn.id)) next.delete(txn.id);
+                          else next.add(txn.id);
+                          return next;
+                        })
+                      }
+                    />
                   </td>
                   <td className={`${CELL} whitespace-nowrap font-medium text-[var(--color-text-global)]`}>{formatDisplayDate(txn.date)}</td>
                   <td className={CELL}>
@@ -848,11 +953,13 @@ export function BankTransactionsPage() {
                   </td>
                   <td className={`${CELL} text-right text-[var(--color-text-global)]`}>{txn.spent ? formatMoney(txn.spent) : ""}</td>
                   <td className={`${CELL} text-right text-[var(--color-text-global)]`}>{txn.received ? formatMoney(txn.received) : ""}</td>
+                  {tab !== "POSTED" ? (
                   <td className={`${CELL} text-center`} onClick={stopRowClick}>
                     <button type="button" disabled title="Attachments aren't available yet" className="cursor-not-allowed text-[var(--color-icon-secondary)]">
                       <Plus className="h-4 w-4" aria-hidden="true" />
                     </button>
                   </td>
+                  ) : null}
                   <td className={`${CELL} text-center`} onClick={stopRowClick}>
                     <button type="button" disabled title="Comments aren't available yet" className="cursor-not-allowed text-[var(--color-icon-secondary)]">
                       <Plus className="h-4 w-4" aria-hidden="true" />
@@ -933,6 +1040,20 @@ export function BankTransactionsPage() {
                       <span className="text-[13px] text-[var(--color-text-primary)]">{txn.categoryLabel ?? "--"}</span>
                     )}
                   </td>
+                  {tab === "POSTED" ? (
+                    <td className={CELL} onClick={stopRowClick}>
+                      {txn.postedTransactionId ? (
+                        <Link
+                          href={`/register?accountId=${encodeURIComponent(selectedAccountId)}&tx=${encodeURIComponent(txn.postedTransactionId)}`}
+                          className="text-[var(--color-link-action)] hover:underline"
+                        >
+                          {txn.postedType ?? "Transaction"} {formatDisplayDate(txn.date)}
+                        </Link>
+                      ) : (
+                        <span className="text-[var(--color-icon-secondary)]">--</span>
+                      )}
+                    </td>
+                  ) : null}
                   <td className="border-l border-[var(--color-divider-tertiary)] p-2 align-middle text-right" onClick={stopRowClick}>
                     {tab === "PENDING" ? (
                       <PendingRowActions
@@ -940,16 +1061,32 @@ export function BankTransactionsPage() {
                         onPost={() => handlePost(txn)}
                         onExclude={() => handleExclude(txn)}
                       />
+                    ) : tab === "POSTED" ? (
+                      txn.isLocal ? (
+                        <button type="button" onClick={() => void undoRow(txn)} className="text-sm font-medium text-[var(--color-link-action)] hover:underline">
+                          Undo
+                        </button>
+                      ) : null
                     ) : txn.isLocal ? (
                       <button type="button" onClick={() => remove(txn.id)} className="text-sm font-medium text-[var(--color-negative)] hover:underline">
                         Delete
                       </button>
-                    ) : (
-                      <span className="text-xs text-[var(--color-icon-secondary)]">Posted</span>
-                    )}
+                    ) : null}
                   </td>
                 </tr>
-                {expandedId === txn.id && canExpand(txn) ? (
+                {expandedId === txn.id && tab === "POSTED" ? (
+                  <tr>
+                    <td colSpan={11} className="border-t border-[var(--color-divider-tertiary)] bg-[var(--color-container-background-accent)] px-7 py-5">
+                      <p className="text-xs font-semibold uppercase text-[var(--color-text-global)]">Description</p>
+                      <p className="mb-5 mt-1 text-sm text-[var(--color-text-primary)]">
+                        {selectedAccount?.name} shows this as <strong className="text-[var(--color-text-global)]">{txn.description}</strong>
+                      </p>
+                      <p className="text-xs font-semibold uppercase text-[var(--color-text-global)]">Memo</p>
+                      <p className="mt-1 text-sm text-[var(--color-text-primary)]">{txn.memo || txn.description}</p>
+                    </td>
+                  </tr>
+                ) : null}
+                {expandedId === txn.id && tab === "PENDING" && canExpand(txn) ? (
                   <tr>
                     <td colSpan={11} className="p-0">
                       <BankTxnDetailForm
@@ -989,6 +1126,31 @@ export function BankTransactionsPage() {
           </button>
         </div>
       </div>
+      {selectedIds.size > 0 ? (
+        <SelectionBar
+          rows={visibleTxns.filter((t) => selectedIds.has(t.id))}
+          tab={tab}
+          onClear={() => setSelectedIds(new Set())}
+          onPost={async (rows) => {
+            let posted = 0;
+            for (const row of rows) if (await postRow(row, { quiet: true })) posted += 1;
+            const skipped = rows.length - posted;
+            toast({ variant: posted > 0 ? "success" : "error", title: posted > 0 ? `${posted} transaction${posted === 1 ? "" : "s"} posted` : "Nothing was posted", description: skipped > 0 ? `${skipped} still need a category.` : undefined });
+            setSelectedIds(new Set());
+          }}
+          onExclude={(rows) => {
+            rows.forEach((row) => update(row.id, { status: "EXCLUDED" }));
+            toast({ variant: "success", title: `${rows.length} transaction${rows.length === 1 ? "" : "s"} excluded` });
+            setSelectedIds(new Set());
+          }}
+          onUndo={async (rows) => {
+            let undone = 0;
+            for (const row of rows.filter((r) => r.isLocal)) if (await undoRow(row, { quiet: true })) undone += 1;
+            toast({ variant: undone > 0 ? "success" : "error", title: undone > 0 ? `${undone} transaction${undone === 1 ? "" : "s"} moved back to Pending` : "Nothing to undo" });
+            setSelectedIds(new Set());
+          }}
+        />
+      ) : null}
       <PayeeSideModal
         open={addPayeeForId !== null}
         prefill={
@@ -1090,6 +1252,66 @@ function PendingRowActions({ onPost, onExclude }: { txn: DisplayRow; onPost: () 
           </button>
         </div>
       ) : null}
+    </div>
+  );
+}
+
+// QBO's dark bar at the bottom while rows are ticked: what's selected, and the
+// actions that make sense for the current tab.
+function SelectionBar({
+  rows,
+  tab,
+  onClear,
+  onPost,
+  onExclude,
+  onUndo
+}: {
+  rows: DisplayRow[];
+  tab: PendingTxnStatus;
+  onClear: () => void;
+  onPost: (rows: DisplayRow[]) => void;
+  onExclude: (rows: DisplayRow[]) => void;
+  onUndo: (rows: DisplayRow[]) => void;
+}) {
+  const out = rows.filter((r) => r.spent);
+  const incoming = rows.filter((r) => r.received);
+  const outTotal = out.reduce((sum, r) => sum + (r.spent ?? 0), 0);
+  const inTotal = incoming.reduce((sum, r) => sum + (r.received ?? 0), 0);
+  const summary =
+    incoming.length === 0
+      ? `${rows.length} money out transaction${rows.length === 1 ? "" : "s"} -${formatMoney(outTotal)}`
+      : out.length === 0
+        ? `${rows.length} money in transaction${rows.length === 1 ? "" : "s"} ${formatMoney(inTotal)}`
+        : `${rows.length} transactions`;
+  const button = "rounded-md border border-white/70 px-5 py-2 text-base font-medium text-white hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50";
+  return (
+    <div className="sticky bottom-0 z-20 mt-4 flex flex-wrap items-center gap-4 rounded-t-lg bg-[#21262a] px-4 py-4 text-white shadow-lg" role="region" aria-label="Selected transactions">
+      <span className="mr-2 text-base">{summary}</span>
+      {tab === "PENDING" ? (
+        <>
+          <button type="button" className={button} onClick={() => onPost(rows)}>
+            Post
+          </button>
+          <button type="button" className={button} onClick={() => onExclude(rows)}>
+            Exclude
+          </button>
+        </>
+      ) : tab === "POSTED" ? (
+        <>
+          <button type="button" className={button} onClick={() => onUndo(rows)}>
+            Undo
+          </button>
+          <button type="button" className={button} disabled title="Editing from here isn't available yet">
+            Edit
+          </button>
+          <button type="button" className={button} disabled title="Messages aren't available yet">
+            New message
+          </button>
+        </>
+      ) : null}
+      <button type="button" onClick={onClear} aria-label="Clear selection" className="ml-auto text-white/80 hover:text-white">
+        <X className="h-5 w-5" aria-hidden="true" />
+      </button>
     </div>
   );
 }
