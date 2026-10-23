@@ -60,7 +60,7 @@ function Switch({ checked, onChange, label }: { checked: boolean; onChange: (che
 
 // The panel that opens under a pending row (QBO's "Categorize" form): every
 // field here edits the same staged row the table cells do, so the two stay in
-// step. Match, Split, Product/Service and Files are shown but disabled until
+// step. Match, Split and Files are shown but disabled until
 // those features exist.
 export function BankTxnDetailForm({ txn, payeeOptions, accountOptions, onChange, onAddPayee, onPost, onExclude, onClose }: BankTxnDetailFormProps) {
   const memoRef = useRef<HTMLTextAreaElement>(null);
@@ -122,7 +122,7 @@ export function BankTxnDetailForm({ txn, payeeOptions, accountOptions, onChange,
       <div className="mb-5 flex flex-wrap gap-4">
         <div>
           <span className={LABEL}>From/To</span>
-          <div className={FIELD}>
+          <div className={`${FIELD} [&_svg]:hidden`}>
             <Select
               value={txn.payee ?? ""}
               onChange={(v) => onChange({ payee: v || undefined })}
@@ -140,15 +140,6 @@ export function BankTxnDetailForm({ txn, payeeOptions, accountOptions, onChange,
             <Select value={txn.categoryAccountId ?? ""} onChange={(v) => onChange({ categoryAccountId: v || undefined })} options={accountOptions} placeholder="Select category" allowCustomValue={false} />
           </div>
         </div>
-        {/* QBO only offers Product/Service when money comes in (a deposit/sale). */}
-        {direction === "in" ? (
-          <div>
-            <span className={LABEL}>Product/Service</span>
-            <div className={FIELD}>
-              <Select value="" onChange={() => undefined} options={[]} placeholder="Select product/service" allowCustomValue={false} disabled />
-            </div>
-          </div>
-        ) : null}
       </div>
 
       <div className="mb-5 flex flex-wrap items-start gap-8">
@@ -174,15 +165,15 @@ export function BankTxnDetailForm({ txn, payeeOptions, accountOptions, onChange,
         </div>
         <div>
           <span className={LABEL}>Files</span>
-          <Button variant="secondary" size="sm" disabled title="Attachments aren't available yet">
+          <Button variant="secondary" size="sm" className="!rounded-md" disabled title="Attachments aren't available yet">
             Upload
           </Button>
         </div>
       </div>
 
       <div className="flex flex-wrap items-center gap-4">
-        <Button size="sm" onClick={onPost}>Post</Button>
-        <Button size="sm" variant="secondary" disabled title="Splitting one transaction across several categories isn't available yet">
+        <Button size="sm" className="!rounded-md px-5" onClick={onPost}>Post</Button>
+        <Button size="sm" variant="secondary" className="!rounded-md px-5" disabled title="Splitting one transaction across several categories isn't available yet">
           Split
         </Button>
         <Link href="/all-apps/bank-rules" className="px-1 text-sm text-[var(--color-text-global)] hover:underline">
