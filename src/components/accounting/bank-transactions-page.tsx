@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, CreditCard, Landmark, MessageSquarePlus, Paperclip, MessageSquare, Pencil, Plus, Printer, RefreshCw, Search, Settings, Share, TriangleAlert } from "lucide-react";
+import { BankTxnDetailForm, PURPOSE_OPTIONS } from "@/components/accounting/bank-txn-detail-form";
+import { PayeeSideModal } from "@/components/bank-register/payee-side-modal";
 import { AddAccountModal } from "@/components/bank-register/add-account-modal";
 import { QuickAddMenu } from "@/components/bank-register/register-header-actions";
 import { Button } from "@/components/ui/button";
@@ -14,6 +16,7 @@ import { useToast } from "@/components/ui/toast/toast-context";
 import { useCompany } from "@/lib/company/company-provider";
 import { companyScopedKey, localId, useLocalCollection } from "@/lib/local-store/use-local-collection";
 import type { PendingBankTxn, PendingTxnStatus } from "@/lib/local-store/accounting-types";
+import { useCustomers } from "@/lib/hooks/use-customers";
 import { useVendors } from "@/lib/hooks/use-vendors";
 import { listReconciliationsForAccount } from "@/lib/services/reconciliation-service";
 import { getServiceContainer } from "@/lib/services/service-container-v2";
@@ -103,6 +106,10 @@ type DisplayRow = {
   categoryLabel?: string;
   /** Only set (and only editable) for local-only Pending/Excluded rows -- real Posted rows derive categoryLabel straight from the transaction's own postings instead. */
   categoryAccountId?: string;
+  purpose?: PendingBankTxn["purpose"];
+  memo?: string;
+  payeeKind?: PendingBankTxn["payeeKind"];
+  txnType?: PendingBankTxn["txnType"];
   /** True for local-only staging rows (deletable); false/undefined for real transactions (not something this Phase-1 screen can delete). */
   isLocal?: boolean;
 };
@@ -321,7 +328,18 @@ export function BankTransactionsPage() {
     [accounts]
   );
   const { items: vendors, add: addVendor } = useVendors();
-  const vendorOptions = useMemo(() => vendors.map((v) => ({ value: v.name, label: v.name, rightLabel: v.is1099Contractor ? "Vendor" : "Contact" })), [vendors]);
+  const { items: customers, add: addCustomer } = useCustomers();
+  // From/To lists both directories, each tagged with what it is.
+  const vendorOptions = useMemo(
+    () => [
+      ...customers.map((c) => ({ value: c.name, label: c.name, rightLabel: "Customer" })),
+      ...vendors.map((v) => ({ value: v.name, label: v.name, rightLabel: "Vendor" }))
+    ],
+    [customers, vendors]
+  );
+  // The row whose From/To "+ Add new" opened the contact panel (and the row whose detail form is open).
+  const [addPayeeForId, setAddPayeeForId] = useState<string | null>(null);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const [showAddForm, setShowAddForm] = useState(false);
   const today = new Date().toISOString().slice(0, 10);
@@ -392,6 +410,12 @@ export function BankTransactionsPage() {
     });
     toast({ variant: "success", title: "Sample transactions loaded", description: "Local-only, for trying out Pending/Posted/Excluded -- delete anytime." });
   }
+
+  // Only staged Pending rows open the Categorize form (posted rows are history).
+  function canExpand(txn: DisplayRow): boolean {
+    return tab === "PENDING" && Boolean(txn.isLocal);
+  }
+  const stopRowClick = (event: React.MouseEvent) => event.stopPropagation();
 
   function handlePost(txn: DisplayRow) {
     if (!txn.categoryAccountId) {
@@ -794,8 +818,12 @@ export function BankTransactionsPage() {
               </tr>
             ) : (
               pagedTxns.map((txn, index) => (
-                <tr key={txn.id} className={`h-[50px] border-t border-[var(--color-divider-tertiary)] hover:bg-[var(--color-table-row-hover)] ${index % 2 === 1 ? "bg-[var(--color-table-row-secondary)]" : ""}`}>
-                  <td className="px-[10px] py-0 align-middle">
+                <Fragment key={txn.id}>
+                <tr
+                  onClick={() => canExpand(txn) && setExpandedId((current) => (current === txn.id ? null : txn.id))}
+                  className={`h-[50px] border-t border-[var(--color-divider-tertiary)] hover:bg-[var(--color-table-row-hover)] ${canExpand(txn) ? "cursor-pointer" : ""} ${index % 2 === 1 ? "bg-[var(--color-table-row-secondary)]" : ""}`}
+                >
+                  <td className="px-[10px] py-0 align-middle" onClick={stopRowClick}>
                     <input type="checkbox" disabled aria-label="Select transaction" />
                   </td>
                   <td className={`${CELL} whitespace-nowrap font-medium text-[var(--color-text-global)]`}>{formatDisplayDate(txn.date)}</td>
@@ -805,32 +833,25 @@ export function BankTransactionsPage() {
                   </td>
                   <td className={`${CELL} text-right text-[var(--color-text-global)]`}>{txn.spent ? formatMoney(txn.spent) : ""}</td>
                   <td className={`${CELL} text-right text-[var(--color-text-global)]`}>{txn.received ? formatMoney(txn.received) : ""}</td>
-                  <td className={`${CELL} text-center`}>
+                  <td className={`${CELL} text-center`} onClick={stopRowClick}>
                     <button type="button" disabled title="Attachments aren't available yet" className="cursor-not-allowed text-[var(--color-icon-secondary)]">
                       <Plus className="h-4 w-4" aria-hidden="true" />
                     </button>
                   </td>
-                  <td className={`${CELL} text-center`}>
+                  <td className={`${CELL} text-center`} onClick={stopRowClick}>
                     <button type="button" disabled title="Comments aren't available yet" className="cursor-not-allowed text-[var(--color-icon-secondary)]">
                       <Plus className="h-4 w-4" aria-hidden="true" />
                     </button>
                   </td>
-                  <td className="border-l border-[var(--color-divider-tertiary)] w-48 px-2 py-0 align-middle [&_input]:h-7 [&_input]:border-transparent [&_input]:bg-transparent">
+                  <td className="border-l border-[var(--color-divider-tertiary)] w-48 px-2 py-0 align-middle [&_input]:h-7 [&_input]:border-transparent [&_input]:bg-transparent" onClick={stopRowClick}>
                     {tab === "PENDING" ? (
                       <Select
                         value={txn.payee ?? ""}
                         onChange={(value) => update(txn.id, { payee: value || undefined })}
                         options={vendorOptions}
-                        placeholder="Select vendor"
-                        allowCustomValue
-                        onAddNew={() => {
-                          const name = txn.payee?.trim();
-                          if (!name) return;
-                          if (vendors.some((v) => v.name.toLowerCase() === name.toLowerCase())) return;
-                          addVendor({ name })
-                            .then(() => toast({ variant: "success", title: `"${name}" added to Vendors` }))
-                            .catch((err) => toast({ variant: "error", title: "Could not add vendor", description: err instanceof Error ? err.message : undefined }));
-                        }}
+                        placeholder={txn.received ? "Select customer" : "Select vendor"}
+                        allowCustomValue={false}
+                        onAddNew={() => setAddPayeeForId(txn.id)}
                         addNewLabel="+ Add new"
                         optionSize="sm"
                       />
@@ -838,8 +859,22 @@ export function BankTransactionsPage() {
                       <span className="text-[13px] text-[var(--color-text-primary)]">{txn.payee || "--"}</span>
                     )}
                   </td>
-                  <td className={`${CELL} text-[var(--color-text-global)]`}>Business</td>
-                  <td className="border-l border-[var(--color-divider-tertiary)] w-56 px-2 py-0 align-middle [&_input]:h-7 [&_input]:border-transparent [&_input]:bg-transparent">
+                  <td className="w-32 border-l border-[var(--color-divider-tertiary)] px-2 py-0 align-middle [&_input]:h-7 [&_input]:border-transparent [&_input]:bg-transparent" onClick={stopRowClick}>
+                    {tab === "PENDING" ? (
+                      <Select
+                        value={txn.purpose ?? "BUSINESS"}
+                        onChange={(value) => update(txn.id, { purpose: value as PendingBankTxn["purpose"] })}
+                        options={PURPOSE_OPTIONS}
+                        placeholder="Purpose"
+                        allowCustomValue={false}
+                        showCheckmark
+                        optionSize="sm"
+                      />
+                    ) : (
+                      <span className="text-sm text-[var(--color-text-global)]">{txn.purpose === "PERSONAL" ? "Personal" : "Business"}</span>
+                    )}
+                  </td>
+                  <td className="border-l border-[var(--color-divider-tertiary)] w-56 px-2 py-0 align-middle [&_input]:h-7 [&_input]:border-transparent [&_input]:bg-transparent" onClick={stopRowClick}>
                     {tab === "PENDING" ? (
                       <div className="flex items-center gap-1.5">
                         {!txn.categoryAccountId ? <TriangleAlert className="h-3.5 w-3.5 shrink-0 text-[var(--color-warning-text)]" aria-hidden="true" /> : null}
@@ -856,7 +891,7 @@ export function BankTransactionsPage() {
                       <span className="text-[13px] text-[var(--color-text-primary)]">{txn.categoryLabel ?? "--"}</span>
                     )}
                   </td>
-                  <td className="border-l border-[var(--color-divider-tertiary)] p-2 align-middle text-right">
+                  <td className="border-l border-[var(--color-divider-tertiary)] p-2 align-middle text-right" onClick={stopRowClick}>
                     {tab === "PENDING" ? (
                       <PendingRowActions
                         txn={txn}
@@ -872,6 +907,29 @@ export function BankTransactionsPage() {
                     )}
                   </td>
                 </tr>
+                {expandedId === txn.id && canExpand(txn) ? (
+                  <tr>
+                    <td colSpan={11} className="p-0">
+                      <BankTxnDetailForm
+                        txn={txn}
+                        payeeOptions={vendorOptions}
+                        accountOptions={expenseAccountOptions}
+                        onChange={(patch) => update(txn.id, patch)}
+                        onAddPayee={() => setAddPayeeForId(txn.id)}
+                        onPost={() => {
+                          handlePost(txn);
+                          if (txn.categoryAccountId) setExpandedId(null);
+                        }}
+                        onExclude={() => {
+                          handleExclude(txn);
+                          setExpandedId(null);
+                        }}
+                        onClose={() => setExpandedId(null)}
+                      />
+                    </td>
+                  </tr>
+                ) : null}
+                </Fragment>
               ))
             )}
             </tbody>
@@ -888,6 +946,20 @@ export function BankTransactionsPage() {
           </button>
         </div>
       </div>
+      <PayeeSideModal
+        open={addPayeeForId !== null}
+        onClose={() => setAddPayeeForId(null)}
+        onSave={(payee) => {
+          const targetId = addPayeeForId;
+          const create = payee.kind === "CUSTOMER" ? addCustomer({ name: payee.name }) : addVendor({ name: payee.name });
+          create
+            .then(() => {
+              if (targetId) update(targetId, { payee: payee.name, payeeKind: payee.kind === "CUSTOMER" ? "CUSTOMER" : "VENDOR" });
+              toast({ variant: "success", title: `"${payee.name}" added to ${payee.kind === "CUSTOMER" ? "Customers" : "Vendors"}` });
+            })
+            .catch((err) => toast({ variant: "error", title: "Could not add contact", description: err instanceof Error ? err.message : undefined }));
+        }}
+      />
       <AddAccountModal
         open={editingAccount !== null}
         accounts={accounts}

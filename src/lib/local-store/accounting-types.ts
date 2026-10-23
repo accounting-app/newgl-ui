@@ -15,6 +15,13 @@ export type PendingBankTxn = {
   received?: number;
   payee?: string;
   categoryAccountId?: string;
+  /** QBO's Purpose column; unset reads as Business. */
+  purpose?: "BUSINESS" | "PERSONAL";
+  memo?: string;
+  /** Which directory the payee came from (a vendor or a customer). */
+  payeeKind?: "CUSTOMER" | "VENDOR";
+  /** Overrides the type derived from direction (money in = Deposit, money out = Expense). */
+  txnType?: "Deposit" | "Expense" | "Transfer";
   status: PendingTxnStatus;
   createdAt: string;
 };
