@@ -33,6 +33,7 @@ type BankTxnDetailFormProps = {
   accountOptions: SelectOption[];
   onChange: (patch: Partial<PendingBankTxn>) => void;
   onAddPayee: () => void;
+  onAddSuggestedPayee: (prefill: { name: string; website: string | null }) => void;
   onPost: () => void;
   onExclude: () => void;
   onClose: () => void;
@@ -63,7 +64,7 @@ function Switch({ checked, onChange, label }: { checked: boolean; onChange: (che
 // field here edits the same staged row the table cells do, so the two stay in
 // step. Match, Split and Files are shown but disabled until
 // those features exist.
-export function BankTxnDetailForm({ txn, payeeOptions, accountOptions, onChange, onAddPayee, onPost, onExclude, onClose }: BankTxnDetailFormProps) {
+export function BankTxnDetailForm({ txn, payeeOptions, accountOptions, onChange, onAddPayee, onAddSuggestedPayee, onPost, onExclude, onClose }: BankTxnDetailFormProps) {
   const memoRef = useRef<HTMLTextAreaElement>(null);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const direction = txn.received ? "in" : "out";
@@ -209,6 +210,7 @@ export function BankTxnDetailForm({ txn, payeeOptions, accountOptions, onChange,
               payeeOptions={payeeOptions}
               onApplyAccount={(accountId) => onChange({ categoryAccountId: accountId })}
               onApplyPayee={(name) => onChange({ payee: name })}
+              onAddSuggestedPayee={onAddSuggestedPayee}
             />
           </div>
         ) : null}

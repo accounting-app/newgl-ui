@@ -69,7 +69,11 @@ export type CategorizationSuggestion = {
   resolvedBy: "rule" | "ai";
   /** One-line "why" for the suggestion; absent/null from older responses. */
   reason?: string | null;
+  /** The business the model thinks is behind the transaction ("New vendor for you"). */
+  payeeSuggestion?: PayeeSuggestion | null;
 };
+
+export type PayeeSuggestion = { name: string; description: string | null; website: string | null };
 
 type CategorizeResponse = {
   results: CategorizationSuggestion[];

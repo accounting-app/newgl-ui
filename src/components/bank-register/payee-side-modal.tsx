@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { InputField } from "@/components/ui/input-field";
@@ -22,6 +22,8 @@ export type PayeeOption = {
 
 type PayeeSideModalProps = {
   open: boolean;
+  /** Opens the form pre-filled (e.g. from an AI "New vendor for you" suggestion). */
+  prefill?: { kind: PayeeKind; name: string; website?: string | null } | null;
   onClose: () => void;
   onSave: (payee: PayeeOption) => void;
 };
@@ -99,7 +101,7 @@ function SelectField({
   );
 }
 
-export function PayeeSideModal({ open, onClose, onSave }: PayeeSideModalProps) {
+export function PayeeSideModal({ open, prefill, onClose, onSave }: PayeeSideModalProps) {
   const [kind, setKind] = useState<PayeeKind>("VENDOR");
   const [vendor, setVendor] = useState({ ...PAYEE_MODAL_INITIAL_VENDOR_FORM });
   const [customer, setCustomer] = useState({ ...PAYEE_MODAL_INITIAL_CUSTOMER_FORM });
@@ -140,6 +142,19 @@ export function PayeeSideModal({ open, onClose, onSave }: PayeeSideModalProps) {
     resetForms();
     onClose();
   }
+
+  // Apply the prefill each time the panel opens, so a suggestion's name
+  // lands in the form and a later plain "+ Add new" opens blank again.
+  useEffect(() => {
+    if (!open || !prefill) return;
+    setKind(prefill.kind);
+    if (prefill.kind === "CUSTOMER") {
+      setCustomer({ ...PAYEE_MODAL_INITIAL_CUSTOMER_FORM, companyName: prefill.name, displayName: prefill.name, nameOnChecks: prefill.name, website: prefill.website ?? "" });
+    } else if (prefill.kind === "VENDOR") {
+      setVendor({ ...PAYEE_MODAL_INITIAL_VENDOR_FORM, companyName: prefill.name, vendorDisplayName: prefill.name, nameOnChecks: prefill.name, website: prefill.website ?? "" });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only on open
+  }, [open]);
 
   if (!open) return null;
 

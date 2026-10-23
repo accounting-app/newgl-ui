@@ -2,8 +2,10 @@
 
 import { Fragment, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
-import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, CreditCard, Landmark, MessageSquarePlus, Paperclip, MessageSquare, Pencil, Plus, Printer, RefreshCw, Search, Settings, Share, TriangleAlert } from "lucide-react";
+import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, CreditCard, Landmark, MessageSquarePlus, Paperclip, MessageSquare, Pencil, Plus, Printer, RefreshCw, Search, Settings, Share } from "lucide-react";
 import { BankTxnDetailForm, PURPOSE_OPTIONS } from "@/components/accounting/bank-txn-detail-form";
+import { CategorySuggestionMarker, PayeeSuggestionMarker } from "@/components/accounting/bank-txn-row-suggestion";
+import { suggestionKey, useStoredSuggestions } from "@/lib/bank-txn-suggestions-store";
 import { PayeeSideModal } from "@/components/bank-register/payee-side-modal";
 import { AddAccountModal } from "@/components/bank-register/add-account-modal";
 import { QuickAddMenu } from "@/components/bank-register/register-header-actions";
@@ -339,6 +341,9 @@ export function BankTransactionsPage() {
   );
   // The row whose From/To "+ Add new" opened the contact panel (and the row whose detail form is open).
   const [addPayeeForId, setAddPayeeForId] = useState<string | null>(null);
+  // Set when the contact panel was opened from an AI "New vendor for you" card.
+  const [addPayeePrefill, setAddPayeePrefill] = useState<{ name: string; website: string | null } | null>(null);
+  const storedSuggestions = useStoredSuggestions();
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const [showAddForm, setShowAddForm] = useState(false);
@@ -409,6 +414,16 @@ export function BankTransactionsPage() {
       addVendor({ name }).catch(() => {});
     });
     toast({ variant: "success", title: "Sample transactions loaded", description: "Local-only, for trying out Pending/Posted/Excluded -- delete anytime." });
+  }
+
+  // The AI answer already fetched for this row (by the Categorize form), if it still matches the row.
+  function rowSuggestion(txn: DisplayRow) {
+    const entry = storedSuggestions[txn.id];
+    return entry && entry.key === suggestionKey({ payee: txn.description, amount: txn.received ? txn.received : -(txn.spent ?? 0) }) ? entry.suggestion : undefined;
+  }
+  function openAddPayee(txnId: string, prefill: { name: string; website: string | null } | null) {
+    setAddPayeePrefill(prefill);
+    setAddPayeeForId(txnId);
   }
 
   // Only staged Pending rows open the Categorize form (posted rows are history).
@@ -845,16 +860,27 @@ export function BankTransactionsPage() {
                   </td>
                   <td className="border-l border-[var(--color-divider-tertiary)] w-48 px-2 py-0 align-middle [&_input]:h-7 [&_input]:border-transparent [&_input]:bg-transparent" onClick={stopRowClick}>
                     {tab === "PENDING" ? (
+                      <div className="flex items-center gap-1">
+                        {(() => {
+                          const merchant = rowSuggestion(txn)?.payeeSuggestion;
+                          const known = merchant ? vendorOptions.some((o) => o.label.toLowerCase() === merchant.name.toLowerCase()) : true;
+                          return merchant && !known && !txn.payee ? (
+                            <PayeeSuggestionMarker merchant={merchant} kind={txn.received ? "customer" : "vendor"} onAdd={() => openAddPayee(txn.id, { name: merchant.name, website: merchant.website })} />
+                          ) : null;
+                        })()}
+                        <div className="min-w-0 flex-1">
                       <Select
                         value={txn.payee ?? ""}
                         onChange={(value) => update(txn.id, { payee: value || undefined })}
                         options={vendorOptions}
                         placeholder={txn.received ? "Select customer" : "Select vendor"}
                         allowCustomValue={false}
-                        onAddNew={() => setAddPayeeForId(txn.id)}
+                        onAddNew={() => openAddPayee(txn.id, null)}
                         addNewLabel="+ Add new"
                         optionSize="sm"
                       />
+                        </div>
+                      </div>
                     ) : (
                       <span className="text-[13px] text-[var(--color-text-primary)]">{txn.payee || "--"}</span>
                     )}
@@ -877,7 +903,23 @@ export function BankTransactionsPage() {
                   <td className="border-l border-[var(--color-divider-tertiary)] w-56 px-2 py-0 align-middle [&_input]:h-7 [&_input]:border-transparent [&_input]:bg-transparent" onClick={stopRowClick}>
                     {tab === "PENDING" ? (
                       <div className="flex items-center gap-1.5">
-                        {!txn.categoryAccountId ? <TriangleAlert className="h-3.5 w-3.5 shrink-0 text-[var(--color-warning-text)]" aria-hidden="true" /> : null}
+                        {(() => {
+                          const suggestion = rowSuggestion(txn);
+                          const awaitingReview = !txn.categoryAccountId || Boolean(suggestion?.accountId && suggestion.accountId === txn.categoryAccountId);
+                          if (!awaitingReview) return null;
+                          const merchant = suggestion?.payeeSuggestion ?? null;
+                          const knownMerchant = merchant ? vendorOptions.some((o) => o.label.toLowerCase() === merchant.name.toLowerCase()) : true;
+                          return (
+                            <CategorySuggestionMarker
+                              accountName={suggestion?.accountId ? (accountById.get(suggestion.accountId)?.name ?? null) : null}
+                              confirmed={Boolean(suggestion?.accountId && suggestion.accountId === txn.categoryAccountId)}
+                              merchant={merchant && !knownMerchant && !txn.payee ? merchant : null}
+                              kind={txn.received ? "customer" : "vendor"}
+                              onAdd={() => merchant && openAddPayee(txn.id, { name: merchant.name, website: merchant.website })}
+                              onApply={() => suggestion?.accountId && update(txn.id, { categoryAccountId: suggestion.accountId })}
+                            />
+                          );
+                        })()}
                         <Select
                           value={txn.categoryAccountId ?? ""}
                           onChange={(value) => update(txn.id, { categoryAccountId: value || undefined })}
@@ -915,7 +957,8 @@ export function BankTransactionsPage() {
                         payeeOptions={vendorOptions}
                         accountOptions={expenseAccountOptions}
                         onChange={(patch) => update(txn.id, patch)}
-                        onAddPayee={() => setAddPayeeForId(txn.id)}
+                        onAddPayee={() => openAddPayee(txn.id, null)}
+                        onAddSuggestedPayee={(prefill) => openAddPayee(txn.id, prefill)}
                         onPost={() => {
                           handlePost(txn);
                           if (txn.categoryAccountId) setExpandedId(null);
@@ -948,7 +991,15 @@ export function BankTransactionsPage() {
       </div>
       <PayeeSideModal
         open={addPayeeForId !== null}
-        onClose={() => setAddPayeeForId(null)}
+        prefill={
+          addPayeePrefill
+            ? { kind: pagedTxns.find((t) => t.id === addPayeeForId)?.received ? "CUSTOMER" : "VENDOR", name: addPayeePrefill.name, website: addPayeePrefill.website }
+            : null
+        }
+        onClose={() => {
+          setAddPayeeForId(null);
+          setAddPayeePrefill(null);
+        }}
         onSave={(payee) => {
           const targetId = addPayeeForId;
           const create = payee.kind === "CUSTOMER" ? addCustomer({ name: payee.name }) : addVendor({ name: payee.name });

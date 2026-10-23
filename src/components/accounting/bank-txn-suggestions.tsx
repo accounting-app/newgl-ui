@@ -6,6 +6,7 @@ import { ChevronDown, ChevronRight, CircleHelp, Sparkles, ThumbsDown, ThumbsUp }
 import { suggestCategorization } from "@/lib/services/ai-service";
 import type { CategorizationSuggestion } from "@/lib/services/ai-service";
 import type { SelectOption } from "@/components/ui/select";
+import { getStoredSuggestion, storeSuggestion, suggestionKey } from "@/lib/bank-txn-suggestions-store";
 
 type SuggestionTxn = {
   id: string;
@@ -23,17 +24,14 @@ type BankTxnSuggestionsProps = {
   payeeOptions: SelectOption[];
   onApplyAccount: (accountId: string) => void;
   onApplyPayee: (name: string) => void;
+  /** Opens the contact panel pre-filled with the AI's merchant guess. */
+  onAddSuggestedPayee: (prefill: { name: string; website: string | null }) => void;
 };
 
 type State =
   | { status: "loading" }
   | { status: "ready"; suggestion: CategorizationSuggestion }
   | { status: "error"; message: string; settingsLink: boolean };
-
-// One model call per row per session: re-opening the panel (or toggling the
-// switch) reuses the answer instead of spending another AI action. Keyed by
-// everything the call is based on, so editing the payee/memo asks again.
-const suggestionCache = new Map<string, CategorizationSuggestion>();
 
 function explainError(error: unknown): { message: string; settingsLink: boolean } {
   const text = error instanceof Error ? error.message : "";
@@ -43,6 +41,16 @@ function explainError(error: unknown): { message: string; settingsLink: boolean 
 }
 
 const NOTICE = "flex items-center justify-between gap-3 rounded-md px-3 py-2 text-sm text-[var(--color-text-global)] bg-[color-mix(in_srgb,var(--color-warning-text)_16%,transparent)]";
+
+const INFO_NOTICE = "flex items-center justify-between gap-3 rounded-md px-3 py-2 text-sm text-[var(--color-text-global)] bg-[color-mix(in_srgb,var(--color-link-action)_16%,transparent)]";
+
+function InfoDot() {
+  return (
+    <span aria-hidden="true" className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-[var(--color-link-action)] text-[11px] font-bold leading-none text-white">
+      i
+    </span>
+  );
+}
 
 function WarnDot() {
   return (
@@ -55,7 +63,7 @@ function WarnDot() {
 // QBO's Suggestions card: the AI's account pick (with its reasoning behind a
 // chevron), plus a contact match. Account suggestions come from newgl-ai's
 // categorize endpoint -- the same quota, BYOK and "AI off" rules as CSV import.
-export function BankTxnSuggestions({ txn, accountOptions, payeeOptions, onApplyAccount, onApplyPayee }: BankTxnSuggestionsProps) {
+export function BankTxnSuggestions({ txn, accountOptions, payeeOptions, onApplyAccount, onApplyPayee, onAddSuggestedPayee }: BankTxnSuggestionsProps) {
   const [state, setState] = useState<State>({ status: "loading" });
   const [expanded, setExpanded] = useState(true);
   const [vote, setVote] = useState<"up" | "down" | null>(null);
@@ -63,23 +71,25 @@ export function BankTxnSuggestions({ txn, accountOptions, payeeOptions, onApplyA
   const [attempt, setAttempt] = useState(0);
 
   const amount = txn.received ? txn.received : -(txn.spent ?? 0);
-  const payeeText = txn.payee || txn.description;
-  const cacheKey = `${txn.id}|${payeeText}|${txn.memo ?? ""}|${amount}`;
+  // Based on the bank text and amount only: editing the payee or memo afterwards
+  // must not trigger (and spend) another AI call.
+  const payeeText = txn.description;
+  const cacheKey = suggestionKey({ payee: payeeText, amount });
 
   useEffect(() => {
     let cancelled = false;
-    const cached = suggestionCache.get(cacheKey);
+    const cached = getStoredSuggestion(txn.id, cacheKey);
     if (cached) {
       setState({ status: "ready", suggestion: cached });
       return;
     }
     setState({ status: "loading" });
-    suggestCategorization([{ payee: payeeText, memo: txn.memo || undefined, amount }])
+    suggestCategorization([{ payee: payeeText, amount }])
       .then((results) => {
         if (cancelled) return;
         const suggestion = results[0];
         if (!suggestion) throw new Error("No suggestion came back.");
-        suggestionCache.set(cacheKey, suggestion);
+        storeSuggestion(txn.id, cacheKey, suggestion);
         setState({ status: "ready", suggestion });
       })
       .catch((error) => {
@@ -212,6 +222,33 @@ export function BankTxnSuggestions({ txn, accountOptions, payeeOptions, onApplyA
                 Apply
               </button>
             ) : null}
+          </div>
+        ) : suggestion?.payeeSuggestion ? (
+          <div>
+            <div className={INFO_NOTICE}>
+              <span>New {contactKind} for you</span>
+              <InfoDot />
+            </div>
+            <p className="mt-3 text-lg font-semibold text-[var(--color-text-global)]">{suggestion.payeeSuggestion.name}</p>
+            {suggestion.payeeSuggestion.description ? (
+              <p className="mt-1 text-base leading-relaxed text-[var(--color-text-primary)]">{suggestion.payeeSuggestion.description}</p>
+            ) : null}
+            <div className="mt-2 flex items-end justify-between gap-3">
+              {suggestion.payeeSuggestion.website ? (
+                <a href={`https://${suggestion.payeeSuggestion.website}`} target="_blank" rel="noopener noreferrer" className="text-base text-[var(--color-link-action)] underline">
+                  {`www.${suggestion.payeeSuggestion.website}`}
+                </a>
+              ) : (
+                <span />
+              )}
+              <button
+                type="button"
+                onClick={() => onAddSuggestedPayee({ name: suggestion.payeeSuggestion!.name, website: suggestion.payeeSuggestion!.website })}
+                className="shrink-0 rounded-md border border-[var(--color-divider-tertiary)] px-3 py-1.5 text-sm font-medium text-[var(--color-text-global)] hover:bg-[var(--color-action-passive-subtle-hover)]"
+              >
+                Add to {contactKind} list
+              </button>
+            </div>
           </div>
         ) : (
           <div className={NOTICE}>
