@@ -39,7 +39,7 @@ function explainError(error: unknown): { message: string; settingsLink: boolean 
   const text = error instanceof Error ? error.message : "";
   if (/turned off/i.test(text)) return { message: "AI features are turned off for this account.", settingsLink: true };
   if (/quota/i.test(text)) return { message: "You've used this month's AI actions. Suggestions will be back when the limit resets.", settingsLink: true };
-  return { message: text || "Suggestions aren't available right now.", settingsLink: false };
+  return { message: "Suggestions aren't available right now.", settingsLink: false };
 }
 
 const NOTICE = "flex items-center justify-between gap-3 rounded-md px-3 py-2 text-sm text-[var(--color-text-global)] bg-[color-mix(in_srgb,var(--color-warning-text)_16%,transparent)]";
@@ -59,6 +59,8 @@ export function BankTxnSuggestions({ txn, accountOptions, payeeOptions, onApplyA
   const [state, setState] = useState<State>({ status: "loading" });
   const [expanded, setExpanded] = useState(true);
   const [vote, setVote] = useState<"up" | "down" | null>(null);
+  // Bumped by "Try again" so the effect below runs another request.
+  const [attempt, setAttempt] = useState(0);
 
   const amount = txn.received ? txn.received : -(txn.spent ?? 0);
   const payeeText = txn.payee || txn.description;
@@ -87,7 +89,7 @@ export function BankTxnSuggestions({ txn, accountOptions, payeeOptions, onApplyA
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- cacheKey already covers every input
-  }, [cacheKey]);
+  }, [cacheKey, attempt]);
 
   // Fill an empty Account right away, as QBO does; never overwrite one the user picked.
   const suggestedAccountId = state.status === "ready" ? state.suggestion.accountId : null;
@@ -148,7 +150,14 @@ export function BankTxnSuggestions({ txn, accountOptions, payeeOptions, onApplyA
                     AI settings
                   </Link>
                 </>
-              ) : null}
+              ) : (
+                <>
+                  {" "}
+                  <button type="button" onClick={() => setAttempt((n) => n + 1)} className="font-medium underline">
+                    Try again
+                  </button>
+                </>
+              )}
             </span>
             <WarnDot />
           </div>
