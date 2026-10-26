@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ChevronDown, Copy, GripVertical, Lock, LockOpen, Plus, Trash2 } from "lucide-react";
+import { ChevronDown, CircleHelp, Copy, GripVertical, Lock, LockOpen, Plus, Trash2 } from "lucide-react";
 import { FullScreenFormShell, RT_TOOLBAR_LINK } from "@/components/accounting/full-screen-form-shell";
 import { ProductServicePanel } from "@/components/accounting/product-service-panel";
 import { AddAccountModal } from "@/components/bank-register/add-account-modal";
@@ -62,6 +62,7 @@ export function SalesReceiptFormPage() {
   const [bcc, setBcc] = useState("");
   const [sendLater, setSendLater] = useState(false);
   const [number, setNumber] = useState("1001");
+  const [charge, setCharge] = useState(false);
   const [detailsHidden, setDetailsHidden] = useState(false);
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [refNo, setRefNo] = useState("");
@@ -75,7 +76,6 @@ export function SalesReceiptFormPage() {
   const [error, setError] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [customerModalOpen, setCustomerModalOpen] = useState(false);
-  const [detailsOpen, setDetailsOpen] = useState(false);
   const [accountModalOpen, setAccountModalOpen] = useState(false);
   const [methodModalOpen, setMethodModalOpen] = useState(false);
   const [newMethod, setNewMethod] = useState("");
@@ -292,7 +292,9 @@ export function SalesReceiptFormPage() {
           <div className="w-[340px]">
             <span className={LABEL}>Customer</span>
             <Select value={customer} onChange={onCustomerChange} options={customerOptions} placeholder="Choose a customer" allowCustomValue={false} onAddNew={() => setCustomerModalOpen(true)} addNewLabel="+ Add new" />
-            <button type="button" onClick={() => setDetailsOpen(true)} disabled={!customer} className="mt-1 text-sm font-medium text-[var(--color-negative)] hover:underline disabled:cursor-not-allowed disabled:opacity-50 disabled:no-underline">Payee Details</button>
+            {customerRecord ? (
+              <button type="button" onClick={() => window.open(`/customerdetail?nameId=${encodeURIComponent(customerRecord.id)}`, "_blank")} className="mt-1 block text-sm font-medium text-[var(--color-negative)] underline hover:no-underline">Payee Details</button>
+            ) : null}
           </div>
           <div className="w-[400px]">
             <div className="flex items-baseline justify-between">
@@ -333,13 +335,13 @@ export function SalesReceiptFormPage() {
             <div className="flex flex-wrap gap-8 px-5 py-6">
               <div className="w-[300px] space-y-5">
                 <label className="flex gap-3">
-                  <input type="radio" name="receipt-mode" checked readOnly className="mt-1.5 h-5 w-5 accent-[var(--color-ui-primary)]" />
+                  <input type="radio" name="receipt-mode" checked={!charge} onChange={() => setCharge(false)} className="mt-1.5 h-5 w-5 accent-[var(--color-ui-primary)]" />
                   <span><span className="block text-lg text-[var(--color-text-global)]">Record payment</span><span className="text-base">Received via check, cash, other</span></span>
                 </label>
-                <label className="flex cursor-not-allowed gap-3 opacity-70" title="Charging cards isn't available yet">
-                  <input type="radio" name="receipt-mode" disabled className="mt-1.5 h-5 w-5" />
+                <label className="flex cursor-pointer gap-3">
+                  <input type="radio" name="receipt-mode" checked={charge} onChange={() => setCharge(true)} className="mt-1.5 h-5 w-5 accent-[var(--color-ui-primary)]" />
                   <span>
-                    <span className="block text-lg text-[var(--color-text-global)]">Charge new payment</span>
+                    <span className="flex items-center gap-2 text-lg text-[var(--color-text-global)]">Charge new payment <CircleHelp className="h-5 w-5 text-[var(--color-icon-secondary)]" aria-hidden="true" /></span>
                     <span className="text-base">Process a card or ACH bank transfer</span>
                     <span className="mt-3 flex gap-1.5 text-[10px] font-bold">
                       {["VISA", "MC", "DISCOVER", "BANK"].map((b) => <span key={b} className="rounded border border-[var(--color-divider-tertiary)] px-1.5 py-1">{b}</span>)}
@@ -347,24 +349,32 @@ export function SalesReceiptFormPage() {
                   </span>
                 </label>
               </div>
+              {charge ? (
+                <div className="flex-1 rounded-xl bg-[var(--color-container-background-accent)] p-8" style={{ minWidth: 420 }}>
+                  <h3 className="text-xl font-semibold text-[var(--color-text-global)]">Process payments on open invoices</h3>
+                  <p className="mt-3 max-w-xl text-lg">Charge debit and credit cards or process ACH bank payments. Your books update automatically when you get paid through QuickBooks. <a href="https://quickbooks.intuit.com/payments/" target="_blank" rel="noreferrer" className="text-[var(--color-link-action)] hover:underline">Find out more</a></p>
+                  <button type="button" disabled title="Payments aren't available yet" className="mt-6 cursor-not-allowed rounded-md border-2 border-[var(--color-ui-primary)] px-5 py-2.5 text-xl text-[var(--color-ui-primary)] opacity-70">Activate payments</button>
+                </div>
+              ) : (
               <div className="grid flex-1 grid-cols-2 gap-x-4 gap-y-3" style={{ minWidth: 520 }}>
-                <div>
-                  <label htmlFor="receipt-date" className={LABEL}>Sales Receipt Date</label>
-                  <InputField id="receipt-date" type="date" value={date} onChange={(event) => setDate(event.target.value)} />
+                  <div>
+                    <label htmlFor="receipt-date" className={LABEL}>Sales Receipt Date</label>
+                    <InputField id="receipt-date" type="date" value={date} onChange={(event) => setDate(event.target.value)} />
+                  </div>
+                  <div>
+                    <label htmlFor="receipt-ref" className={LABEL}>Reference no.</label>
+                    <InputField id="receipt-ref" value={refNo} onChange={(event) => setRefNo(event.target.value)} />
+                  </div>
+                  <div>
+                    <span className={LABEL}>Payment method</span>
+                    <Select value={method} onChange={setMethod} options={methods.options} placeholder="Select method" allowCustomValue={false} onAddNew={() => setMethodModalOpen(true)} addNewLabel="+ Add new" />
+                  </div>
+                  <div>
+                    <span className={LABEL}>Deposit To</span>
+                    <Select value={depositId} onChange={setDepositId} options={depositOptions} placeholder="Select account" allowCustomValue={false} onAddNew={() => setAccountModalOpen(true)} addNewLabel="+ Add new" />
+                  </div>
                 </div>
-                <div>
-                  <label htmlFor="receipt-ref" className={LABEL}>Reference no.</label>
-                  <InputField id="receipt-ref" value={refNo} onChange={(event) => setRefNo(event.target.value)} />
-                </div>
-                <div>
-                  <span className={LABEL}>Payment method</span>
-                  <Select value={method} onChange={setMethod} options={methods.options} placeholder="Select method" allowCustomValue={false} onAddNew={() => setMethodModalOpen(true)} addNewLabel="+ Add new" />
-                </div>
-                <div>
-                  <span className={LABEL}>Deposit To</span>
-                  <Select value={depositId} onChange={setDepositId} options={depositOptions} placeholder="Select account" allowCustomValue={false} onAddNew={() => setAccountModalOpen(true)} addNewLabel="+ Add new" />
-                </div>
-              </div>
+              )}
             </div>
           </section>
           {!detailsHidden ? (
@@ -514,19 +524,6 @@ export function SalesReceiptFormPage() {
           <Button variant="secondary" onClick={() => setMethodModalOpen(false)}>Cancel</Button>
           <Button onClick={addMethod} disabled={!newMethod.trim()}>Save</Button>
         </div>
-      </Modal>
-      <Modal open={detailsOpen} onClose={() => setDetailsOpen(false)} title={customer || "Customer details"} size="sm">
-        {customerRecord ? (
-          <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-2 text-sm">
-            {customerRecord.companyName ? (<><dt className="text-[var(--color-icon-secondary)]">Company</dt><dd>{customerRecord.companyName}</dd></>) : null}
-            {customerRecord.email ? (<><dt className="text-[var(--color-icon-secondary)]">Email</dt><dd>{customerRecord.email}</dd></>) : null}
-            {customerRecord.phone ? (<><dt className="text-[var(--color-icon-secondary)]">Phone</dt><dd>{customerRecord.phone}</dd></>) : null}
-            {customerRecord.address ? (<><dt className="text-[var(--color-icon-secondary)]">Address</dt><dd>{customerRecord.address}</dd></>) : null}
-            {!customerRecord.companyName && !customerRecord.email && !customerRecord.phone && !customerRecord.address ? <dd className="col-span-2">No saved details for this customer.</dd> : null}
-          </dl>
-        ) : (
-          <p className="text-sm">No saved details for this customer.</p>
-        )}
       </Modal>
     </FullScreenFormShell>
   );

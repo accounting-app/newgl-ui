@@ -80,7 +80,6 @@ export function ExpenseFormPage() {
   const [methodModalOpen, setMethodModalOpen] = useState(false);
   const [newMethod, setNewMethod] = useState("");
   const [accountModalOpen, setAccountModalOpen] = useState(false);
-  const [payeeDetailsOpen, setPayeeDetailsOpen] = useState(false);
   const [attachmentsOpen, setAttachmentsOpen] = useState(false);
   const [saveMenuOpen, setSaveMenuOpen] = useState(false);
   const saveMenuRef = useRef<HTMLDivElement>(null);
@@ -363,9 +362,11 @@ export function ExpenseFormPage() {
             <div className="w-[320px]">
               <span className={LABEL}>Payee</span>
               <Select value={payee} onChange={setPayee} options={payeeOptions} placeholder="Who did you pay?" allowCustomValue={false} onAddNew={() => setPayeeModalOpen(true)} addNewLabel="+ Add new" />
-              <button type="button" onClick={() => setPayeeDetailsOpen(true)} disabled={!payee} className="mt-1 text-sm font-medium text-[var(--color-negative)] hover:underline disabled:cursor-not-allowed disabled:opacity-50 disabled:no-underline">
-                Payee Details
-              </button>
+              {payeeRecord ? (
+                <button type="button" onClick={() => window.open(`/${"is1099Contractor" in payeeRecord ? "vendor" : "customer"}detail?nameId=${encodeURIComponent(payeeRecord.id)}`, "_blank")} className="mt-1 block text-sm font-medium text-[var(--color-negative)] underline hover:no-underline">
+                  Payee Details
+                </button>
+              ) : null}
             </div>
             <div className="w-[320px]">
               <span className={LABEL}>Payment account</span>
@@ -546,20 +547,6 @@ export function ExpenseFormPage() {
           <Button variant="secondary" onClick={() => setMethodModalOpen(false)}>Cancel</Button>
           <Button onClick={addMethod} disabled={!newMethod.trim()}>Save</Button>
         </div>
-      </Modal>
-      <Modal open={payeeDetailsOpen} onClose={() => setPayeeDetailsOpen(false)} title={payee || "Payee details"} size="sm">
-        {payeeRecord ? (
-          <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-2 text-sm">
-            <dt className="text-[var(--color-icon-secondary)]">Type</dt>
-            <dd>{"is1099Contractor" in payeeRecord ? "Vendor" : "Customer"}</dd>
-            {payeeRecord.companyName ? (<><dt className="text-[var(--color-icon-secondary)]">Company</dt><dd>{payeeRecord.companyName}</dd></>) : null}
-            {payeeRecord.email ? (<><dt className="text-[var(--color-icon-secondary)]">Email</dt><dd>{payeeRecord.email}</dd></>) : null}
-            {payeeRecord.phone ? (<><dt className="text-[var(--color-icon-secondary)]">Phone</dt><dd>{payeeRecord.phone}</dd></>) : null}
-            {payeeRecord.address ? (<><dt className="text-[var(--color-icon-secondary)]">Address</dt><dd>{payeeRecord.address}</dd></>) : null}
-          </dl>
-        ) : (
-          <p className="text-sm">No saved details for this payee.</p>
-        )}
       </Modal>
       {panel ? (
         <div className="fixed inset-0 z-[80] flex justify-end bg-black/30">
