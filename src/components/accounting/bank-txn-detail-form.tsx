@@ -36,6 +36,7 @@ type BankTxnDetailFormProps = {
   onAddPayee: () => void;
   productOptions: SelectOption[];
   onAddProduct: () => void;
+  onSplit: () => void;
   onAddSuggestedPayee: (prefill: { name: string; website: string | null }) => void;
   onPost: () => void;
   onExclude: () => void;
@@ -65,9 +66,9 @@ function Switch({ checked, onChange, label }: { checked: boolean; onChange: (che
 
 // The panel that opens under a pending row (QBO's "Categorize" form): every
 // field here edits the same staged row the table cells do, so the two stay in
-// step. Match, Split and Files are shown but disabled until
+// step. Match and Files are shown but disabled until
 // those features exist.
-export function BankTxnDetailForm({ txn, payeeOptions, accountOptions, onChange, onAddPayee, onAddSuggestedPayee, productOptions, onAddProduct, onPost, onExclude, onClose }: BankTxnDetailFormProps) {
+export function BankTxnDetailForm({ txn, payeeOptions, accountOptions, onChange, onAddPayee, onAddSuggestedPayee, productOptions, onAddProduct, onSplit, onPost, onExclude, onClose }: BankTxnDetailFormProps) {
   const memoRef = useRef<HTMLTextAreaElement>(null);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const direction = txn.received ? "in" : "out";
@@ -198,7 +199,7 @@ export function BankTxnDetailForm({ txn, payeeOptions, accountOptions, onChange,
 
       <div className="flex flex-wrap items-center gap-4">
         <Button size="sm" className="!rounded-md px-5" onClick={onPost}>Post</Button>
-        <Button size="sm" variant="secondary" className="!rounded-md px-5" disabled title="Splitting one transaction across several categories isn't available yet">
+        <Button size="sm" variant="secondary" className="!rounded-md px-5" onClick={onSplit}>
           Split
         </Button>
         <Link href="/all-apps/bank-rules" className="px-1 text-sm text-[var(--color-text-global)] hover:underline">

@@ -6,6 +6,8 @@ import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Credit
 import { BankTxnDetailForm, PURPOSE_OPTIONS } from "@/components/accounting/bank-txn-detail-form";
 import { CategorySuggestionMarker, PayeeSuggestionMarker } from "@/components/accounting/bank-txn-row-suggestion";
 import { suggestionKey, useStoredSuggestions } from "@/lib/bank-txn-suggestions-store";
+import { SplitTransactionModal } from "@/components/accounting/split-transaction-modal";
+import type { SplitLine } from "@/components/accounting/split-transaction-modal";
 import { ProductServicePanel } from "@/components/accounting/product-service-panel";
 import { useProductsServices } from "@/lib/hooks/use-products-services";
 import { PayeeSideModal } from "@/components/bank-register/payee-side-modal";
@@ -116,6 +118,7 @@ type DisplayRow = {
   txnType?: PendingBankTxn["txnType"];
   postedTransactionId?: string;
   postedType?: string;
+  splitLineCount?: number;
   /** True for local-only staging rows (deletable); false/undefined for real transactions (not something this Phase-1 screen can delete). */
   isLocal?: boolean;
 };
@@ -250,7 +253,7 @@ export function BankTransactionsPage() {
   const [tab, setTab] = useState<PendingTxnStatus>("PENDING");
   const [search, setSearch] = useState("");
   const stagingRowsForTab = useMemo<DisplayRow[]>(
-    () => accountTxns.filter((t) => t.status === tab).map((t) => ({ ...t, categoryLabel: t.categoryAccountId ? accountById.get(t.categoryAccountId)?.name : undefined, isLocal: true })),
+    () => accountTxns.filter((t) => t.status === tab).map((t) => ({ ...t, categoryLabel: t.splitLineCount ? "Split" : t.categoryAccountId ? accountById.get(t.categoryAccountId)?.name : undefined, isLocal: true })),
     [accountTxns, tab, accountById]
   );
   // Posted shows real transactions plus any locally-staged rows the user
@@ -260,7 +263,7 @@ export function BankTransactionsPage() {
     () =>
       accountTxns
         .filter((t) => t.status === "POSTED")
-        .map((t) => ({ ...t, categoryLabel: t.categoryAccountId ? accountById.get(t.categoryAccountId)?.name : undefined, isLocal: true })),
+        .map((t) => ({ ...t, categoryLabel: t.splitLineCount ? "Split" : t.categoryAccountId ? accountById.get(t.categoryAccountId)?.name : undefined, isLocal: true })),
     [accountTxns, accountById]
   );
   // A staged row that Post turned into a real transaction would otherwise show
@@ -372,6 +375,7 @@ export function BankTransactionsPage() {
   );
   // The row whose Product/Service "+ Add new" opened the side panel.
   const [addProductForId, setAddProductForId] = useState<string | null>(null);
+  const [splitTxnId, setSplitTxnId] = useState<string | null>(null);
   // Ticked rows (by id) drive the bar at the bottom: Post/Exclude on Pending, Undo on Posted.
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
 
@@ -523,7 +527,7 @@ export function BankTransactionsPage() {
   async function undoRow(txn: DisplayRow, options: { quiet?: boolean } = {}): Promise<boolean> {
     try {
       if (txn.postedTransactionId) await services.transactionService.voidTransaction(txn.postedTransactionId);
-      update(txn.id, { status: "PENDING", postedTransactionId: undefined, postedType: undefined });
+      update(txn.id, { status: "PENDING", postedTransactionId: undefined, postedType: undefined, splitLineCount: undefined });
       if (!options.quiet) toast({ variant: "success", title: "Transaction moved back to Pending" });
       await refreshLedgerData();
       return true;
@@ -531,6 +535,41 @@ export function BankTransactionsPage() {
       toast({ variant: "error", title: "Could not undo this transaction", description: err instanceof Error ? err.message : undefined });
       return false;
     }
+  }
+
+  // Split and post: one bank line, several categories. The bank side stays a
+  // single posting for the full amount; the other side is one posting per line.
+  async function postSplit(txn: DisplayRow, lines: SplitLine[], memo: string): Promise<void> {
+    const total = txn.received ?? txn.spent;
+    if (!total || !selectedAccountId) throw new Error("This transaction has no amount.");
+    const offset = lines.map((line) => ({ accountId: line.categoryAccountId, amount: Math.round((Number(line.amount) || 0) * 100) / 100 }));
+    const payee = lines.find((l) => l.payee)?.payee || txn.payee;
+    const finalMemo = memo.trim() || txn.description;
+    let created;
+    if (txn.received) {
+      created = await services.transactionService.createDeposit({
+        transactionDate: txn.date,
+        memo: finalMemo,
+        payee,
+        accountLabel: "Split",
+        sourceAccountId: selectedAccountId,
+        postings: [{ accountId: selectedAccountId, type: "DEBIT", amount: total }, ...offset.map((o) => ({ ...o, type: "CREDIT" as const }))]
+      });
+    } else {
+      created = await services.transactionService.createTransaction({
+        type: "EXPENSE",
+        transactionDate: txn.date,
+        memo: finalMemo,
+        payee,
+        accountLabel: "Split",
+        sourceAccountId: selectedAccountId,
+        postings: [...offset.map((o) => ({ ...o, type: "DEBIT" as const })), { accountId: selectedAccountId, type: "CREDIT", amount: total }]
+      });
+      await services.transactionService.postTransaction(created.id);
+    }
+    update(txn.id, { status: "POSTED", postedTransactionId: created.id, postedType: txn.received ? "Deposit" : "Expense", splitLineCount: lines.length, memo: finalMemo, payee: payee || undefined });
+    toast({ variant: "success", title: "Transaction posted" });
+    await refreshLedgerData();
   }
 
   function handlePost(txn: DisplayRow) {
@@ -1073,6 +1112,7 @@ export function BankTransactionsPage() {
                         txn={txn}
                         onPost={() => handlePost(txn)}
                         onExclude={() => handleExclude(txn)}
+                        onSplit={() => setSplitTxnId(txn.id)}
                       />
                     ) : tab === "POSTED" ? (
                       txn.isLocal ? (
@@ -1111,6 +1151,7 @@ export function BankTransactionsPage() {
                         onAddSuggestedPayee={(prefill) => openAddPayee(txn.id, prefill)}
                         productOptions={productOptions}
                         onAddProduct={() => setAddProductForId(txn.id)}
+                        onSplit={() => setSplitTxnId(txn.id)}
                         onPost={() => {
                           handlePost(txn);
                           if (txn.categoryAccountId) setExpandedId(null);
@@ -1166,6 +1207,21 @@ export function BankTransactionsPage() {
           }}
         />
       ) : null}
+      <SplitTransactionModal
+        open={splitTxnId !== null}
+        txn={pagedTxns.find((t) => t.id === splitTxnId) ?? null}
+        bankAccountName={selectedAccount?.name ?? ""}
+        payeeOptions={vendorOptions}
+        accountOptions={expenseAccountOptions}
+        formatDate={formatDisplayDate}
+        formatMoney={formatMoney}
+        onClose={() => setSplitTxnId(null)}
+        onConfirm={async (lines, memo) => {
+          const row = pagedTxns.find((t) => t.id === splitTxnId);
+          if (row) await postSplit(row, lines, memo);
+          setExpandedId(null);
+        }}
+      />
       <ProductServicePanel
         open={addProductForId !== null}
         incomeAccountOptions={incomeAccountOptions}
@@ -1217,11 +1273,10 @@ export function BankTransactionsPage() {
 }
 
 // "Post" as a text link plus a chevron opening Split/Create rule/Exclude,
-// matching the reference. Split has no real implementation yet (this app
-// has no multi-category-per-posting UI) -- shown disabled rather than
-// silently doing nothing. Create rule links to the real Bank Rules
-// feature; Exclude is real (flips this row's local status).
-function PendingRowActions({ onPost, onExclude }: { txn: DisplayRow; onPost: () => void; onExclude: () => void }) {
+// matching the reference. Split opens the Split transaction dialog; Create
+// rule links to the real Bank Rules feature; Exclude is real (flips this
+// row's local status).
+function PendingRowActions({ onPost, onExclude, onSplit }: { txn: DisplayRow; onPost: () => void; onExclude: () => void; onSplit: () => void }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -1252,9 +1307,11 @@ function PendingRowActions({ onPost, onExclude }: { txn: DisplayRow; onPost: () 
         <div className="absolute right-0 top-full z-10 mt-1 w-40 rounded-lg border border-[var(--color-divider-tertiary)] bg-[var(--color-container-background-primary)] py-1 text-left shadow-lg">
           <button
             type="button"
-            disabled
-            title="Splitting one transaction across multiple categories isn't available yet"
-            className="block w-full cursor-not-allowed px-3 py-1.5 text-left text-sm text-[var(--color-text-disabled)]"
+            onClick={() => {
+              onSplit();
+              setOpen(false);
+            }}
+            className="block w-full px-3 py-1.5 text-left text-sm text-[var(--color-text-global)] hover:bg-[var(--color-action-passive-subtle-hover)]"
           >
             Split
           </button>

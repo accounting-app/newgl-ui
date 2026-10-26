@@ -24,6 +24,8 @@ export type PendingBankTxn = {
   txnType?: "Deposit" | "Expense" | "Transfer";
   /** The Products & Services item chosen for a deposit. */
   productServiceId?: string;
+  /** Set when the row was posted as a split across this many categories. */
+  splitLineCount?: number;
   /** Set when Post created the real ledger transaction; Undo voids it. */
   postedTransactionId?: string;
   postedType?: "Deposit" | "Expense";
