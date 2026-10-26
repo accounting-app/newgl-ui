@@ -9,7 +9,7 @@ import { ChevronDown } from "lucide-react";
 // each destination is decided -- an empty href renders the item inert, so
 // wiring one up later is a one-line change here.
 const QUICK_ADD_LINKS: { label: string; href: string }[] = [
-  { label: "+ Sales Receipt", href: "" },
+  { label: "+ Sales Receipt", href: "/salesreceipt" },
   { label: "+ Deposit", href: "" },
   { label: "+ Check", href: "" },
   { label: "+ CC Credit", href: "" },
@@ -88,7 +88,7 @@ export function QuickAddMenu({ accountId }: { accountId?: string }) {
             {QUICK_ADD_LINKS.map((link) => (
               <li key={link.label}>
                 <a
-                  href={link.href || "#"}
+                  href={link.href ? (accountId ? `${link.href}?rtAccountId=${encodeURIComponent(accountId)}&rt=close` : `${link.href}?rt=close`) : "#"}
                   onClick={(event) => {
                     if (!link.href) event.preventDefault();
                     setOpen(false);
