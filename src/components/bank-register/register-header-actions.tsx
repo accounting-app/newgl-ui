@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { ChevronDown } from "lucide-react";
 
@@ -59,7 +60,8 @@ export function SplitButton({
 }
 
 /** "+ Expense ▾" split button with RightTool's quick-add links; shared by the register and Bank transactions headers. */
-export function QuickAddMenu() {
+export function QuickAddMenu({ accountId }: { accountId?: string }) {
+  const router = useRouter();
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
 
@@ -74,7 +76,13 @@ export function QuickAddMenu() {
 
   return (
     <div ref={rootRef} className="relative inline-flex">
-      <SplitButton label="+ Expense" onMainClick={() => setOpen(false)} onToggle={() => setOpen((current) => !current)} expanded={open} toggleLabel="More quick-add options">
+      <SplitButton
+        label="+ Expense"
+        onMainClick={() => {
+          setOpen(false);
+          // QBO opens the full-screen Expense form with the payment account in the URL.
+          router.push(accountId ? `/expense?rtAccountId=${encodeURIComponent(accountId)}&rt=close` : "/expense?rt=close");
+        }} onToggle={() => setOpen((current) => !current)} expanded={open} toggleLabel="More quick-add options">
         {open ? (
           <ul className="absolute right-0 top-full z-20 mt-1 min-w-[180px] rounded-lg border border-[var(--color-divider-tertiary)] bg-[var(--color-container-background-primary)] py-1 text-left shadow-lg">
             {QUICK_ADD_LINKS.map((link) => (
@@ -101,7 +109,7 @@ export function QuickAddMenu() {
 export function RegisterHeaderActions({ accountId }: { accountId: string }) {
   return (
     <div className="flex items-center justify-end gap-2">
-      <QuickAddMenu />
+      <QuickAddMenu accountId={accountId} />
       <Link
         href={`/all-apps/reconcile?accountId=${encodeURIComponent(accountId)}`}
         className={`${PILL} bg-[var(--color-ui-primary)] text-white hover:opacity-90`}

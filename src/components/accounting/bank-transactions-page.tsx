@@ -626,7 +626,7 @@ export function BankTransactionsPage() {
       <div className="mb-[22px] flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-[32px] font-normal leading-10 text-[var(--color-text-global)]">Bank transactions</h1>
         <div className="flex items-center gap-2">
-          <QuickAddMenu />
+          <QuickAddMenu accountId={selectedAccountId} />
           <SplitButton
             label="Link account"
             toggleLabel="More link account options"
