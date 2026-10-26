@@ -10,7 +10,7 @@ import { ChevronDown } from "lucide-react";
 // wiring one up later is a one-line change here.
 const QUICK_ADD_LINKS: { label: string; href: string }[] = [
   { label: "+ Sales Receipt", href: "/salesreceipt" },
-  { label: "+ Deposit", href: "" },
+  { label: "+ Deposit", href: "/deposit" },
   { label: "+ Check", href: "" },
   { label: "+ CC Credit", href: "" },
   { label: "+ Journal", href: "" },
