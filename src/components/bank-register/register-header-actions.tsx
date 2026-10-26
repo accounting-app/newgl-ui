@@ -23,6 +23,41 @@ export const PILL =
 const SECONDARY =
   "border border-[var(--color-button-border)] bg-transparent text-[var(--color-text-primary)] hover:bg-[var(--color-action-standard-subtle-hover)]";
 
+const SPLIT_BASE = "inline-flex h-8 items-center justify-center text-sm font-semibold transition-colors border border-[var(--color-button-border)] bg-transparent text-[var(--color-text-primary)] hover:bg-[var(--color-action-standard-subtle-hover)]";
+
+/**
+ * The outlined pill with a label and a chevron half ("+ Expense ▾",
+ * "Link account ▾"). One component so every header action has the same shape;
+ * `children` is the menu that opens under the chevron, if any.
+ */
+export function SplitButton({
+  label,
+  onMainClick,
+  onToggle,
+  expanded = false,
+  toggleLabel,
+  children
+}: {
+  label: string;
+  onMainClick: () => void;
+  onToggle: () => void;
+  expanded?: boolean;
+  toggleLabel: string;
+  children?: React.ReactNode;
+}) {
+  return (
+    <div className="relative inline-flex">
+      <button type="button" className={`${SPLIT_BASE} rounded-l-full rounded-r-none pl-5 pr-4`} onClick={onMainClick}>
+        {label}
+      </button>
+      <button type="button" aria-label={toggleLabel} aria-expanded={expanded} className={`${SPLIT_BASE} w-10 rounded-l-none rounded-r-full border-l-0`} onClick={onToggle}>
+        <ChevronDown className="h-4 w-4" aria-hidden="true" />
+      </button>
+      {children}
+    </div>
+  );
+}
+
 /** "+ Expense ▾" split button with RightTool's quick-add links; shared by the register and Bank transactions headers. */
 export function QuickAddMenu() {
   const [open, setOpen] = useState(false);
@@ -39,36 +74,26 @@ export function QuickAddMenu() {
 
   return (
     <div ref={rootRef} className="relative inline-flex">
-      <button type="button" className={`${PILL} rounded-r-none ${SECONDARY}`} onClick={() => setOpen(false)}>
-        + Expense
-      </button>
-      <button
-        type="button"
-        aria-label="More quick-add options"
-        aria-expanded={open}
-        className={`${PILL} w-8 rounded-l-none border-l-0 px-0 ${SECONDARY}`}
-        onClick={() => setOpen((current) => !current)}
-      >
-        <ChevronDown className="h-4 w-4" aria-hidden="true" />
-      </button>
-      {open ? (
-        <ul className="absolute right-0 top-full z-20 mt-1 min-w-[180px] rounded-lg border border-[var(--color-divider-tertiary)] bg-[var(--color-container-background-primary)] py-1 text-left shadow-lg">
-          {QUICK_ADD_LINKS.map((link) => (
-            <li key={link.label}>
-              <a
-                href={link.href || "#"}
-                onClick={(event) => {
-                  if (!link.href) event.preventDefault();
-                  setOpen(false);
-                }}
-                className="block px-3 py-1.5 text-sm text-[var(--color-text-primary)] hover:bg-[var(--color-action-passive-subtle-hover)]"
-              >
-                {link.label}
-              </a>
-            </li>
-          ))}
-        </ul>
-      ) : null}
+      <SplitButton label="+ Expense" onMainClick={() => setOpen(false)} onToggle={() => setOpen((current) => !current)} expanded={open} toggleLabel="More quick-add options">
+        {open ? (
+          <ul className="absolute right-0 top-full z-20 mt-1 min-w-[180px] rounded-lg border border-[var(--color-divider-tertiary)] bg-[var(--color-container-background-primary)] py-1 text-left shadow-lg">
+            {QUICK_ADD_LINKS.map((link) => (
+              <li key={link.label}>
+                <a
+                  href={link.href || "#"}
+                  onClick={(event) => {
+                    if (!link.href) event.preventDefault();
+                    setOpen(false);
+                  }}
+                  className="block px-3 py-1.5 text-sm text-[var(--color-text-primary)] hover:bg-[var(--color-action-passive-subtle-hover)]"
+                >
+                  {link.label}
+                </a>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+      </SplitButton>
     </div>
   );
 }

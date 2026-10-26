@@ -12,7 +12,7 @@ import { ProductServicePanel } from "@/components/accounting/product-service-pan
 import { useProductsServices } from "@/lib/hooks/use-products-services";
 import { PayeeSideModal } from "@/components/bank-register/payee-side-modal";
 import { AddAccountModal } from "@/components/bank-register/add-account-modal";
-import { QuickAddMenu } from "@/components/bank-register/register-header-actions";
+import { QuickAddMenu, SplitButton } from "@/components/bank-register/register-header-actions";
 import { Button } from "@/components/ui/button";
 import { IconButton } from "@/components/ui/icon-button";
 import { InputField } from "@/components/ui/input-field";
@@ -627,14 +627,12 @@ export function BankTransactionsPage() {
         <h1 className="text-[32px] font-normal leading-10 text-[var(--color-text-global)]">Bank transactions</h1>
         <div className="flex items-center gap-2">
           <QuickAddMenu />
-          <div className="flex overflow-hidden rounded-lg">
-            <Button className="rounded-r-none" disabled title="No bank feed integration yet">
-              Link account
-            </Button>
-            <Button className="rounded-l-none border-l border-l-white/20 px-2" disabled aria-label="More options">
-              <ChevronDown className="h-4 w-4" aria-hidden="true" />
-            </Button>
-          </div>
+          <SplitButton
+            label="Link account"
+            toggleLabel="More link account options"
+            onMainClick={() => toast({ variant: "info", title: "Linking a bank isn't available yet" })}
+            onToggle={() => toast({ variant: "info", title: "Linking a bank isn't available yet" })}
+          />
         </div>
       </div>
 
