@@ -174,7 +174,11 @@ export function ContactDetailPage({ kind }: { kind: Kind }) {
           {label}s
         </Link>
         <div className="flex items-center gap-3">
-          <button type="button" disabled title="Reports by customer aren't available yet" className="cursor-not-allowed rounded-md bg-[#8f1111] px-4 py-2 text-sm text-white opacity-90">{label} P&amp;L</button>
+          {kind === "customer" && contact ? (
+            <button type="button" onClick={() => window.open(`/report/builder?rptId=${crypto.randomUUID()}&type=temp&token=PANDL&title=${encodeURIComponent(`Profit And Loss ${contact.name}`)}&nameId=${contact.id}`, "_blank")} className="rounded-md bg-[#8f1111] px-4 py-2 text-sm text-white hover:opacity-90">Customer P&amp;L</button>
+          ) : (
+            <button type="button" disabled title="Reports by vendor aren't available yet" className="cursor-not-allowed rounded-md bg-[#8f1111] px-4 py-2 text-sm text-white opacity-90">{label} P&amp;L</button>
+          )}
           <button type="button" onClick={() => toast({ variant: "info", title: "Feedback isn't available yet" })} className="flex items-center gap-2 text-lg text-[var(--color-text-global)] hover:underline">
             <MessageSquareText className="h-5 w-5" aria-hidden="true" />
             Give feedback
