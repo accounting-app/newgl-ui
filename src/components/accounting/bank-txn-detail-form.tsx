@@ -25,6 +25,7 @@ type DetailTxn = {
   purpose?: PendingBankTxn["purpose"];
   memo?: string;
   txnType?: PendingBankTxn["txnType"];
+  productServiceId?: string;
 };
 
 type BankTxnDetailFormProps = {
@@ -33,6 +34,8 @@ type BankTxnDetailFormProps = {
   accountOptions: SelectOption[];
   onChange: (patch: Partial<PendingBankTxn>) => void;
   onAddPayee: () => void;
+  productOptions: SelectOption[];
+  onAddProduct: () => void;
   onAddSuggestedPayee: (prefill: { name: string; website: string | null }) => void;
   onPost: () => void;
   onExclude: () => void;
@@ -64,7 +67,7 @@ function Switch({ checked, onChange, label }: { checked: boolean; onChange: (che
 // field here edits the same staged row the table cells do, so the two stay in
 // step. Match, Split and Files are shown but disabled until
 // those features exist.
-export function BankTxnDetailForm({ txn, payeeOptions, accountOptions, onChange, onAddPayee, onAddSuggestedPayee, onPost, onExclude, onClose }: BankTxnDetailFormProps) {
+export function BankTxnDetailForm({ txn, payeeOptions, accountOptions, onChange, onAddPayee, onAddSuggestedPayee, productOptions, onAddProduct, onPost, onExclude, onClose }: BankTxnDetailFormProps) {
   const memoRef = useRef<HTMLTextAreaElement>(null);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const direction = txn.received ? "in" : "out";
@@ -146,12 +149,20 @@ export function BankTxnDetailForm({ txn, payeeOptions, accountOptions, onChange,
           </div>
         </div>
       </div>
-      {/* QBO offers Product/Service on money-in rows (sales/deposits). */}
-      {direction === "in" ? (
+      {/* QBO offers Product/Service only for a Deposit (a sale); expenses and transfers don't have it. */}
+      {txnType === "Deposit" ? (
         <div className="mb-5">
           <span className={LABEL}>Product/Service</span>
           <div className={FIELD}>
-            <Select value="" onChange={() => undefined} options={[]} placeholder="Select product/service" allowCustomValue={false} disabled />
+            <Select
+              value={txn.productServiceId ?? ""}
+              onChange={(v) => onChange({ productServiceId: v || undefined })}
+              options={productOptions}
+              placeholder="Select product/service"
+              allowCustomValue={false}
+              onAddNew={onAddProduct}
+              addNewLabel="+ Add new"
+            />
           </div>
         </div>
       ) : null}

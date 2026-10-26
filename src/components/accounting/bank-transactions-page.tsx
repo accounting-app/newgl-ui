@@ -6,6 +6,8 @@ import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Credit
 import { BankTxnDetailForm, PURPOSE_OPTIONS } from "@/components/accounting/bank-txn-detail-form";
 import { CategorySuggestionMarker, PayeeSuggestionMarker } from "@/components/accounting/bank-txn-row-suggestion";
 import { suggestionKey, useStoredSuggestions } from "@/lib/bank-txn-suggestions-store";
+import { ProductServicePanel } from "@/components/accounting/product-service-panel";
+import { useProductsServices } from "@/lib/hooks/use-products-services";
 import { PayeeSideModal } from "@/components/bank-register/payee-side-modal";
 import { AddAccountModal } from "@/components/bank-register/add-account-modal";
 import { QuickAddMenu } from "@/components/bank-register/register-header-actions";
@@ -359,6 +361,17 @@ export function BankTransactionsPage() {
   const [addPayeePrefill, setAddPayeePrefill] = useState<{ name: string; website: string | null } | null>(null);
   const storedSuggestions = useStoredSuggestions();
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const { items: productItems, add: addProductItem } = useProductsServices();
+  const productOptions = useMemo(
+    () => productItems.filter((p) => p.status === "ACTIVE").map((p) => ({ value: p.id, label: p.name, rightLabel: p.type === "SERVICE" ? "Service" : "Product" })),
+    [productItems]
+  );
+  const incomeAccountOptions = useMemo(
+    () => accounts.filter((a) => a.category === "INCOME" || a.category === "OTHER_INCOME").map((a) => ({ value: a.id, label: a.name })),
+    [accounts]
+  );
+  // The row whose Product/Service "+ Add new" opened the side panel.
+  const [addProductForId, setAddProductForId] = useState<string | null>(null);
   // Ticked rows (by id) drive the bar at the bottom: Post/Exclude on Pending, Undo on Posted.
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
 
@@ -1096,6 +1109,8 @@ export function BankTransactionsPage() {
                         onChange={(patch) => update(txn.id, patch)}
                         onAddPayee={() => openAddPayee(txn.id, null)}
                         onAddSuggestedPayee={(prefill) => openAddPayee(txn.id, prefill)}
+                        productOptions={productOptions}
+                        onAddProduct={() => setAddProductForId(txn.id)}
                         onPost={() => {
                           handlePost(txn);
                           if (txn.categoryAccountId) setExpandedId(null);
@@ -1151,6 +1166,16 @@ export function BankTransactionsPage() {
           }}
         />
       ) : null}
+      <ProductServicePanel
+        open={addProductForId !== null}
+        incomeAccountOptions={incomeAccountOptions}
+        onClose={() => setAddProductForId(null)}
+        onSave={async (input) => {
+          const created = await addProductItem(input);
+          if (addProductForId) update(addProductForId, { productServiceId: created.id });
+          toast({ variant: "success", title: `"${created.name}" added to Products & Services` });
+        }}
+      />
       <PayeeSideModal
         open={addPayeeForId !== null}
         prefill={

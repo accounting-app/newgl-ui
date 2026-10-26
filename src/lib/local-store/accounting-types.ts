@@ -22,6 +22,8 @@ export type PendingBankTxn = {
   payeeKind?: "CUSTOMER" | "VENDOR";
   /** Overrides the type derived from direction (money in = Deposit, money out = Expense). */
   txnType?: "Deposit" | "Expense" | "Transfer";
+  /** The Products & Services item chosen for a deposit. */
+  productServiceId?: string;
   /** Set when Post created the real ledger transaction; Undo voids it. */
   postedTransactionId?: string;
   postedType?: "Deposit" | "Expense";
