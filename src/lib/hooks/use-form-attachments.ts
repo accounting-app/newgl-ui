@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
-import { deleteReceipt, updateReceipt, uploadReceipt, type ReceiptRecord } from "@/lib/services/receipts-service";
+import { deleteReceipt, updateReceipt, uploadReceipt, type ReceiptRecord, type ReceiptZone } from "@/lib/services/receipts-service";
 
 export const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024;
 
@@ -14,7 +14,7 @@ export type FormAttachments = ReturnType<typeof useFormAttachments>;
  * are already stored, and `linkTo` stamps the saved transaction's id on
  * every file once the form is saved -- which is what makes it "linked".
  */
-export function useFormAttachments() {
+export function useFormAttachments(zone: ReceiptZone = "forms") {
   const [items, setItems] = useState<ReceiptRecord[]>([]);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -28,7 +28,7 @@ export function useFormAttachments() {
     setUploading(true);
     try {
       for (const file of files) {
-        const created = await uploadReceipt(file);
+        const created = await uploadReceipt(file, { zone });
         uploadedHere.current.add(created.id);
         setItems((current) => [...current, created]);
       }
@@ -37,7 +37,7 @@ export function useFormAttachments() {
     } finally {
       setUploading(false);
     }
-  }, []);
+  }, [zone]);
 
   const attach = useCallback((receipt: ReceiptRecord) => setItems((current) => (current.some((r) => r.id === receipt.id) ? current : [...current, receipt])), []);
 

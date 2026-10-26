@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRef, useState } from "react";
 import { X } from "lucide-react";
 import { BankTxnSuggestions } from "@/components/accounting/bank-txn-suggestions";
+import { LinkedFiles } from "@/components/accounting/linked-files";
 import { Button } from "@/components/ui/button";
 import { INPUT_BASE_CLASSES } from "@/components/ui/input-field";
 import { Select } from "@/components/ui/select";
@@ -191,9 +192,7 @@ export function BankTxnDetailForm({ txn, payeeOptions, accountOptions, onChange,
         </div>
         <div>
           <span className={LABEL}>Files</span>
-          <Button variant="secondary" size="sm" className="!rounded-md" disabled title="Attachments aren't available yet">
-            Upload
-          </Button>
+          <LinkedFiles zone="bank" linkedId={txn.id} />
         </div>
       </div>
 

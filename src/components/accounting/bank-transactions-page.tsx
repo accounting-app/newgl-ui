@@ -6,6 +6,9 @@ import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Credit
 import { BankTxnDetailForm, PURPOSE_OPTIONS } from "@/components/accounting/bank-txn-detail-form";
 import { CategorySuggestionMarker, PayeeSuggestionMarker } from "@/components/accounting/bank-txn-row-suggestion";
 import { suggestionKey, useStoredSuggestions } from "@/lib/bank-txn-suggestions-store";
+import { LinkedFiles } from "@/components/accounting/linked-files";
+import { Modal } from "@/components/ui/modal";
+import { useLinkedFiles } from "@/lib/hooks/use-linked-files";
 import { SplitTransactionModal } from "@/components/accounting/split-transaction-modal";
 import type { SplitLine } from "@/components/accounting/split-transaction-modal";
 import { ProductServicePanel } from "@/components/accounting/product-service-panel";
@@ -140,6 +143,13 @@ export function BankTransactionsPage() {
   const { toast } = useToast();
   const services = useMemo(() => getServiceContainer(), []);
   const [accounts, setAccounts] = useState<Account[]>([]);
+  const [filesTxnId, setFilesTxnId] = useState<string | null>(null);
+  const bankFiles = useLinkedFiles("bank");
+  const fileCount = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const f of bankFiles.all) if (f.linkedTransactionId) counts.set(f.linkedTransactionId, (counts.get(f.linkedTransactionId) ?? 0) + 1);
+    return counts;
+  }, [bankFiles.all]);
   const [postedTransactions, setPostedTransactions] = useState<Transaction[]>([]);
   const reloadAccounts = () => services.accountService.listAccounts().then(setAccounts).catch(() => setAccounts([]));
   useEffect(() => {
@@ -1071,8 +1081,8 @@ export function BankTransactionsPage() {
                   <td className={`${CELL} text-right text-[var(--color-text-global)]`}>{txn.received ? formatMoney(txn.received) : ""}</td>
                   {tab !== "POSTED" ? (
                   <td className={`${CELL} text-center`} onClick={stopRowClick}>
-                    <button type="button" disabled title="Attachments aren't available yet" className="cursor-not-allowed text-[var(--color-icon-secondary)]">
-                      <Plus className="h-4 w-4" aria-hidden="true" />
+                    <button type="button" onClick={() => setFilesTxnId(txn.id)} aria-label={fileCount.get(txn.id) ? `${fileCount.get(txn.id)} attachment(s)` : "Add attachment"} title="Attachments" className="inline-flex items-center gap-0.5 text-[var(--color-icon-secondary)] hover:text-[var(--color-link-action)]">
+                      {fileCount.get(txn.id) ? <><Paperclip className="h-4 w-4" aria-hidden="true" /><span className="text-xs">{fileCount.get(txn.id)}</span></> : <Plus className="h-4 w-4" aria-hidden="true" />}
                     </button>
                   </td>
                   ) : null}
@@ -1276,6 +1286,9 @@ export function BankTransactionsPage() {
           }}
         />
       ) : null}
+      <Modal open={filesTxnId !== null} onClose={() => setFilesTxnId(null)} title="Attachments" size="sm">
+        {filesTxnId ? <LinkedFiles zone="bank" linkedId={filesTxnId} /> : null}
+      </Modal>
       <SplitTransactionModal
         open={splitTxnId !== null}
         txn={pagedTxns.find((t) => t.id === splitTxnId) ?? null}

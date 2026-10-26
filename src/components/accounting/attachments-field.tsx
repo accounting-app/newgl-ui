@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ChevronDown, FileText, Paperclip, Trash2, X } from "lucide-react";
 import type { FormAttachments } from "@/lib/hooks/use-form-attachments";
-import { fetchReceiptFileUrl, listReceipts, type ReceiptRecord } from "@/lib/services/receipts-service";
+import { fetchReceiptFileUrl, listReceipts, type ReceiptRecord, type ReceiptZone } from "@/lib/services/receipts-service";
 
 const LABEL = "mb-1 block text-sm text-[var(--color-text-primary)]";
 const size = (bytes: number) => (bytes >= 1024 * 1024 ? `${(bytes / (1024 * 1024)).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`);
@@ -16,7 +16,7 @@ async function openFile(receipt: ReceiptRecord) {
 // QBO's "Attachments" box under a transaction form: dashed drop zone with
 // "Add attachment", the files already on this form, and a "Show existing"
 // side panel ("Add to <form>") that lists stored files to attach.
-export function AttachmentsField({ attachments, formLabel }: { attachments: FormAttachments; formLabel: string }) {
+export function AttachmentsField({ attachments, formLabel, zone = "forms" }: { attachments: FormAttachments; formLabel: string; zone?: ReceiptZone }) {
   const input = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
   const [panel, setPanel] = useState(false);
@@ -29,11 +29,11 @@ export function AttachmentsField({ attachments, formLabel }: { attachments: Form
     if (!panel) return;
     setStored(null);
     setLoadError(null);
-    listReceipts().then(setStored).catch((err) => setLoadError(err instanceof Error ? err.message : "Could not load attachments"));
+    listReceipts(zone).then(setStored).catch((err) => setLoadError(err instanceof Error ? err.message : "Could not load attachments"));
     const onKey = (event: KeyboardEvent) => event.key === "Escape" && setPanel(false);
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [panel]);
+  }, [panel, zone]);
 
   const onForm = new Set(attachments.items.map((r) => r.id));
   const shown = (stored ?? []).filter((r) => !onForm.has(r.id) && (filter === "all" || (filter === "linked") === Boolean(r.linkedTransactionId)));

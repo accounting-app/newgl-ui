@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Plus, Trash2, X } from "lucide-react";
+import { LinkedFiles } from "@/components/accounting/linked-files";
 import { Button } from "@/components/ui/button";
 import { INPUT_BASE_CLASSES } from "@/components/ui/input-field";
 import { Select } from "@/components/ui/select";
@@ -19,6 +20,7 @@ export type SplitLine = {
 };
 
 type SplitTxn = {
+  id: string;
   date: string;
   description: string;
   spent?: number;
@@ -221,9 +223,7 @@ export function SplitTransactionModal({ open, txn, bankAccountName, payeeOptions
 
           <div className="mt-5">
             <span className="mb-1 block text-sm text-[var(--color-text-primary)]">Files</span>
-            <Button variant="secondary" size="sm" className="!rounded-md" disabled title="Attachments aren't available yet">
-              Upload
-            </Button>
+            {txn ? <LinkedFiles zone="bank" linkedId={txn.id} /> : null}
           </div>
         </div>
 
