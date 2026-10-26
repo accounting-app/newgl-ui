@@ -2,7 +2,10 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ChevronDown, ChevronUp, Copy, History, Plus, Trash2, X } from "lucide-react";
+import { ChevronDown, ChevronUp, ClipboardPaste, Copy, GripVertical, History, Plus, Settings, SquareArrowOutUpRight, Trash2, X } from "lucide-react";
+import { ExpensePasteModal } from "@/components/accounting/expense-paste-modal";
+import type { PastedLine } from "@/components/accounting/expense-paste-modal";
+import { AddAccountModal } from "@/components/bank-register/add-account-modal";
 import { PayeeSideModal } from "@/components/bank-register/payee-side-modal";
 import { Button } from "@/components/ui/button";
 import { INPUT_BASE_CLASSES, InputField } from "@/components/ui/input-field";
@@ -10,11 +13,11 @@ import { Modal } from "@/components/ui/modal";
 import { Select } from "@/components/ui/select";
 import { useToast } from "@/components/ui/toast/toast-context";
 import { ACCOUNT_CATEGORY_LABELS } from "@/constants/ui";
+import { nextAccountCode } from "@/lib/accounting/next-account-code";
 import { useCustomers } from "@/lib/hooks/use-customers";
 import { useVendors } from "@/lib/hooks/use-vendors";
 import { getServiceContainer } from "@/lib/services/service-container-v2";
 import type { Account } from "@/modules/accounting/domain/models";
-import { isRegisterAccountCategory } from "@/modules/accounting/presentation/transaction-type-policy";
 
 type Line = { id: string; categoryAccountId: string; description: string; amount: string };
 
@@ -23,9 +26,13 @@ const blankLine = (): Line => {
   lineCounter += 1;
   return { id: `expense-line-${lineCounter}`, categoryAccountId: "", description: "", amount: "" };
 };
-const startingLines = () => [blankLine(), blankLine()];
+const startingLines = () => [blankLine(), blankLine(), blankLine(), blankLine()];
 
-const PAYMENT_METHODS = ["Cash", "Check", "Credit Card", "Debit Card", "Bank Transfer"].map((m) => ({ value: m, label: m }));
+// QBO's built-in payment methods; "+ Add new" adds your own (kept in this browser).
+const DEFAULT_METHODS = ["ACH", "Cash", "Check", "Credit Card"];
+const METHODS_KEY = "newgl:payment-methods:v1";
+// Accounts you can pay an expense from: bank, card, and other current asset/liability accounts.
+const PAYMENT_CATEGORIES = new Set<Account["category"]>(["BANK", "CREDIT_CARD", "OTHER_CURRENT_ASSET", "OTHER_CURRENT_LIABILITY"]);
 const LABEL = "mb-1 block text-sm text-[var(--color-text-primary)]";
 const RT_BUTTON = "rounded-md border border-[var(--color-negative)] px-3 py-1.5 text-sm text-[var(--color-negative)] hover:bg-[var(--color-action-passive-subtle-hover)]";
 const PLAIN_BUTTON = "rounded-md border border-[var(--color-button-border)] px-3 py-1.5 text-sm text-[var(--color-text-global)] hover:bg-[var(--color-action-passive-subtle-hover)]";
@@ -60,13 +67,27 @@ export function ExpenseFormPage() {
   const [error, setError] = useState<string | null>(null);
   const [payeeModalOpen, setPayeeModalOpen] = useState(false);
   const [pasteOpen, setPasteOpen] = useState(false);
-  const [pasteText, setPasteText] = useState("");
+  const [customMethods, setCustomMethods] = useState<string[]>([]);
+  const [methodModalOpen, setMethodModalOpen] = useState(false);
+  const [newMethod, setNewMethod] = useState("");
+  const [accountModalOpen, setAccountModalOpen] = useState(false);
+  const [payeeDetailsOpen, setPayeeDetailsOpen] = useState(false);
+  const [attachmentsOpen, setAttachmentsOpen] = useState(false);
   const [saveMenuOpen, setSaveMenuOpen] = useState(false);
   const saveMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     services.accountService.listAccounts().then(setAccounts).catch(() => setAccounts([]));
   }, [services]);
+
+  useEffect(() => {
+    try {
+      const stored = JSON.parse(window.localStorage.getItem(METHODS_KEY) ?? "[]");
+      if (Array.isArray(stored)) setCustomMethods(stored.filter((m): m is string => typeof m === "string"));
+    } catch {
+      // storage unavailable: only the built-in methods
+    }
+  }, []);
 
   useEffect(() => {
     if (!saveMenuOpen) return;
@@ -77,7 +98,9 @@ export function ExpenseFormPage() {
     return () => document.removeEventListener("mousedown", onDown);
   }, [saveMenuOpen]);
 
-  const paymentAccounts = useMemo(() => accounts.filter((a) => isRegisterAccountCategory(a.category)), [accounts]);
+  const paymentAccounts = useMemo(() => accounts.filter((a) => PAYMENT_CATEGORIES.has(a.category)).sort((a, b) => a.name.localeCompare(b.name)), [accounts]);
+  const methodOptions = useMemo(() => [...new Set([...DEFAULT_METHODS, ...customMethods])].sort((a, b) => a.localeCompare(b)).map((m) => ({ value: m, label: m })), [customMethods]);
+  const payeeRecord = useMemo(() => vendors.find((v) => v.name === payee) ?? customers.find((c) => c.name === payee), [vendors, customers, payee]);
   const paymentAccount = accounts.find((a) => a.id === paymentAccountId);
   // If no (or an unknown) rtAccountId came in, default to the first bank/card account once loaded.
   useEffect(() => {
@@ -171,19 +194,37 @@ export function ExpenseFormPage() {
     a.click();
     URL.revokeObjectURL(url);
   }
-  function applyPaste() {
-    const parsed: Line[] = [];
-    const unknown: string[] = [];
-    for (const row of pasteText.split("\n").map((r) => r.trim()).filter(Boolean)) {
-      const [category = "", description = "", amount = ""] = row.split(row.includes("\t") ? "\t" : ",").map((c) => c.trim());
-      const match = accounts.find((a) => a.id !== paymentAccountId && a.name.toLowerCase() === category.toLowerCase());
-      if (category && !match) unknown.push(category);
-      parsed.push({ ...blankLine(), categoryAccountId: match?.id ?? "", description, amount: amount.replace(/[$,]/g, "") });
+  function applyPasted(pasted: PastedLine[]) {
+    if (pasted.length === 0) return;
+    const next = pasted.map((p) => ({ ...blankLine(), ...p }));
+    while (next.length < 4) next.push(blankLine());
+    setLines(next);
+    const missing = pasted.filter((p) => !p.categoryAccountId).length;
+    if (missing > 0) toast({ variant: "info", title: missing === 1 ? "1 line still needs a category" : `${missing} lines still need a category` });
+  }
+  // The list the paste dialog matches against, as a CSV to build a spreadsheet from.
+  function exportAccountList() {
+    const rows = ["Category", ...categoryOptions.map((o) => `"${o.label.replaceAll('"', '""')}"`)].join("\n");
+    const url = URL.createObjectURL(new Blob([rows], { type: "text/csv" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "categories.csv";
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+  function addMethod() {
+    const name = newMethod.trim();
+    if (!name) return;
+    const next = [...new Set([...customMethods, name])];
+    setCustomMethods(next);
+    try {
+      window.localStorage.setItem(METHODS_KEY, JSON.stringify(next));
+    } catch {
+      // not persisted; still usable for this visit
     }
-    if (parsed.length > 0) setLines(parsed);
-    setPasteOpen(false);
-    setPasteText("");
-    if (unknown.length > 0) toast({ variant: "info", title: "Some categories weren't found", description: [...new Set(unknown)].join(", ") });
+    setMethod(name);
+    setNewMethod("");
+    setMethodModalOpen(false);
   }
 
   return (
@@ -204,10 +245,13 @@ export function ExpenseFormPage() {
             <div className="w-[320px]">
               <span className={LABEL}>Payee</span>
               <Select value={payee} onChange={setPayee} options={payeeOptions} placeholder="Who did you pay?" allowCustomValue={false} onAddNew={() => setPayeeModalOpen(true)} addNewLabel="+ Add new" />
+              <button type="button" onClick={() => setPayeeDetailsOpen(true)} disabled={!payee} className="mt-1 text-sm font-medium text-[var(--color-negative)] hover:underline disabled:cursor-not-allowed disabled:opacity-50 disabled:no-underline">
+                Payee Details
+              </button>
             </div>
             <div className="w-[320px]">
               <span className={LABEL}>Payment account</span>
-              <Select value={paymentAccountId} onChange={setPaymentAccountId} options={paymentOptions} placeholder="Select account" allowCustomValue={false} />
+              <Select value={paymentAccountId} onChange={setPaymentAccountId} options={paymentOptions} placeholder="Select account" allowCustomValue={false} onAddNew={() => setAccountModalOpen(true)} addNewLabel="+ Add new" />
             </div>
             {paymentAccount ? (
               <p className="self-center pt-5 text-sm">
@@ -228,7 +272,7 @@ export function ExpenseFormPage() {
           </div>
           <div className="w-[240px]">
             <span className={LABEL}>Payment Method</span>
-            <Select value={method} onChange={setMethod} options={PAYMENT_METHODS} placeholder="" allowCustomValue={false} />
+            <Select value={method} onChange={setMethod} options={methodOptions} placeholder="" allowCustomValue={false} onAddNew={() => setMethodModalOpen(true)} addNewLabel="+ Add new" />
           </div>
           <div>
             <label className={LABEL} htmlFor="expense-ref">Ref no.</label>
@@ -242,8 +286,14 @@ export function ExpenseFormPage() {
           </button>
           {linesOpen ? (
             <>
+              <div className="mb-2 flex justify-end gap-3 text-[var(--color-text-global)]">
+                <button type="button" onClick={exportCsv} aria-label="Export lines" title="Export lines" className="hover:text-[var(--color-link-action)]"><SquareArrowOutUpRight className="h-5 w-5" aria-hidden="true" /></button>
+                <button type="button" onClick={() => setPasteOpen(true)} aria-label="Paste from Excel" title="Paste from Excel" className="hover:text-[var(--color-link-action)]"><ClipboardPaste className="h-5 w-5" aria-hidden="true" /></button>
+                <button type="button" disabled aria-label="Table settings" title="Table settings aren't available yet" className="cursor-not-allowed opacity-60"><Settings className="h-5 w-5" aria-hidden="true" /></button>
+              </div>
               <table className="w-full table-fixed border-collapse text-sm">
                 <colgroup>
+                  <col className="w-6" />
                   <col className="w-10" />
                   <col className="w-[28%]" />
                   <col />
@@ -253,6 +303,7 @@ export function ExpenseFormPage() {
                 </colgroup>
                 <thead>
                   <tr className="border-b border-[var(--color-divider-tertiary)] text-left text-xs font-semibold uppercase text-[var(--color-text-global)]">
+                    <th aria-hidden="true" />
                     <th className="px-2 py-3 text-center">#</th>
                     <th className="px-2 py-3">Category</th>
                     <th className="border-l border-[var(--color-divider-tertiary)] px-2 py-3">Description</th>
@@ -263,7 +314,8 @@ export function ExpenseFormPage() {
                 </thead>
                 <tbody>
                   {lines.map((line, index) => (
-                    <tr key={line.id} className="border-b border-[var(--color-divider-tertiary)]">
+                    <tr key={line.id} className={`border-b border-[var(--color-divider-tertiary)] hover:bg-[var(--color-table-row-hover)] ${index % 2 === 0 ? "bg-[var(--color-table-row-secondary)]" : ""}`}>
+                      <td className="text-[var(--color-icon-muted)]"><GripVertical className="h-4 w-4" aria-hidden="true" /></td>
                       <td className="px-2 py-2 text-center">{index + 1}</td>
                       <td className="px-2 py-2">
                         <Select value={line.categoryAccountId} onChange={(v) => updateLine(line.id, { categoryAccountId: v })} options={categoryOptions} placeholder="" allowCustomValue={false} />
@@ -320,10 +372,11 @@ export function ExpenseFormPage() {
             </div>
             <div className="w-[520px] max-w-full">
               <span className={LABEL}>Attachments</span>
-              <div className="rounded-md border border-dashed border-[var(--color-container-border-secondary)] px-6 py-6 text-center opacity-70" title="Attachments aren't available yet">
+              <div className="rounded-md border border-dashed border-[var(--color-container-border-secondary)] px-6 py-6 text-center opacity-70" title="Uploading attachments isn't available yet">
                 <p className="text-[var(--color-link-action)]">Add attachment</p>
                 <p className="text-sm">Max file size: 20 MB</p>
               </div>
+              <button type="button" onClick={() => setAttachmentsOpen(true)} className="mx-auto mt-2 block text-[var(--color-link-action)] hover:underline">Show existing</button>
             </div>
           </div>
         </section>
@@ -360,13 +413,56 @@ export function ExpenseFormPage() {
           make.then(() => setPayee(created.name)).catch((err) => toast({ variant: "error", title: "Could not add contact", description: err instanceof Error ? err.message : undefined }));
         }}
       />
-      <Modal open={pasteOpen} onClose={() => setPasteOpen(false)} title="Paste from Excel" description="One line per row: Category, Description, Amount (tab- or comma-separated). Categories must match an account name." size="md">
-        <textarea value={pasteText} onChange={(event) => setPasteText(event.target.value)} rows={8} className={`${INPUT_BASE_CLASSES} rounded px-3 py-2 text-sm`} aria-label="Pasted rows" />
+      <ExpensePasteModal open={pasteOpen} accounts={categoryOptions.map((o) => ({ id: o.value, name: o.label }))} onClose={() => setPasteOpen(false)} onApply={applyPasted} onExportList={exportAccountList} />
+      <AddAccountModal
+        open={accountModalOpen}
+        accounts={accounts}
+        onClose={() => setAccountModalOpen(false)}
+        onSave={async (input) => {
+          const created = await services.accountService.createAccount({ code: nextAccountCode(accounts), name: input.name, category: input.category, subtype: input.subtype, currency: "USD", openingBalance: input.openingBalance });
+          setAccounts(await services.accountService.listAccounts());
+          setPaymentAccountId(created.id);
+          return created;
+        }}
+      />
+      <Modal open={methodModalOpen} onClose={() => setMethodModalOpen(false)} title="New payment method" size="sm">
+        <InputField value={newMethod} onChange={(event) => setNewMethod(event.target.value)} placeholder="Payment method name" aria-label="Payment method name" autoFocus onKeyDown={(event) => event.key === "Enter" && addMethod()} />
         <div className="mt-4 flex justify-end gap-3">
-          <Button variant="secondary" onClick={() => setPasteOpen(false)}>Cancel</Button>
-          <Button onClick={applyPaste} disabled={!pasteText.trim()}>Add lines</Button>
+          <Button variant="secondary" onClick={() => setMethodModalOpen(false)}>Cancel</Button>
+          <Button onClick={addMethod} disabled={!newMethod.trim()}>Save</Button>
         </div>
       </Modal>
+      <Modal open={payeeDetailsOpen} onClose={() => setPayeeDetailsOpen(false)} title={payee || "Payee details"} size="sm">
+        {payeeRecord ? (
+          <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-2 text-sm">
+            <dt className="text-[var(--color-icon-secondary)]">Type</dt>
+            <dd>{"is1099Contractor" in payeeRecord ? "Vendor" : "Customer"}</dd>
+            {payeeRecord.companyName ? (<><dt className="text-[var(--color-icon-secondary)]">Company</dt><dd>{payeeRecord.companyName}</dd></>) : null}
+            {payeeRecord.email ? (<><dt className="text-[var(--color-icon-secondary)]">Email</dt><dd>{payeeRecord.email}</dd></>) : null}
+            {payeeRecord.phone ? (<><dt className="text-[var(--color-icon-secondary)]">Phone</dt><dd>{payeeRecord.phone}</dd></>) : null}
+            {payeeRecord.address ? (<><dt className="text-[var(--color-icon-secondary)]">Address</dt><dd>{payeeRecord.address}</dd></>) : null}
+          </dl>
+        ) : (
+          <p className="text-sm">No saved details for this payee.</p>
+        )}
+      </Modal>
+      {attachmentsOpen ? (
+        <div className="fixed inset-0 z-[80] flex justify-end bg-black/30">
+          <button type="button" aria-label="Close attachments" className="h-full flex-1" onClick={() => setAttachmentsOpen(false)} />
+          <aside className="flex h-full w-[min(1100px,80vw)] flex-col bg-[var(--color-container-background-primary)] p-8 shadow-2xl">
+            <div className="relative text-center">
+              <h2 className="text-lg text-[var(--color-text-global)]">Add to Expense</h2>
+              <button type="button" onClick={() => setAttachmentsOpen(false)} aria-label="Close" className="absolute right-0 top-0 rounded-md border-2 border-[var(--color-ui-primary)] p-1.5 text-[var(--color-icon-secondary)]">
+                <X className="h-5 w-5" aria-hidden="true" />
+              </button>
+              <span className="mx-auto mt-4 inline-flex items-center gap-4 rounded-md border border-[var(--color-input-border-primary)] px-4 py-2 text-base text-[var(--color-text-global)]">
+                Unlinked <ChevronDown className="h-4 w-4" aria-hidden="true" />
+              </span>
+            </div>
+            <p className="mt-8 text-base">No unlinked attachments</p>
+          </aside>
+        </div>
+      ) : null}
     </div>
   );
 }
