@@ -576,8 +576,17 @@ export function BankTransactionsPage() {
     void postRow(txn);
   }
 
+  // Excluding only sets this staged line aside (duplicates, personal, noise): it
+  // never touched the books, so no ledger balance changes -- only the Pending
+  // count does. Undo puts it back in Pending.
   function handleExclude(txn: DisplayRow) {
     update(txn.id, { status: "EXCLUDED" });
+    toast({ variant: "success", title: "Transaction excluded" });
+  }
+
+  function restoreExcluded(rows: DisplayRow[]) {
+    rows.forEach((row) => update(row.id, { status: "PENDING" }));
+    toast({ variant: "success", title: `${rows.length} transaction${rows.length === 1 ? "" : "s"} moved back to Pending` });
   }
 
   if (!activeCompany) {
@@ -865,6 +874,8 @@ export function BankTransactionsPage() {
               <InputField placeholder="Search" value={search} onChange={(e) => setSearch(e.target.value)} className="h-[38px] pr-10" />
               <Search className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--color-icon-secondary)]" aria-hidden="true" />
             </div>
+            {tab !== "EXCLUDED" ? (
+              <>
             <FilterSelect value={datePreset} onChange={(v) => setDatePreset(v as DatePreset)} icon={CalendarDays} label="Filter by date" className="w-[200px]">
               {(Object.keys(DATE_PRESET_LABELS) as DatePreset[]).map((key) => (
                 <option key={key} value={key}>{DATE_PRESET_LABELS[key]}</option>
@@ -875,6 +886,8 @@ export function BankTransactionsPage() {
               <option value="categorized">Categorized ({statusCounts.categorized})</option>
               <option value="uncategorized">Uncategorized ({statusCounts.uncategorized})</option>
             </FilterSelect>
+              </>
+            ) : null}
           </div>
           <div className="flex flex-wrap items-center gap-4 text-sm text-[var(--color-text-primary)]">
             <span>{pageStart}-{pageEnd} of {visibleTxns.length}</span>
@@ -933,6 +946,24 @@ export function BankTransactionsPage() {
         <div className="overflow-x-auto">
           <table className="w-full min-w-[1100px] border-collapse text-sm">
             <thead className="bg-[var(--color-container-background-accent)] text-left text-[var(--color-text-global)]">
+              {tab === "EXCLUDED" ? (
+                <tr className="[&>th]:h-[46px] [&>th]:px-[10px] [&>th]:py-0 [&>th]:text-sm [&>th]:font-semibold">
+                  <th className="w-10">
+                    <input
+                      type="checkbox"
+                      aria-label="Select all transactions"
+                      checked={pagedTxns.length > 0 && pagedTxns.every((t) => selectedIds.has(t.id))}
+                      onChange={(event) => setSelectedIds(event.target.checked ? new Set(pagedTxns.map((t) => t.id)) : new Set())}
+                    />
+                  </th>
+                  <th className="w-44 border-l border-[var(--color-divider-tertiary)]">
+                    Date<ChevronDown className="ml-2 inline h-3.5 w-3.5 fill-current" aria-hidden="true" />
+                  </th>
+                  <th className="border-l border-[var(--color-divider-tertiary)]">Bank description</th>
+                  <th className="w-44 border-l border-[var(--color-divider-tertiary)] text-right">Amount</th>
+                  <th className="w-28 border-l-2 border-[var(--color-divider-tertiary)] text-right">Action</th>
+                </tr>
+              ) : (
               <tr className="[&>th]:h-[46px] [&>th]:px-[10px] [&>th]:py-0 [&>th]:text-sm [&>th]:font-semibold">
                 <th className="w-10">
                   <input
@@ -962,22 +993,57 @@ export function BankTransactionsPage() {
                 {tab === "POSTED" ? <th className="w-44 border-l border-[var(--color-divider-tertiary)]">Transaction Posted</th> : null}
                 <th className="w-28 border-l-2 border-[var(--color-divider-tertiary)] text-right">Action</th>
               </tr>
+              )}
             </thead>
             <tbody>
             {!hydrated ? (
               <tr>
-                <td colSpan={11} className="px-3 py-6 text-center text-sm text-[var(--color-text-primary)]">
+                <td colSpan={tab === "EXCLUDED" ? 5 : 11} className="px-3 py-6 text-center text-sm text-[var(--color-text-primary)]">
                   Loading…
                 </td>
               </tr>
             ) : visibleTxns.length === 0 ? (
               <tr>
-                <td colSpan={11} className="px-3 py-6 text-center text-sm text-[var(--color-text-disabled)]">
+                <td colSpan={tab === "EXCLUDED" ? 5 : 11} className="px-3 py-6 text-center text-sm text-[var(--color-text-disabled)]">
                   No {tab.toLowerCase()} transactions.
                 </td>
               </tr>
             ) : (
-              pagedTxns.map((txn, index) => (
+              pagedTxns.map((txn, index) => tab === "EXCLUDED" ? (
+                <tr
+                  key={txn.id}
+                  className={`h-[50px] border-t border-[var(--color-divider-tertiary)] hover:bg-[var(--color-table-row-hover)] ${selectedIds.has(txn.id) ? "bg-[color-mix(in_srgb,var(--color-link-action)_12%,transparent)]" : index % 2 === 1 ? "bg-[var(--color-table-row-secondary)]" : ""}`}
+                >
+                  <td className="px-[10px] py-0 align-middle">
+                    <input
+                      type="checkbox"
+                      aria-label="Select transaction"
+                      checked={selectedIds.has(txn.id)}
+                      onChange={() =>
+                        setSelectedIds((current) => {
+                          const next = new Set(current);
+                          if (next.has(txn.id)) next.delete(txn.id);
+                          else next.add(txn.id);
+                          return next;
+                        })
+                      }
+                    />
+                  </td>
+                  <td className={`${CELL} whitespace-nowrap font-medium text-[var(--color-text-global)]`}>{formatDisplayDate(txn.date)}</td>
+                  <td className={CELL}>
+                    <span className="block text-[var(--color-text-global)]">{txn.description}</span>
+                    <span className="block text-[11px] uppercase leading-[14px] text-[var(--color-negative)]">{txn.description}</span>
+                  </td>
+                  <td className={`${CELL} text-right text-[var(--color-text-global)]`}>
+                    {txn.received ? formatMoney(txn.received) : txn.spent ? `-${formatMoney(txn.spent)}` : ""}
+                  </td>
+                  <td className="border-l border-[var(--color-divider-tertiary)] p-2 align-middle text-right">
+                    <button type="button" onClick={() => restoreExcluded([txn])} className="text-sm font-medium text-[var(--color-link-action)] hover:underline">
+                      Undo
+                    </button>
+                  </td>
+                </tr>
+              ) : (
                 <Fragment key={txn.id}>
                 <tr
                   onClick={() => canExpand(txn) && setExpandedId((current) => (current === txn.id ? null : txn.id))}
@@ -1200,6 +1266,11 @@ export function BankTransactionsPage() {
             setSelectedIds(new Set());
           }}
           onUndo={async (rows) => {
+            if (tab === "EXCLUDED") {
+              restoreExcluded(rows);
+              setSelectedIds(new Set());
+              return;
+            }
             let undone = 0;
             for (const row of rows.filter((r) => r.isLocal)) if (await undoRow(row, { quiet: true })) undone += 1;
             toast({ variant: undone > 0 ? "success" : "error", title: undone > 0 ? `${undone} transaction${undone === 1 ? "" : "s"} moved back to Pending` : "Nothing to undo" });
@@ -1378,6 +1449,10 @@ function SelectionBar({
             Exclude
           </button>
         </>
+      ) : tab === "EXCLUDED" ? (
+        <button type="button" className={button} onClick={() => onUndo(rows)}>
+          Undo
+        </button>
       ) : tab === "POSTED" ? (
         <>
           <button type="button" className={button} onClick={() => onUndo(rows)}>
