@@ -36,6 +36,14 @@ const PAYMENT_CATEGORIES = new Set<Account["category"]>(["BANK", "CREDIT_CARD", 
 const LABEL = "mb-1 block text-sm text-[var(--color-text-primary)]";
 const RT_BUTTON = "rounded-md border border-[var(--color-negative)] px-3 py-1.5 text-sm text-[var(--color-negative)] hover:bg-[var(--color-action-passive-subtle-hover)]";
 const PLAIN_BUTTON = "rounded-md border border-[var(--color-button-border)] px-3 py-1.5 text-sm text-[var(--color-text-global)] hover:bg-[var(--color-action-passive-subtle-hover)]";
+// Transaction types the "Copy options" panel can copy this expense into (QBO's list).
+const COPY_TARGETS = ["Bill", "Check", "Credit Card Credit", "Credit Memo", "Delayed Charge", "Delayed Credit", "Estimate", "Expense", "Invoice", "Journal Entry", "Purchase Order", "Refund Receipt", "Sales Order", "Sales Receipt", "Vendor Credit"];
+const COPY_KEY = "newgl:expense-copy:v1";
+const COLUMNS_KEY = "newgl:expense-columns:v1";
+const TAGS_KEY = "newgl:expense-use-tags:v1";
+type Columns = { description: boolean; amount: boolean };
+const COPY_ICON_BUTTON = "flex items-center gap-1.5 rounded-md px-2 py-1 text-sm text-[var(--color-text-global)] hover:bg-[var(--color-action-passive-subtle-hover)]";
+const CHECKBOX = "h-5 w-5 cursor-pointer rounded accent-[var(--color-ui-primary)] disabled:cursor-not-allowed";
 const RT_LINK = "text-left text-sm font-semibold text-[var(--color-negative)] hover:underline disabled:cursor-not-allowed disabled:opacity-50 disabled:no-underline";
 
 const cents = (value: string) => Math.round((Number(value) || 0) * 100);
@@ -75,6 +83,13 @@ export function ExpenseFormPage() {
   const [attachmentsOpen, setAttachmentsOpen] = useState(false);
   const [saveMenuOpen, setSaveMenuOpen] = useState(false);
   const saveMenuRef = useRef<HTMLDivElement>(null);
+  const [panel, setPanel] = useState<"copy" | "settings" | null>(null);
+  const [copyTarget, setCopyTarget] = useState("");
+  const [copyCardOpen, setCopyCardOpen] = useState(true);
+  const [columns, setColumns] = useState<Columns>({ description: true, amount: true });
+  const [columnsOpen, setColumnsOpen] = useState(false);
+  const [useTags, setUseTags] = useState(true);
+  const columnsRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     services.accountService.listAccounts().then(setAccounts).catch(() => setAccounts([]));
@@ -88,6 +103,48 @@ export function ExpenseFormPage() {
       // storage unavailable: only the built-in methods
     }
   }, []);
+
+  useEffect(() => {
+    try {
+      const cols = JSON.parse(window.localStorage.getItem(COLUMNS_KEY) ?? "null");
+      if (cols && typeof cols === "object") setColumns({ description: cols.description !== false, amount: cols.amount !== false });
+      setUseTags(window.localStorage.getItem(TAGS_KEY) !== "0");
+      // A "Copy to Expense" from another tab leaves the draft here; take it once.
+      if (params.get("copy") === "1") {
+        const draft = JSON.parse(window.localStorage.getItem(COPY_KEY) ?? "null");
+        window.localStorage.removeItem(COPY_KEY);
+        if (draft) {
+          setPayee(draft.payee ?? "");
+          setMethod(draft.method ?? "");
+          setMemo(draft.memo ?? "");
+          if (Array.isArray(draft.lines) && draft.lines.length > 0) {
+            const next = draft.lines.map((l: Omit<Line, "id">) => ({ ...blankLine(), categoryAccountId: l.categoryAccountId ?? "", description: l.description ?? "", amount: l.amount ?? "" }));
+            while (next.length < 4) next.push(blankLine());
+            setLines(next);
+          }
+        }
+      }
+    } catch {
+      // storage unavailable: defaults
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (!columnsOpen) return;
+    const onDown = (event: MouseEvent) => {
+      if (!columnsRef.current?.contains(event.target as Node)) setColumnsOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [columnsOpen]);
+
+  useEffect(() => {
+    if (!panel) return;
+    const onKey = (event: KeyboardEvent) => event.key === "Escape" && setPanel(null);
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [panel]);
 
   useEffect(() => {
     if (!saveMenuOpen) return;
@@ -212,6 +269,40 @@ export function ExpenseFormPage() {
     a.click();
     URL.revokeObjectURL(url);
   }
+  function setColumn(key: keyof Columns, on: boolean) {
+    const next = { ...columns, [key]: on };
+    setColumns(next);
+    try {
+      window.localStorage.setItem(COLUMNS_KEY, JSON.stringify(next));
+    } catch {
+      // not persisted
+    }
+  }
+  function toggleTags(on: boolean) {
+    setUseTags(on);
+    try {
+      window.localStorage.setItem(TAGS_KEY, on ? "1" : "0");
+    } catch {
+      // not persisted
+    }
+  }
+  // Only Expense exists in NewGL so far: it opens a new form pre-filled with this one.
+  function copyTo() {
+    if (!copyTarget) return;
+    if (copyTarget !== "Expense") {
+      toast({ variant: "info", title: `Copying to ${copyTarget} isn't available yet` });
+      return;
+    }
+    try {
+      window.localStorage.setItem(COPY_KEY, JSON.stringify({ payee, method, memo, lines: lines.map(({ categoryAccountId, description, amount }) => ({ categoryAccountId, description, amount })) }));
+    } catch {
+      toast({ variant: "error", title: "Could not copy this expense" });
+      return;
+    }
+    window.open(`/expense?rtAccountId=${encodeURIComponent(paymentAccountId)}&rt=close&copy=1`, "_blank");
+    setPanel(null);
+    setCopyTarget("");
+  }
   function addMethod() {
     const name = newMethod.trim();
     if (!name) return;
@@ -234,9 +325,18 @@ export function ExpenseFormPage() {
           <History className="h-6 w-6" aria-hidden="true" />
           Expense
         </h1>
-        <button type="button" onClick={closePage} aria-label="Close" className="text-[var(--color-icon-secondary)] hover:text-[var(--color-text-global)]">
-          <X className="h-6 w-6" aria-hidden="true" />
-        </button>
+        <div className="flex items-center gap-2">
+          <button type="button" onClick={() => setPanel("copy")} className={COPY_ICON_BUTTON}>
+            <Copy className="h-5 w-5" aria-hidden="true" />
+            Copy
+          </button>
+          <button type="button" onClick={() => setPanel("settings")} aria-label="Choose what you use" title="Choose what you use" className={COPY_ICON_BUTTON}>
+            <Settings className="h-5 w-5" aria-hidden="true" />
+          </button>
+          <button type="button" onClick={closePage} aria-label="Close" className="ml-2 text-[var(--color-icon-secondary)] hover:text-[var(--color-text-global)]">
+            <X className="h-6 w-6" aria-hidden="true" />
+          </button>
+        </div>
       </header>
 
       <div className="flex-1 overflow-y-auto px-6 pb-6">
@@ -289,15 +389,31 @@ export function ExpenseFormPage() {
               <div className="mb-2 flex justify-end gap-3 text-[var(--color-text-global)]">
                 <button type="button" onClick={exportCsv} aria-label="Export lines" title="Export lines" className="hover:text-[var(--color-link-action)]"><SquareArrowOutUpRight className="h-5 w-5" aria-hidden="true" /></button>
                 <button type="button" onClick={() => setPasteOpen(true)} aria-label="Paste from Excel" title="Paste from Excel" className="hover:text-[var(--color-link-action)]"><ClipboardPaste className="h-5 w-5" aria-hidden="true" /></button>
-                <button type="button" disabled aria-label="Table settings" title="Table settings aren't available yet" className="cursor-not-allowed opacity-60"><Settings className="h-5 w-5" aria-hidden="true" /></button>
+                <div ref={columnsRef} className="relative">
+                  <button type="button" onClick={() => setColumnsOpen((v) => !v)} aria-label="Table settings" aria-expanded={columnsOpen} className="hover:text-[var(--color-link-action)]"><Settings className="h-5 w-5" aria-hidden="true" /></button>
+                  {columnsOpen ? (
+                    <div role="dialog" aria-label="Columns" className="absolute right-[-12px] top-full z-20 mt-3 w-[250px] rounded-lg border border-[var(--color-divider-tertiary)] bg-[var(--color-container-background-primary)] px-4 pb-4 pt-3 shadow-lg">
+                      <span aria-hidden="true" className="absolute -top-[7px] right-[18px] h-3 w-3 rotate-45 border-l border-t border-[var(--color-divider-tertiary)] bg-[var(--color-container-background-primary)]" />
+                      <button type="button" onClick={() => setColumnsOpen(false)} aria-label="Close columns" className="ml-auto mr-1 block text-[var(--color-icon-secondary)]"><X className="h-5 w-5" aria-hidden="true" /></button>
+                      <p className="mt-2 text-sm text-[var(--color-text-global)]">Columns</p>
+                      <ul className="mt-2 space-y-3 text-sm uppercase text-[var(--color-text-global)]">
+                        <li><label className="flex items-center gap-3 opacity-60"><input type="checkbox" checked disabled className={CHECKBOX} />Category</label></li>
+                        <li><label className="flex cursor-pointer items-center gap-3"><input type="checkbox" checked={columns.description} onChange={(event) => setColumn("description", event.target.checked)} className={CHECKBOX} />Description</label></li>
+                        <li><label className="flex cursor-pointer items-center gap-3"><input type="checkbox" checked={columns.amount} onChange={(event) => setColumn("amount", event.target.checked)} className={CHECKBOX} />Amount</label></li>
+                        <li><label className="flex items-center gap-3 opacity-60" title="Classes aren't available yet"><input type="checkbox" disabled className={CHECKBOX} />Class</label></li>
+                      </ul>
+                    </div>
+                  ) : null}
+                </div>
               </div>
               <table className="w-full table-fixed border-collapse text-sm">
                 <colgroup>
                   <col className="w-6" />
                   <col className="w-10" />
                   <col className="w-[28%]" />
-                  <col />
-                  <col className="w-[18%]" />
+                  {columns.description ? <col /> : null}
+                  {columns.amount ? <col className="w-[18%]" /> : null}
+                  {!columns.description && !columns.amount ? <col /> : null}
                   <col className="w-12" />
                   <col className="w-12" />
                 </colgroup>
@@ -306,8 +422,9 @@ export function ExpenseFormPage() {
                     <th aria-hidden="true" />
                     <th className="px-2 py-3 text-center">#</th>
                     <th className="px-2 py-3">Category</th>
-                    <th className="border-l border-[var(--color-divider-tertiary)] px-2 py-3">Description</th>
-                    <th className="border-l border-[var(--color-divider-tertiary)] px-2 py-3 text-right">Amount</th>
+                    {columns.description ? <th className="border-l border-[var(--color-divider-tertiary)] px-2 py-3">Description</th> : null}
+                    {columns.amount ? <th className="border-l border-[var(--color-divider-tertiary)] px-2 py-3 text-right">Amount</th> : null}
+                    {!columns.description && !columns.amount ? <th /> : null}
                     <th />
                     <th />
                   </tr>
@@ -320,12 +437,13 @@ export function ExpenseFormPage() {
                       <td className="px-2 py-2">
                         <Select value={line.categoryAccountId} onChange={(v) => updateLine(line.id, { categoryAccountId: v })} options={categoryOptions} placeholder="" allowCustomValue={false} />
                       </td>
-                      <td className="border-l border-[var(--color-divider-tertiary)] px-2 py-2">
+                      {columns.description ? <td className="border-l border-[var(--color-divider-tertiary)] px-2 py-2">
                         <input value={line.description} onChange={(event) => updateLine(line.id, { description: event.target.value })} aria-label={`Line ${index + 1} description`} className={`${INPUT_BASE_CLASSES} h-9 rounded px-3 text-sm`} />
-                      </td>
-                      <td className="border-l border-[var(--color-divider-tertiary)] px-2 py-2">
+                      </td> : null}
+                      {columns.amount ? <td className="border-l border-[var(--color-divider-tertiary)] px-2 py-2">
                         <input type="number" min="0" step="0.01" value={line.amount} onChange={(event) => updateLine(line.id, { amount: event.target.value })} aria-label={`Line ${index + 1} amount`} className={`${INPUT_BASE_CLASSES} h-9 rounded px-3 text-right text-sm`} />
-                      </td>
+                      </td> : null}
+                      {!columns.description && !columns.amount ? <td /> : null}
                       <td className="px-1 text-center">
                         <button type="button" aria-label="Copy line" onClick={() => setLines((current) => { const i = current.findIndex((l) => l.id === line.id); return [...current.slice(0, i + 1), { ...line, id: blankLine().id }, ...current.slice(i + 1)]; })} className="text-[var(--color-text-global)]">
                           <Copy className="h-5 w-5" aria-hidden="true" />
@@ -364,7 +482,7 @@ export function ExpenseFormPage() {
               <textarea id="expense-memo" value={memo} onChange={(event) => setMemo(event.target.value)} className={`${INPUT_BASE_CLASSES} h-40 resize-y rounded px-3 py-2 text-sm`} />
               <div className="mt-2 grid grid-cols-2 gap-x-6 gap-y-1">
                 <button type="button" className={RT_LINK} onClick={copyNamesToMemo} disabled={!payee}>Copy Names To Memo</button>
-                <button type="button" className={RT_LINK} disabled title="Tags aren't available yet">Copy Tags To Memo</button>
+                {useTags ? <button type="button" className={RT_LINK} disabled title="Tags aren't available yet">Copy Tags To Memo</button> : <span />}
                 <button type="button" className={RT_LINK} onClick={copyDescriptionsToMemo}>Copy Descriptions To Memo</button>
                 <span />
                 <button type="button" className={RT_LINK} onClick={copyMemoToDescriptions}>Copy Memo to Descriptions</button>
@@ -446,6 +564,44 @@ export function ExpenseFormPage() {
           <p className="text-sm">No saved details for this payee.</p>
         )}
       </Modal>
+      {panel ? (
+        <div className="fixed inset-0 z-[80] flex justify-end bg-black/30">
+          <button type="button" aria-label="Close panel" tabIndex={-1} className="h-full flex-1" onClick={() => setPanel(null)} />
+          <aside className="flex h-full w-[min(1650px,94vw)] flex-col overflow-y-auto bg-[var(--color-container-background-primary)] px-8 pb-8 pt-6 shadow-2xl" role="dialog" aria-label={panel === "copy" ? "Copy options" : "Choose what you use"}>
+            <div className="relative text-center">
+              <h2 className="text-lg text-[var(--color-text-global)]">{panel === "copy" ? "Copy options" : "Choose what you use"}</h2>
+              <button type="button" onClick={() => setPanel(null)} aria-label="Close" className="absolute right-0 top-0 -mt-1 rounded-md p-1.5 text-[var(--color-icon-secondary)] hover:text-[var(--color-text-global)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--color-ui-primary)]">
+                <X className="h-6 w-6" aria-hidden="true" />
+              </button>
+            </div>
+            {panel === "copy" ? (
+              <section className="mt-8 rounded-lg border border-[var(--color-container-border-secondary)]">
+                <button type="button" onClick={() => setCopyCardOpen((v) => !v)} aria-expanded={copyCardOpen} className="flex w-full items-center justify-between px-6 py-5 text-left text-lg font-semibold text-[var(--color-text-global)]">
+                  Copy data to another transaction
+                  {copyCardOpen ? <ChevronUp className="h-5 w-5" aria-hidden="true" /> : <ChevronDown className="h-5 w-5" aria-hidden="true" />}
+                </button>
+                {copyCardOpen ? (
+                  <div className="flex items-end justify-between gap-6 border-t border-[var(--color-divider-tertiary)] px-6 pb-8 pt-8">
+                    <div className="w-[260px]">
+                      <span className={LABEL}>Copy to</span>
+                      <Select value={copyTarget} onChange={setCopyTarget} options={COPY_TARGETS.map((t) => ({ value: t, label: t }))} placeholder="Select..." allowCustomValue={false} />
+                    </div>
+                    <Button variant="secondary" className="!rounded-md" disabled={!copyTarget} onClick={copyTo}>Copy</Button>
+                  </div>
+                ) : null}
+              </section>
+            ) : (
+              <div className="mt-6">
+                <p className="text-base">Changes you make here apply to all expense forms.</p>
+                <label className="mt-6 flex cursor-pointer items-center gap-3 text-base text-[var(--color-text-global)]">
+                  <input type="checkbox" checked={useTags} onChange={(event) => toggleTags(event.target.checked)} className={CHECKBOX} />
+                  Tags
+                </label>
+              </div>
+            )}
+          </aside>
+        </div>
+      ) : null}
       {attachmentsOpen ? (
         <div className="fixed inset-0 z-[80] flex justify-end bg-black/30">
           <button type="button" aria-label="Close attachments" className="h-full flex-1" onClick={() => setAttachmentsOpen(false)} />
