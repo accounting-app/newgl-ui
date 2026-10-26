@@ -11,6 +11,8 @@ import { PayeeSideModal } from "@/components/bank-register/payee-side-modal";
 import { Button } from "@/components/ui/button";
 import { INPUT_BASE_CLASSES, InputField } from "@/components/ui/input-field";
 import { Modal } from "@/components/ui/modal";
+import { AttachmentsField } from "@/components/accounting/attachments-field";
+import { useFormAttachments } from "@/lib/hooks/use-form-attachments";
 import { Select } from "@/components/ui/select";
 import { useToast } from "@/components/ui/toast/toast-context";
 import { ACCOUNT_CATEGORY_LABELS } from "@/constants/ui";
@@ -80,7 +82,7 @@ export function ExpenseFormPage() {
   const [methodModalOpen, setMethodModalOpen] = useState(false);
   const [newMethod, setNewMethod] = useState("");
   const [accountModalOpen, setAccountModalOpen] = useState(false);
-  const [attachmentsOpen, setAttachmentsOpen] = useState(false);
+  const attachments = useFormAttachments();
   const [saveMenuOpen, setSaveMenuOpen] = useState(false);
   const saveMenuRef = useRef<HTMLDivElement>(null);
   const [panel, setPanel] = useState<"copy" | "settings" | null>(null);
@@ -191,6 +193,7 @@ export function ExpenseFormPage() {
     setRefNo("");
     setLines(startingLines());
     setMemo("");
+    attachments.reset();
     setError(null);
   }
 
@@ -222,6 +225,7 @@ export function ExpenseFormPage() {
         ]
       });
       await services.transactionService.postTransaction(created.id);
+      await attachments.linkTo(created.id).catch(() => toast({ variant: "error", title: "Saved, but the attachments could not be linked" }));
       toast({ variant: "success", title: "Expense saved" });
       if (after === "close") closePage();
       else {
@@ -508,12 +512,7 @@ export function ExpenseFormPage() {
               </div>
             </div>
             <div className="w-[520px] max-w-full">
-              <span className={LABEL}>Attachments</span>
-              <div className="rounded-md border border-dashed border-[var(--color-container-border-secondary)] px-6 py-6 text-center opacity-70" title="Uploading attachments isn't available yet">
-                <p className="text-[var(--color-link-action)]">Add attachment</p>
-                <p className="text-sm">Max file size: 20 MB</p>
-              </div>
-              <button type="button" onClick={() => setAttachmentsOpen(true)} className="mx-auto mt-2 block text-[var(--color-link-action)] hover:underline">Show existing</button>
+              <AttachmentsField attachments={attachments} formLabel="Expense" />
             </div>
           </div>
         </section>
@@ -583,23 +582,6 @@ export function ExpenseFormPage() {
                 </label>
               </div>
             )}
-          </aside>
-        </div>
-      ) : null}
-      {attachmentsOpen ? (
-        <div className="fixed inset-0 z-[80] flex justify-end bg-black/30">
-          <button type="button" aria-label="Close attachments" className="h-full flex-1" onClick={() => setAttachmentsOpen(false)} />
-          <aside className="flex h-full w-[min(1100px,80vw)] flex-col bg-[var(--color-container-background-primary)] p-8 shadow-2xl">
-            <div className="relative text-center">
-              <h2 className="text-lg text-[var(--color-text-global)]">Add to Expense</h2>
-              <button type="button" onClick={() => setAttachmentsOpen(false)} aria-label="Close" className="absolute right-0 top-0 rounded-md border-2 border-[var(--color-ui-primary)] p-1.5 text-[var(--color-icon-secondary)]">
-                <X className="h-5 w-5" aria-hidden="true" />
-              </button>
-              <span className="mx-auto mt-4 inline-flex items-center gap-4 rounded-md border border-[var(--color-input-border-primary)] px-4 py-2 text-base text-[var(--color-text-global)]">
-                Unlinked <ChevronDown className="h-4 w-4" aria-hidden="true" />
-              </span>
-            </div>
-            <p className="mt-8 text-base">No unlinked attachments</p>
           </aside>
         </div>
       ) : null}

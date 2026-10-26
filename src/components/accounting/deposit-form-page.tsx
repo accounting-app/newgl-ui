@@ -8,6 +8,8 @@ import { AddAccountModal } from "@/components/bank-register/add-account-modal";
 import { Button } from "@/components/ui/button";
 import { INPUT_BASE_CLASSES, InputField } from "@/components/ui/input-field";
 import { Modal } from "@/components/ui/modal";
+import { AttachmentsField } from "@/components/accounting/attachments-field";
+import { useFormAttachments } from "@/lib/hooks/use-form-attachments";
 import { Select } from "@/components/ui/select";
 import { useToast } from "@/components/ui/toast/toast-context";
 import { ACCOUNT_CATEGORY_LABELS } from "@/constants/ui";
@@ -50,6 +52,7 @@ export function DepositFormPage() {
   const { items: customers } = useCustomers();
   const { items: vendors } = useVendors();
   const methods = usePaymentMethods();
+  const attachments = useFormAttachments();
 
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [depositId, setDepositId] = useState(params.get("rtAccountId") ?? "");
@@ -111,6 +114,7 @@ export function DepositFormPage() {
     setCashBackId("");
     setCashBackMemo("");
     setCashBackAmount("");
+    attachments.reset();
     setError(null);
   }
 
@@ -145,6 +149,7 @@ export function DepositFormPage() {
         ]
       });
       await services.transactionService.postTransaction(created.id);
+      await attachments.linkTo(created.id).catch(() => toast({ variant: "error", title: "Saved, but the attachments could not be linked" }));
       toast({ variant: "success", title: "Deposit saved" });
       if (after === "close") closePage();
       else {
@@ -327,14 +332,7 @@ export function DepositFormPage() {
                 <button type="button" className={RT_LINK} onClick={() => setLines((current) => current.map((l) => ({ ...l, description: memo })))}>Copy Memo to Descriptions</button>
               </div>
             </div>
-            <div>
-              <span className={LABEL}>Attachments</span>
-              <div className="rounded-md border border-dashed border-[var(--color-container-border-secondary)] px-6 py-8 text-center opacity-70" title="Uploading attachments isn't available yet">
-                <p className="text-[var(--color-link-action)]">Add attachment</p>
-                <p className="text-sm">Max file size: 20 MB</p>
-              </div>
-              <button type="button" onClick={() => toast({ variant: "info", title: "Attachments aren't available yet" })} className="mx-auto mt-2 block text-[var(--color-link-action)] hover:underline">Show existing</button>
-            </div>
+            <AttachmentsField attachments={attachments} formLabel="Bank Deposit" />
           </div>
           <div className="w-[720px] max-w-full">
             <div className="flex flex-wrap items-end gap-4">

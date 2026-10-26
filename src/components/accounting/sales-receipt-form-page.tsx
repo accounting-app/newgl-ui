@@ -10,6 +10,8 @@ import { PayeeSideModal } from "@/components/bank-register/payee-side-modal";
 import { Button } from "@/components/ui/button";
 import { INPUT_BASE_CLASSES, InputField } from "@/components/ui/input-field";
 import { Modal } from "@/components/ui/modal";
+import { AttachmentsField } from "@/components/accounting/attachments-field";
+import { useFormAttachments } from "@/lib/hooks/use-form-attachments";
 import { Select } from "@/components/ui/select";
 import { useToast } from "@/components/ui/toast/toast-context";
 import { nextAccountCode } from "@/lib/accounting/next-account-code";
@@ -53,6 +55,7 @@ export function SalesReceiptFormPage() {
   const { items: customers, add: addCustomer } = useCustomers();
   const { items: products, add: addProduct } = useProductsServices();
   const methods = usePaymentMethods();
+  const attachments = useFormAttachments();
 
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [customer, setCustomer] = useState("");
@@ -136,6 +139,7 @@ export function SalesReceiptFormPage() {
     setLines(startingLines());
     setMessage("");
     setStatement("");
+    attachments.reset();
     setError(null);
     if (nextNumber) setNumber(nextNumber);
   }
@@ -192,6 +196,7 @@ export function SalesReceiptFormPage() {
         ]
       });
       await services.transactionService.postTransaction(created.id);
+      await attachments.linkTo(created.id).catch(() => toast({ variant: "error", title: "Saved, but the attachments could not be linked" }));
       const following = String((Number(number) || 1000) + 1);
       try {
         window.localStorage.setItem(NEXT_NUMBER_KEY, following);
@@ -478,12 +483,7 @@ export function SalesReceiptFormPage() {
         </div>
 
         <div className="mt-8 w-[660px] max-w-full">
-          <span className={LABEL}>Attachments</span>
-          <div className="rounded-md border border-[var(--color-container-border-secondary)] px-6 py-5 text-center opacity-80" title="Uploading attachments isn't available yet">
-            <p className="text-[var(--color-link-action)]">Add attachment</p>
-            <p className="text-sm">Max file size: 20 MB</p>
-          </div>
-          <button type="button" disabled className="mx-auto mt-3 block cursor-not-allowed text-[var(--color-link-action)] opacity-70">Show existing</button>
+          <AttachmentsField attachments={attachments} formLabel="Sales Receipt" />
         </div>
         <p className="mt-6 text-center"><a href="https://www.intuit.com/privacy/" target="_blank" rel="noreferrer" className="text-[var(--color-link-action)] hover:underline">Privacy</a></p>
         {error ? <p className="mt-3 text-sm text-[var(--color-negative)]" role="alert">{error}</p> : null}
