@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ChevronDown, ChevronUp, ClipboardPaste, Copy, GripVertical, History, Plus, Settings, SquareArrowOutUpRight, Trash2, X } from "lucide-react";
+import { ChevronDown, ChevronUp, ClipboardPaste, Copy, GripVertical, Plus, Settings, SquareArrowOutUpRight, Trash2, X } from "lucide-react";
+import { FullScreenFormShell } from "@/components/accounting/full-screen-form-shell";
 import { ExpensePasteModal } from "@/components/accounting/expense-paste-modal";
 import type { PastedLine } from "@/components/accounting/expense-paste-modal";
 import { AddAccountModal } from "@/components/bank-register/add-account-modal";
@@ -318,27 +319,44 @@ export function ExpenseFormPage() {
     setMethodModalOpen(false);
   }
 
-  return (
-    <div className="fixed inset-0 z-[70] flex flex-col bg-[var(--color-container-background-accent)] text-[var(--color-text-primary)]">
-      <header className="flex items-center justify-between px-6 py-3">
-        <h1 className="flex items-center gap-3 text-2xl text-[var(--color-text-global)]">
-          <History className="h-6 w-6" aria-hidden="true" />
-          Expense
-        </h1>
-        <div className="flex items-center gap-2">
-          <button type="button" onClick={() => setPanel("copy")} className={COPY_ICON_BUTTON}>
-            <Copy className="h-5 w-5" aria-hidden="true" />
-            Copy
-          </button>
-          <button type="button" onClick={() => setPanel("settings")} aria-label="Choose what you use" title="Choose what you use" className={COPY_ICON_BUTTON}>
-            <Settings className="h-5 w-5" aria-hidden="true" />
-          </button>
-          <button type="button" onClick={closePage} aria-label="Close" className="ml-2 text-[var(--color-icon-secondary)] hover:text-[var(--color-text-global)]">
-            <X className="h-6 w-6" aria-hidden="true" />
-          </button>
+  const footer = (
+    <>
+        <div className="flex items-center gap-3">
+          <Button variant="secondary" className="!rounded-md" onClick={closePage}>Cancel</Button>
+          <Button variant="secondary" className="!rounded-md" onClick={resetForm}>Clear</Button>
         </div>
-      </header>
+        <button type="button" disabled title="Recurring transactions aren't available yet" className="cursor-not-allowed text-base text-[var(--color-text-disabled)]">Make recurring</button>
+        <div className="flex items-center gap-3">
+          <Button variant="secondary" className="!rounded-md" disabled={saving} onClick={() => void save("stay")}>Save</Button>
+          <div ref={saveMenuRef} className="relative inline-flex">
+            <Button className="!rounded-l-md !rounded-r-none" disabled={saving} onClick={() => void save("close")}>{saving ? "Saving..." : "Save and close"}</Button>
+            <Button className="!rounded-l-none !rounded-r-md border-l border-l-white/30 !min-w-0 px-2" aria-label="More save options" disabled={saving} onClick={() => setSaveMenuOpen((v) => !v)}>
+              <ChevronDown className="h-4 w-4" aria-hidden="true" />
+            </Button>
+            {saveMenuOpen ? (
+              <div className="absolute bottom-full right-0 mb-1 w-40 rounded-lg border border-[var(--color-divider-tertiary)] bg-[var(--color-container-background-primary)] py-1 shadow-lg">
+                <button type="button" onClick={() => void save("stay")} className="block w-full px-3 py-1.5 text-left text-sm text-[var(--color-text-global)] hover:bg-[var(--color-action-passive-subtle-hover)]">Save and new</button>
+              </div>
+            ) : null}
+          </div>
+        </div>
+    </>
+  );
 
+  return (
+    <FullScreenFormShell
+      title="Expense"
+      onClose={closePage}
+      toolbar={
+        <button type="button" onClick={() => setPanel("copy")} className="flex h-9 items-center gap-1.5 rounded-md px-2 text-sm text-[var(--color-text-global)] hover:bg-[var(--color-action-passive-subtle-hover)]">
+          <Copy className="h-5 w-5" aria-hidden="true" />
+          Copy
+        </button>
+      }
+      onSettings={() => setPanel("settings")}
+      settingsLabel="Choose what you use"
+      footer={footer}
+    >
       <div className="flex-1 overflow-y-auto px-6 pb-6">
         <div className="flex flex-wrap items-start justify-between gap-6 pb-6">
           <div className="flex flex-wrap gap-6">
@@ -501,27 +519,6 @@ export function ExpenseFormPage() {
         {error ? <p className="mt-3 text-sm text-[var(--color-negative)]" role="alert">{error}</p> : null}
       </div>
 
-      <footer className="flex items-center justify-between gap-4 border-t border-[var(--color-divider-tertiary)] bg-[var(--color-container-background-primary)] px-6 py-3">
-        <div className="flex items-center gap-3">
-          <Button variant="secondary" className="!rounded-md" onClick={closePage}>Cancel</Button>
-          <Button variant="secondary" className="!rounded-md" onClick={resetForm}>Clear</Button>
-        </div>
-        <button type="button" disabled title="Recurring transactions aren't available yet" className="cursor-not-allowed text-base text-[var(--color-text-disabled)]">Make recurring</button>
-        <div className="flex items-center gap-3">
-          <Button variant="secondary" className="!rounded-md" disabled={saving} onClick={() => void save("stay")}>Save</Button>
-          <div ref={saveMenuRef} className="relative inline-flex">
-            <Button className="!rounded-l-md !rounded-r-none" disabled={saving} onClick={() => void save("close")}>{saving ? "Saving..." : "Save and close"}</Button>
-            <Button className="!rounded-l-none !rounded-r-md border-l border-l-white/30 !min-w-0 px-2" aria-label="More save options" disabled={saving} onClick={() => setSaveMenuOpen((v) => !v)}>
-              <ChevronDown className="h-4 w-4" aria-hidden="true" />
-            </Button>
-            {saveMenuOpen ? (
-              <div className="absolute bottom-full right-0 mb-1 w-40 rounded-lg border border-[var(--color-divider-tertiary)] bg-[var(--color-container-background-primary)] py-1 shadow-lg">
-                <button type="button" onClick={() => void save("stay")} className="block w-full px-3 py-1.5 text-left text-sm text-[var(--color-text-global)] hover:bg-[var(--color-action-passive-subtle-hover)]">Save and new</button>
-              </div>
-            ) : null}
-          </div>
-        </div>
-      </footer>
 
       <PayeeSideModal
         open={payeeModalOpen}
@@ -619,6 +616,6 @@ export function ExpenseFormPage() {
           </aside>
         </div>
       ) : null}
-    </div>
+    </FullScreenFormShell>
   );
 }
