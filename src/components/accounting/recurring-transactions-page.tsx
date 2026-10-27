@@ -10,8 +10,8 @@ import type { RecurringKind, RecurringMode, RecurringTemplate } from "@/lib/serv
 
 const KIND_LABEL: Record<RecurringKind, string> = { EXPENSE: "Expense", CHECK: "Check", DEPOSIT: "Deposit", SALES_RECEIPT: "Sales Receipt", JOURNAL_ENTRY: "Journal Entry" };
 const MODE_LABEL: Record<RecurringMode, string> = { SCHEDULED: "Scheduled", REMINDER: "Reminder", UNSCHEDULED: "Unscheduled" };
-// The form each template kind is filled into. Only these have a recurring-capable form so far.
-const FORM_ROUTE: Partial<Record<RecurringKind, string>> = { EXPENSE: "/expense", CHECK: "/check" };
+// The form each template kind is filled into (Sales Receipt has no "Make recurring").
+const FORM_ROUTE: Partial<Record<RecurringKind, string>> = { EXPENSE: "/expense", CHECK: "/check", DEPOSIT: "/deposit", JOURNAL_ENTRY: "/journal" };
 
 const TH = "px-3 py-3 text-left text-xs font-semibold uppercase text-[var(--color-text-global)]";
 const money = (n: number) => n.toLocaleString("en-US", { style: "currency", currency: "USD" });
@@ -91,7 +91,7 @@ export function RecurringTransactionsPage() {
       {error ? <p className="text-[var(--color-negative)]" role="alert">{error}</p> : items === null ? <p>Loading...</p> : items.length === 0 ? (
         <div className="rounded-lg border border-[var(--color-divider-tertiary)] px-6 py-12 text-center">
           <p className="text-lg font-semibold text-[var(--color-text-global)]">No recurring transactions yet</p>
-          <p className="mt-1">Open an Expense or Check and choose <strong>Make recurring</strong> at the bottom to save it as a template.</p>
+          <p className="mt-1">Open an Expense, Check, Deposit or Journal Entry and choose <strong>Make recurring</strong> at the bottom to save it as a template.</p>
         </div>
       ) : (
         <div className="overflow-x-auto">

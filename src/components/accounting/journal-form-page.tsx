@@ -1,19 +1,22 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { ChevronDown, Copy, GripVertical, Trash2 } from "lucide-react";
 import { AttachmentsField } from "@/components/accounting/attachments-field";
 import { FullScreenFormShell, RT_TOOLBAR_LINK, leaveFormPage } from "@/components/accounting/full-screen-form-shell";
 import { Button } from "@/components/ui/button";
 import { INPUT_BASE_CLASSES, InputField } from "@/components/ui/input-field";
 import { Modal } from "@/components/ui/modal";
+import { RecurringIntervalRow, RecurringNameRow, useRecurringTemplate } from "@/components/accounting/recurring-template-fields";
 import { Select } from "@/components/ui/select";
 import { useToast } from "@/components/ui/toast/toast-context";
 import { ACCOUNT_CATEGORY_LABELS } from "@/constants/ui";
 import { useCustomers } from "@/lib/hooks/use-customers";
 import { useFormAttachments } from "@/lib/hooks/use-form-attachments";
 import { useVendors } from "@/lib/hooks/use-vendors";
+import { advanceRecurring, createRecurring, listRecurring, updateRecurring } from "@/lib/services/recurring-service";
+import type { RecurringTemplate } from "@/lib/services/recurring-service";
 import { getServiceContainer } from "@/lib/services/service-container-v2";
 import type { Account } from "@/modules/accounting/domain/models";
 
@@ -43,11 +46,15 @@ const money = (value: number) => value.toLocaleString("en-US", { style: "currenc
 // Reverse" also posts the mirror-image entry on a date you choose.
 export function JournalFormPage() {
   const router = useRouter();
+  const params = useSearchParams();
   const { toast } = useToast();
   const services = useMemo(() => getServiceContainer(), []);
   const { items: customers } = useCustomers();
   const { items: vendors } = useVendors();
   const attachments = useFormAttachments();
+  // "Make recurring" turns this form into a template editor (QBO's "Recurring Journal Entry").
+  const tpl = useRecurringTemplate();
+  const [useTplId, setUseTplId] = useState<string | null>(null); // template this form was filled from
 
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
@@ -83,6 +90,20 @@ export function JournalFormPage() {
       // storage unavailable: defaults
     }
   }, []);
+  // ?template=<id> fills the form from a saved template; &edit=1 opens it as the template editor, otherwise it is "Use" (saving counts the occurrence as done).
+  const templateParam = params.get("template");
+  const editParam = params.get("edit") === "1";
+  useEffect(() => {
+    if (!templateParam) return;
+    listRecurring()
+      .then((all) => {
+        const t = all.find((x) => x.id === templateParam);
+        if (!t) return toast({ variant: "error", title: "That recurring template no longer exists" });
+        applyTemplate(t);
+      })
+      .catch(() => toast({ variant: "error", title: "Could not load the recurring template" }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [templateParam]);
   useEffect(() => {
     if (!menuOpen) return;
     const onDown = (event: MouseEvent) => {
@@ -107,18 +128,67 @@ export function JournalFormPage() {
     if (nextNumber) setNumber(nextNumber);
   }
 
+  /** Validates the lines and works out the ledger postings; shared by Save and Save template. */
+  function buildPostings() {
+    const used = lines.filter((l) => l.accountId || cents(l.debit) > 0 || cents(l.credit) > 0);
+    if (used.length < 2) return { ok: false as const, error: "A journal entry needs at least two lines." };
+    if (used.some((l) => !l.accountId)) return { ok: false as const, error: "Every line with an amount needs an account." };
+    if (used.some((l) => cents(l.debit) > 0 && cents(l.credit) > 0)) return { ok: false as const, error: "A line can have a debit or a credit, not both." };
+    if (used.some((l) => cents(l.debit) <= 0 && cents(l.credit) <= 0)) return { ok: false as const, error: "Every line needs a debit or a credit amount." };
+    if (debitCents !== creditCents) return { ok: false as const, error: `Debits and credits must be equal (difference ${money(Math.abs(debitCents - creditCents) / 100)}).` };
+    const names = [...new Set(used.map((l) => l.name).filter(Boolean))];
+    return {
+      ok: true as const,
+      used,
+      payee: names.length === 1 ? names[0] : undefined,
+      label: used.length > 2 ? "Split" : accounts.find((a) => a.id === used[0].accountId)?.name ?? "",
+      postings: used.map((l) => (cents(l.debit) > 0 ? { accountId: l.accountId, type: "DEBIT" as const, amount: cents(l.debit) / 100 } : { accountId: l.accountId, type: "CREDIT" as const, amount: cents(l.credit) / 100 }))
+    };
+  }
+
+  function applyTemplate(t: RecurringTemplate) {
+    const f = (t.formState ?? {}) as { memo?: string; lines?: Omit<Line, "id">[] };
+    setMemo(f.memo ?? t.payload.memo ?? "");
+    if (f.lines?.length) {
+      const next = f.lines.map((l) => ({ ...blankLine(), ...l }));
+      while (next.length < 8) next.push(blankLine());
+      setLines(next);
+    }
+    if (editParam) tpl.load(t);
+    else setUseTplId(t.id);
+  }
+
+  async function saveTemplate() {
+    const head = tpl.buildBody();
+    if ("error" in head) return setError(head.error);
+    const built = buildPostings();
+    if (!built.ok) return setError(built.error);
+    const body = {
+      ...head,
+      payload: { memo: memo.trim() || undefined, payee: built.payee, accountLabel: built.label, sourceAccountId: built.used[0].accountId, postings: built.postings },
+      formState: { memo, lines: built.used.map(({ accountId, debit, credit, description, name }) => ({ accountId, debit, credit, description, name })) }
+    };
+    setSaving(true);
+    setError(null);
+    try {
+      if (tpl.id) await updateRecurring(tpl.id, body);
+      else await createRecurring({ ...body, kind: "JOURNAL_ENTRY" });
+      toast({ variant: "success", title: "Recurring template saved" });
+      closePage();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not save this template.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function save(after: "stay" | "close", reverseOn?: string) {
     setMenuOpen(false);
     if (!date) return setError("Enter the journal date.");
-    const used = lines.filter((l) => l.accountId || cents(l.debit) > 0 || cents(l.credit) > 0);
-    if (used.length < 2) return setError("A journal entry needs at least two lines.");
-    if (used.some((l) => !l.accountId)) return setError("Every line with an amount needs an account.");
-    if (used.some((l) => cents(l.debit) > 0 && cents(l.credit) > 0)) return setError("A line can have a debit or a credit, not both.");
-    if (used.some((l) => cents(l.debit) <= 0 && cents(l.credit) <= 0)) return setError("Every line needs a debit or a credit amount.");
-    if (debitCents !== creditCents) return setError(`Debits and credits must be equal (difference ${money(Math.abs(debitCents - creditCents) / 100)}).`);
-    const names = [...new Set(used.map((l) => l.name).filter(Boolean))];
-    const postings = used.map((l) => (cents(l.debit) > 0 ? { accountId: l.accountId, type: "DEBIT" as const, amount: cents(l.debit) / 100 } : { accountId: l.accountId, type: "CREDIT" as const, amount: cents(l.credit) / 100 }));
-    const label = used.length > 2 ? "Split" : accounts.find((a) => a.id === used[0].accountId)?.name ?? "";
+    const built = buildPostings();
+    if (!built.ok) return setError(built.error);
+    const { used, postings, label } = built;
+    const names = built.payee ? [built.payee] : [];
     setSaving(true);
     setError(null);
     try {
@@ -153,6 +223,7 @@ export function JournalFormPage() {
       } catch {
         // not persisted
       }
+      if (useTplId) await advanceRecurring(useTplId).catch(() => undefined);
       toast({ variant: "success", title: reverseOn ? "Journal entry saved and reversed" : "Journal entry saved" });
       if (after === "close") closePage();
       else {
@@ -218,11 +289,20 @@ export function JournalFormPage() {
       <button type="button" disabled aria-label="Sort lines" title="Sorting lines isn't available yet" className="flex h-9 items-center px-2 text-[var(--color-negative)] disabled:opacity-60"><span aria-hidden="true" className="text-lg leading-none">↑↓</span></button>
       <button type="button" onClick={exportCsv} className={RT_TOOLBAR_LINK}>Export CSV</button>
       <button type="button" onClick={() => void pasteFromClipboard()} className={RT_TOOLBAR_LINK}>Paste Excel</button>
-      <button type="button" onClick={copyEntry} className="flex h-9 items-center gap-1.5 rounded-md px-2 text-sm text-[var(--color-text-global)] hover:bg-[var(--color-action-passive-subtle-hover)]"><Copy className="h-5 w-5" aria-hidden="true" />Copy</button>
+      {tpl.active ? null : <button type="button" onClick={copyEntry} className="flex h-9 items-center gap-1.5 rounded-md px-2 text-sm text-[var(--color-text-global)] hover:bg-[var(--color-action-passive-subtle-hover)]"><Copy className="h-5 w-5" aria-hidden="true" />Copy</button>}
     </>
   );
 
-  const footer = (
+  const footer = tpl.active ? (
+    <>
+      <div className="flex items-center gap-3">
+        <Button variant="secondary" className="!rounded-md" onClick={closePage}>Cancel</Button>
+        <Button variant="secondary" className="!rounded-md" onClick={() => resetForm()}>Clear</Button>
+      </div>
+      <button type="button" onClick={() => { tpl.cancel(); setError(null); }} className="text-base text-[var(--color-text-global)] hover:underline">Cancel make recurring</button>
+      <Button className="!rounded-md" disabled={saving} onClick={() => void saveTemplate()}>{saving ? "Saving..." : "Save template"}</Button>
+    </>
+  ) : (
     <>
       <div className="flex items-center gap-3">
         <Button variant="secondary" className="!rounded-md" onClick={closePage}>Cancel</Button>
@@ -230,7 +310,7 @@ export function JournalFormPage() {
       </div>
       <div className="flex items-center gap-6 text-base text-[var(--color-text-global)]">
         <button type="button" onClick={() => window.print()} className="hover:underline">Print</button>
-        <button type="button" disabled title="Recurring transactions aren't available yet" className="cursor-not-allowed text-[var(--color-text-disabled)]">Make recurring</button>
+        <button type="button" onClick={() => tpl.start(date)} className="hover:underline">Make recurring</button>
       </div>
       <div className="flex items-center gap-3">
         <Button variant="secondary" className="!rounded-md" disabled={saving} onClick={() => void save("stay")}>Save</Button>
@@ -252,6 +332,13 @@ export function JournalFormPage() {
   return (
     <FullScreenFormShell title={`Journal Entry #${number}`} onClose={closePage} toolbar={toolbar} onSettings={() => toast({ variant: "info", title: "Choose what you use isn't available yet" })} settingsLabel="Choose what you use" footer={footer}>
       <div className="px-6 pb-8 pt-5">
+        {tpl.active ? (
+          <div className="pb-6">
+            <p className="mb-3 text-sm font-semibold text-[var(--color-text-global)]">Recurring Journal Entry</p>
+            <RecurringNameRow tpl={tpl} />
+            <RecurringIntervalRow tpl={tpl} />
+          </div>
+        ) : (
         <div className="flex flex-wrap items-end gap-4 pb-6">
           <div>
             <label className={LABEL} htmlFor="journal-date">Journal date</label>
@@ -262,6 +349,7 @@ export function JournalFormPage() {
             <InputField id="journal-no" value={number} onChange={(event) => setNumber(event.target.value)} className="w-[260px]" />
           </div>
         </div>
+        )}
 
         <table className="w-full table-fixed border-collapse text-sm">
           <colgroup>
@@ -313,7 +401,7 @@ export function JournalFormPage() {
           <button type="button" className={PLAIN_BUTTON} onClick={() => setLines((current) => [...current, blankLine(), blankLine()])}>Add lines</button>
           <button type="button" className={PLAIN_BUTTON} onClick={() => setLines(startingLines())}>Clear all lines</button>
           <button type="button" className={RT_BUTTON} onClick={clearZeroLines}>Clear 0 Value Lines</button>
-          <button type="button" className={`${RT_LINK} ml-2 !text-sm font-semibold`} disabled={saving} onClick={openReverse}>Save and Reverse</button>
+          {tpl.active ? null : <button type="button" className={`${RT_LINK} ml-2 !text-sm font-semibold`} disabled={saving} onClick={openReverse}>Save and Reverse</button>}
         </div>
 
         <div className="mt-10 flex flex-wrap gap-8">

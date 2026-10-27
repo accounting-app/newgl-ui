@@ -20,7 +20,8 @@ import { nextAccountCode } from "@/lib/accounting/next-account-code";
 import { useCustomers } from "@/lib/hooks/use-customers";
 import { useVendors } from "@/lib/hooks/use-vendors";
 import { advanceRecurring, createRecurring, listRecurring, updateRecurring } from "@/lib/services/recurring-service";
-import type { RecurringMode, RecurringSchedule, RecurringTemplate } from "@/lib/services/recurring-service";
+import type { RecurringTemplate } from "@/lib/services/recurring-service";
+import { RecurringIntervalRow, RecurringNameRow, useRecurringTemplate } from "@/components/accounting/recurring-template-fields";
 import { getServiceContainer } from "@/lib/services/service-container-v2";
 import type { Account } from "@/modules/accounting/domain/models";
 
@@ -43,13 +44,6 @@ const RT_BUTTON = "rounded-md border border-[var(--color-negative)] px-3 py-1.5 
 const PLAIN_BUTTON = "rounded-md border border-[var(--color-button-border)] px-3 py-1.5 text-sm text-[var(--color-text-global)] hover:bg-[var(--color-action-passive-subtle-hover)]";
 // Transaction types the "Copy options" panel can copy this expense into (QBO's list).
 const COPY_TARGETS = ["Bill", "Check", "Credit Card Credit", "Credit Memo", "Delayed Charge", "Delayed Credit", "Estimate", "Expense", "Invoice", "Journal Entry", "Purchase Order", "Refund Receipt", "Sales Order", "Sales Receipt", "Vendor Credit"];
-const MODE_OPTIONS = [{ value: "SCHEDULED", label: "Scheduled" }, { value: "REMINDER", label: "Reminder" }, { value: "UNSCHEDULED", label: "Unscheduled" }];
-const UNIT_OPTIONS = [{ value: "DAY", label: "Daily" }, { value: "WEEK", label: "Weekly" }, { value: "MONTH", label: "Monthly" }, { value: "YEAR", label: "Yearly" }];
-const END_OPTIONS = [{ value: "NONE", label: "None" }, { value: "BY", label: "By" }, { value: "AFTER", label: "After" }];
-const WEEKDAY_OPTIONS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"].map((label, i) => ({ value: String(i), label }));
-const MONTH_OPTIONS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"].map((label, i) => ({ value: String(i + 1), label }));
-const ordinalDay = (n: number) => `${n}${n % 100 >= 11 && n % 100 <= 13 ? "th" : (["th", "st", "nd", "rd"][n % 10] ?? "th")}`;
-const DAY_OPTIONS = [...Array.from({ length: 31 }, (_, i) => ({ value: String(i + 1), label: ordinalDay(i + 1) })), { value: "-1", label: "last" }];
 const CHECK_NEXT_KEY = "newgl:check-next:v1";
 const COPY_KEY = "newgl:expense-copy:v1";
 const COLUMNS_KEY = "newgl:expense-columns:v1";
@@ -85,21 +79,8 @@ export function ExpenseFormPage({ kind = "expense" }: { kind?: "expense" | "chec
   const [printLater, setPrintLater] = useState(false);
   const [mailing, setMailing] = useState("");
   // "Make recurring" turns this form into a template editor (QBO's "Recurring Expense").
-  const [recurring, setRecurring] = useState(false);
-  const [tplId, setTplId] = useState<string | null>(null); // template being edited
+  const tpl = useRecurringTemplate();
   const [useTplId, setUseTplId] = useState<string | null>(null); // template this form was filled from
-  const [tplName, setTplName] = useState("");
-  const [tplMode, setTplMode] = useState<RecurringMode>("SCHEDULED");
-  const [advance, setAdvance] = useState("");
-  const [unit, setUnit] = useState<RecurringSchedule["unit"]>("MONTH");
-  const [every, setEvery] = useState("1");
-  const [onDay, setOnDay] = useState("1");
-  const [onWeekday, setOnWeekday] = useState("1");
-  const [onMonth, setOnMonth] = useState("1");
-  const [startDate, setStartDate] = useState("");
-  const [endType, setEndType] = useState<RecurringSchedule["endType"]>("NONE");
-  const [endDate, setEndDate] = useState("");
-  const [endAfter, setEndAfter] = useState("");
   const [refNo, setRefNo] = useState("");
   const [lines, setLines] = useState<Line[]>(startingLines);
   const [memo, setMemo] = useState("");
@@ -400,22 +381,7 @@ export function ExpenseFormPage({ kind = "expense" }: { kind?: "expense" | "chec
       setLines(next);
     }
     if (editParam) {
-      setRecurring(true);
-      setTplId(t.id);
-      setTplName(t.name);
-      setTplMode(t.mode);
-      setAdvance(t.daysInAdvance ? String(t.daysInAdvance) : "");
-      if (t.schedule) {
-        setUnit(t.schedule.unit);
-        setEvery(String(t.schedule.every));
-        setOnDay(String(t.schedule.onDay ?? 1));
-        setOnWeekday(String(t.schedule.onWeekday ?? 1));
-        setOnMonth(String(t.schedule.onMonth ?? 1));
-        setStartDate(t.schedule.startDate);
-        setEndType(t.schedule.endType);
-        setEndDate(t.schedule.endDate ?? "");
-        setEndAfter(t.schedule.endAfter ? String(t.schedule.endAfter) : "");
-      }
+      tpl.load(t);
     } else {
       setUseTplId(t.id);
     }
@@ -423,34 +389,14 @@ export function ExpenseFormPage({ kind = "expense" }: { kind?: "expense" | "chec
 
   async function saveTemplate() {
     if (!paymentAccount) return setError(isCheck ? "Choose the bank account." : "Choose the payment account.");
-    if (!tplName.trim()) return setError("Enter a template name.");
+    const head = tpl.buildBody();
+    if ("error" in head) return setError(head.error);
     const used = lines.filter((l) => l.categoryAccountId || cents(l.amount) > 0);
     if (used.length === 0) return setError("Add at least one line with a category and an amount.");
     if (used.some((l) => !l.categoryAccountId)) return setError("Every line with an amount needs a category.");
     if (used.some((l) => cents(l.amount) <= 0)) return setError("Every line needs an amount above zero.");
-    let schedule: RecurringSchedule | undefined;
-    if (tplMode !== "UNSCHEDULED") {
-      if (!startDate) return setError("Enter a start date.");
-      if (!(Number(every) >= 1)) return setError("The interval must be at least 1.");
-      if (endType === "BY" && !endDate) return setError("Enter the end date.");
-      if (endType === "AFTER" && !(Number(endAfter) >= 1)) return setError("Enter how many occurrences.");
-      schedule = {
-        unit,
-        every: Math.floor(Number(every)),
-        onDay: unit === "MONTH" || unit === "YEAR" ? Number(onDay) : undefined,
-        onWeekday: unit === "WEEK" ? Number(onWeekday) : undefined,
-        onMonth: unit === "YEAR" ? Number(onMonth) : undefined,
-        startDate,
-        endType,
-        endDate: endType === "BY" ? endDate : undefined,
-        endAfter: endType === "AFTER" ? Math.floor(Number(endAfter)) : undefined
-      };
-    }
     const body = {
-      name: tplName.trim(),
-      mode: tplMode,
-      daysInAdvance: tplMode === "SCHEDULED" ? Math.max(0, Math.floor(Number(advance) || 0)) : 0,
-      schedule,
+      ...head,
       payload: {
         memo: memo.trim() || undefined,
         payee: payee.trim() || undefined,
@@ -466,7 +412,7 @@ export function ExpenseFormPage({ kind = "expense" }: { kind?: "expense" | "chec
     setSaving(true);
     setError(null);
     try {
-      if (tplId) await updateRecurring(tplId, body);
+      if (tpl.id) await updateRecurring(tpl.id, body);
       else await createRecurring({ ...body, kind: isCheck ? "CHECK" : "EXPENSE" });
       toast({ variant: "success", title: "Recurring template saved" });
       closePage();
@@ -477,13 +423,13 @@ export function ExpenseFormPage({ kind = "expense" }: { kind?: "expense" | "chec
     }
   }
 
-  const footer = recurring ? (
+  const footer = tpl.active ? (
     <>
       <div className="flex items-center gap-3">
         <Button variant="secondary" className="!rounded-md" onClick={closePage}>Cancel</Button>
         <Button variant="secondary" className="!rounded-md" onClick={resetForm}>Clear</Button>
       </div>
-      <button type="button" onClick={() => { setRecurring(false); setTplId(null); setError(null); }} className="text-base text-[var(--color-text-global)] hover:underline">Cancel make recurring</button>
+      <button type="button" onClick={() => { tpl.cancel(); setError(null); }} className="text-base text-[var(--color-text-global)] hover:underline">Cancel make recurring</button>
       <Button className="!rounded-md" disabled={saving} onClick={() => void saveTemplate()}>{saving ? "Saving..." : "Save template"}</Button>
     </>
   ) : (
@@ -499,7 +445,7 @@ export function ExpenseFormPage({ kind = "expense" }: { kind?: "expense" | "chec
               <button type="button" disabled title="Ordering checks isn't available yet" className="cursor-not-allowed text-[var(--color-text-disabled)]">Order checks</button>
             </>
           ) : null}
-          <button type="button" onClick={() => { setRecurring(true); setStartDate((d) => d || date); }} className="text-[var(--color-text-global)] hover:underline">Make recurring</button>
+          <button type="button" onClick={() => tpl.start(date)} className="text-[var(--color-text-global)] hover:underline">Make recurring</button>
           {isCheck ? <button type="button" disabled title="More options aren't available yet" className="cursor-not-allowed text-[var(--color-text-disabled)]">More</button> : null}
         </div>
         <div className="flex items-center gap-3">
@@ -524,7 +470,7 @@ export function ExpenseFormPage({ kind = "expense" }: { kind?: "expense" | "chec
       title={isCheck ? `Check #${checkNo}` : "Expense"}
       onClose={closePage}
       toolbar={
-        recurring ? null : <button type="button" onClick={() => setPanel("copy")} className="flex h-9 items-center gap-1.5 rounded-md px-2 text-sm text-[var(--color-text-global)] hover:bg-[var(--color-action-passive-subtle-hover)]">
+        tpl.active ? null : <button type="button" onClick={() => setPanel("copy")} className="flex h-9 items-center gap-1.5 rounded-md px-2 text-sm text-[var(--color-text-global)] hover:bg-[var(--color-action-passive-subtle-hover)]">
           <Copy className="h-5 w-5" aria-hidden="true" />
           Copy
         </button>
@@ -534,26 +480,10 @@ export function ExpenseFormPage({ kind = "expense" }: { kind?: "expense" | "chec
       footer={footer}
     >
       <div className="flex-1 overflow-y-auto px-6 pb-6">
-        {recurring ? (
+        {tpl.active ? (
           <div className="pb-6">
             <p className="mb-3 text-sm font-semibold text-[var(--color-text-global)]">{isCheck ? "Recurring Check" : "Recurring Expense"}</p>
-            <div className="flex flex-wrap items-end gap-4 border-b border-[var(--color-divider-tertiary)] pb-5">
-              <div className="w-[220px]">
-                <label className={LABEL} htmlFor="tpl-name">Template name</label>
-                <InputField id="tpl-name" value={tplName} onChange={(event) => setTplName(event.target.value)} autoFocus />
-              </div>
-              <div className="w-[220px]">
-                <span className={LABEL}>Type</span>
-                <Select value={tplMode} onChange={(v) => setTplMode(v as RecurringMode)} options={MODE_OPTIONS} placeholder="" allowCustomValue={false} />
-              </div>
-              {tplMode === "SCHEDULED" ? (
-                <div className="flex items-center gap-3 pb-2">
-                  <span>Create</span>
-                  <InputField aria-label="Days in advance" type="number" min="0" value={advance} onChange={(event) => setAdvance(event.target.value)} className="w-[80px]" />
-                  <span>days in advance</span>
-                </div>
-              ) : null}
-            </div>
+            <RecurringNameRow tpl={tpl} />
             <div className="flex flex-wrap gap-8 border-b border-[var(--color-divider-tertiary)] py-5">
             <div className="w-[320px]">
               <span className={LABEL}>Payee</span>
@@ -570,54 +500,7 @@ export function ExpenseFormPage({ kind = "expense" }: { kind?: "expense" | "chec
                 <Select value={paymentAccountId} onChange={setPaymentAccountId} options={paymentOptions} placeholder="Select account" allowCustomValue={false} onAddNew={() => setAccountModalOpen(true)} addNewLabel="+ Add new" />
               </div>
             </div>
-            {tplMode !== "UNSCHEDULED" ? (
-              <div className="flex flex-wrap items-end gap-x-10 gap-y-4 border-b border-[var(--color-divider-tertiary)] py-5">
-                <div className="flex flex-wrap items-end gap-3">
-                  <div className="w-[150px]">
-                    <span className={LABEL}>Interval</span>
-                    <Select value={unit} onChange={(v) => setUnit(v as RecurringSchedule["unit"])} options={UNIT_OPTIONS} placeholder="" allowCustomValue={false} />
-                  </div>
-                  {unit === "WEEK" ? (
-                    <>
-                      <span className="pb-2">on</span>
-                      <div className="w-[160px]"><Select value={onWeekday} onChange={setOnWeekday} options={WEEKDAY_OPTIONS} placeholder="" allowCustomValue={false} /></div>
-                    </>
-                  ) : null}
-                  {unit === "YEAR" ? (
-                    <>
-                      <span className="pb-2">on</span>
-                      <div className="w-[150px]"><Select value={onMonth} onChange={setOnMonth} options={MONTH_OPTIONS} placeholder="" allowCustomValue={false} /></div>
-                    </>
-                  ) : null}
-                  {unit === "MONTH" || unit === "YEAR" ? (
-                    <>
-                      {unit === "MONTH" ? <span className="pb-2">on day</span> : null}
-                      <div className="w-[110px]"><Select value={onDay} onChange={setOnDay} options={DAY_OPTIONS} placeholder="" allowCustomValue={false} /></div>
-                    </>
-                  ) : null}
-                  <span className="pb-2">{unit === "DAY" ? "every" : "of every"}</span>
-                  <InputField aria-label="Repeat every" type="number" min="1" value={every} onChange={(event) => setEvery(event.target.value)} className="w-[80px]" />
-                  <span className="pb-2">{{ DAY: "day(s)", WEEK: "week(s)", MONTH: "month(s)", YEAR: "year(s)" }[unit]}</span>
-                </div>
-                <div>
-                  <label className={LABEL} htmlFor="tpl-start">Start date</label>
-                  <InputField id="tpl-start" type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} className="w-[200px]" />
-                </div>
-                <div className="flex items-end gap-3">
-                  <div className="w-[130px]">
-                    <span className={LABEL}>End</span>
-                    <Select value={endType} onChange={(v) => setEndType(v as RecurringSchedule["endType"])} options={END_OPTIONS} placeholder="" allowCustomValue={false} />
-                  </div>
-                  {endType === "BY" ? <InputField aria-label="End date" type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} className="w-[180px]" /> : null}
-                  {endType === "AFTER" ? (
-                    <>
-                      <InputField aria-label="Occurrences" type="number" min="1" value={endAfter} onChange={(event) => setEndAfter(event.target.value)} className="w-[90px]" />
-                      <span className="pb-2">occurrences</span>
-                    </>
-                  ) : null}
-                </div>
-              </div>
-            ) : null}
+            <RecurringIntervalRow tpl={tpl} />
             {!isCheck ? (
               <div className="py-5">
                 <span className={LABEL}>Payment Method</span>
