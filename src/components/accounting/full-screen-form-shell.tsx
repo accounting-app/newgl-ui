@@ -49,3 +49,11 @@ export function FullScreenFormShell({ title, onClose, toolbar, onSettings, setti
     </div>
   );
 }
+
+// Closes a full-screen form: a form opened in its own window/tab (the quick-add
+// menu) closes that window; one opened in place returns to the previous page.
+export function leaveFormPage(router: { back: () => void; push: (href: string) => void }) {
+  if (window.opener) window.close();
+  else if (window.history.length > 1) router.back();
+  else router.push("/all-apps/bank-transactions");
+}

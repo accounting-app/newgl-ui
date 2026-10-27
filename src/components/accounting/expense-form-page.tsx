@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ChevronDown, ChevronUp, ClipboardPaste, Copy, GripVertical, Plus, Settings, SquareArrowOutUpRight, Trash2, X } from "lucide-react";
-import { FullScreenFormShell } from "@/components/accounting/full-screen-form-shell";
+import { FullScreenFormShell, leaveFormPage } from "@/components/accounting/full-screen-form-shell";
 import { ExpensePasteModal } from "@/components/accounting/expense-paste-modal";
 import type { PastedLine } from "@/components/accounting/expense-paste-modal";
 import { AddAccountModal } from "@/components/bank-register/add-account-modal";
@@ -41,6 +41,7 @@ const RT_BUTTON = "rounded-md border border-[var(--color-negative)] px-3 py-1.5 
 const PLAIN_BUTTON = "rounded-md border border-[var(--color-button-border)] px-3 py-1.5 text-sm text-[var(--color-text-global)] hover:bg-[var(--color-action-passive-subtle-hover)]";
 // Transaction types the "Copy options" panel can copy this expense into (QBO's list).
 const COPY_TARGETS = ["Bill", "Check", "Credit Card Credit", "Credit Memo", "Delayed Charge", "Delayed Credit", "Estimate", "Expense", "Invoice", "Journal Entry", "Purchase Order", "Refund Receipt", "Sales Order", "Sales Receipt", "Vendor Credit"];
+const CHECK_NEXT_KEY = "newgl:check-next:v1";
 const COPY_KEY = "newgl:expense-copy:v1";
 const COLUMNS_KEY = "newgl:expense-columns:v1";
 const TAGS_KEY = "newgl:expense-use-tags:v1";
@@ -57,7 +58,8 @@ const money = (value: number) => value.toLocaleString("en-US", { style: "currenc
 // it already pointing at that account. `rt=close` is RightTool's flag that this
 // page was opened from a list: Save and close / Cancel / X return there.
 // Save posts a real expense (category lines debit, the payment account credits).
-export function ExpenseFormPage() {
+export function ExpenseFormPage({ kind = "expense" }: { kind?: "expense" | "check" }) {
+  const isCheck = kind === "check";
   const router = useRouter();
   const params = useSearchParams();
   const { toast } = useToast();
@@ -70,6 +72,9 @@ export function ExpenseFormPage() {
   const [paymentAccountId, setPaymentAccountId] = useState(params.get("rtAccountId") ?? "");
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [method, setMethod] = useState("");
+  const [checkNo, setCheckNo] = useState("1");
+  const [printLater, setPrintLater] = useState(false);
+  const [mailing, setMailing] = useState("");
   const [refNo, setRefNo] = useState("");
   const [lines, setLines] = useState<Line[]>(startingLines);
   const [memo, setMemo] = useState("");
@@ -96,6 +101,16 @@ export function ExpenseFormPage() {
   useEffect(() => {
     services.accountService.listAccounts().then(setAccounts).catch(() => setAccounts([]));
   }, [services]);
+
+  useEffect(() => {
+    if (!isCheck) return;
+    try {
+      const stored = Number(window.localStorage.getItem(CHECK_NEXT_KEY));
+      if (Number.isInteger(stored) && stored > 0) setCheckNo(String(stored));
+    } catch {
+      // storage unavailable: start at 1
+    }
+  }, [isCheck]);
 
   useEffect(() => {
     try {
@@ -157,10 +172,13 @@ export function ExpenseFormPage() {
     return () => document.removeEventListener("mousedown", onDown);
   }, [saveMenuOpen]);
 
-  const paymentAccounts = useMemo(() => accounts.filter((a) => PAYMENT_CATEGORIES.has(a.category)).sort((a, b) => a.name.localeCompare(b.name)), [accounts]);
+  const paymentAccounts = useMemo(() => accounts.filter((a) => (isCheck ? a.category === "BANK" : PAYMENT_CATEGORIES.has(a.category))).sort((a, b) => a.name.localeCompare(b.name)), [accounts, isCheck]);
   const methodOptions = useMemo(() => [...new Set([...DEFAULT_METHODS, ...customMethods])].sort((a, b) => a.localeCompare(b)).map((m) => ({ value: m, label: m })), [customMethods]);
   const payeeRecord = useMemo(() => vendors.find((v) => v.name === payee) ?? customers.find((c) => c.name === payee), [vendors, customers, payee]);
   const paymentAccount = accounts.find((a) => a.id === paymentAccountId);
+  useEffect(() => {
+    if (isCheck) setMailing([payeeRecord?.name, payeeRecord?.address].filter(Boolean).join("\n"));
+  }, [isCheck, payeeRecord]);
   // If no (or an unknown) rtAccountId came in, default to the first bank/card account once loaded.
   useEffect(() => {
     if (accounts.length === 0 || paymentAccount) return;
@@ -182,15 +200,13 @@ export function ExpenseFormPage() {
   const totalCents = lines.reduce((sum, l) => sum + cents(l.amount), 0);
   const categoryName = (id: string) => accounts.find((a) => a.id === id)?.name ?? "";
 
-  function closePage() {
-    if (window.history.length > 1) router.back();
-    else router.push("/all-apps/bank-transactions");
-  }
+  const closePage = () => leaveFormPage(router);
 
   function resetForm() {
     setPayee("");
     setMethod("");
     setRefNo("");
+    setPrintLater(false);
     setLines(startingLines());
     setMemo("");
     attachments.reset();
@@ -212,9 +228,9 @@ export function ExpenseFormPage() {
     try {
       const total = totalCents / 100;
       const created = await services.transactionService.createTransaction({
-        type: "EXPENSE",
+        type: isCheck ? "CHECK" : "EXPENSE",
         transactionDate: date,
-        referenceNumber: refNo.trim() || undefined,
+        referenceNumber: (isCheck ? checkNo : refNo).trim() || undefined,
         memo: memo.trim() || undefined,
         payee: payee.trim() || undefined,
         accountLabel: used.length > 1 ? "Split" : categoryName(used[0].categoryAccountId),
@@ -226,14 +242,23 @@ export function ExpenseFormPage() {
       });
       await services.transactionService.postTransaction(created.id);
       await attachments.linkTo(created.id).catch(() => toast({ variant: "error", title: "Saved, but the attachments could not be linked" }));
-      toast({ variant: "success", title: "Expense saved" });
+      toast({ variant: "success", title: isCheck ? "Check saved" : "Expense saved" });
+      if (isCheck) {
+        const following = String((Number(checkNo) || 0) + 1);
+        setCheckNo(following);
+        try {
+          window.localStorage.setItem(CHECK_NEXT_KEY, following);
+        } catch {
+          // not persisted
+        }
+      }
       if (after === "close") closePage();
       else {
         resetForm();
         services.accountService.listAccounts().then(setAccounts).catch(() => undefined);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not save this expense.");
+      setError(err instanceof Error ? err.message : isCheck ? "Could not save this check." : "Could not save this expense.");
     } finally {
       setSaving(false);
     }
@@ -251,7 +276,7 @@ export function ExpenseFormPage() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = "expense-lines.csv";
+    a.download = isCheck ? "check-lines.csv" : "expense-lines.csv";
     a.click();
     URL.revokeObjectURL(url);
   }
@@ -328,7 +353,16 @@ export function ExpenseFormPage() {
           <Button variant="secondary" className="!rounded-md" onClick={closePage}>Cancel</Button>
           <Button variant="secondary" className="!rounded-md" onClick={resetForm}>Clear</Button>
         </div>
-        <button type="button" disabled title="Recurring transactions aren't available yet" className="cursor-not-allowed text-base text-[var(--color-text-disabled)]">Make recurring</button>
+        <div className="flex items-center gap-8 text-base">
+          {isCheck ? (
+            <>
+              <button type="button" onClick={() => window.print()} className="text-[var(--color-text-global)] hover:underline">Print check</button>
+              <button type="button" disabled title="Ordering checks isn't available yet" className="cursor-not-allowed text-[var(--color-text-disabled)]">Order checks</button>
+            </>
+          ) : null}
+          <button type="button" disabled title="Recurring transactions aren't available yet" className="cursor-not-allowed text-[var(--color-text-disabled)]">Make recurring</button>
+          {isCheck ? <button type="button" disabled title="More options aren't available yet" className="cursor-not-allowed text-[var(--color-text-disabled)]">More</button> : null}
+        </div>
         <div className="flex items-center gap-3">
           <Button variant="secondary" className="!rounded-md" disabled={saving} onClick={() => void save("stay")}>Save</Button>
           <div ref={saveMenuRef} className="relative inline-flex">
@@ -348,7 +382,7 @@ export function ExpenseFormPage() {
 
   return (
     <FullScreenFormShell
-      title="Expense"
+      title={isCheck ? `Check #${checkNo}` : "Expense"}
       onClose={closePage}
       toolbar={
         <button type="button" onClick={() => setPanel("copy")} className="flex h-9 items-center gap-1.5 rounded-md px-2 text-sm text-[var(--color-text-global)] hover:bg-[var(--color-action-passive-subtle-hover)]">
@@ -373,7 +407,7 @@ export function ExpenseFormPage() {
               ) : null}
             </div>
             <div className="w-[320px]">
-              <span className={LABEL}>Payment account</span>
+              <span className={LABEL}>{isCheck ? "Bank Account" : "Payment account"}</span>
               <Select value={paymentAccountId} onChange={setPaymentAccountId} options={paymentOptions} placeholder="Select account" allowCustomValue={false} onAddNew={() => setAccountModalOpen(true)} addNewLabel="+ Add new" />
             </div>
             {paymentAccount ? (
@@ -388,6 +422,23 @@ export function ExpenseFormPage() {
           </div>
         </div>
 
+        {isCheck ? (
+          <div className="flex flex-wrap items-start gap-6 pb-6">
+            <div className="w-[350px]">
+              <label className={LABEL} htmlFor="check-mailing">Mailing address</label>
+              <textarea id="check-mailing" value={mailing} onChange={(event) => setMailing(event.target.value)} className={`${INPUT_BASE_CLASSES} h-[154px] resize-none rounded px-3 py-2 text-sm`} />
+            </div>
+            <div>
+              <label className={LABEL} htmlFor="expense-date">Payment date</label>
+              <InputField id="expense-date" type="date" value={date} onChange={(event) => setDate(event.target.value)} className="w-[200px]" />
+            </div>
+            <div>
+              <label className={LABEL} htmlFor="check-no">Check no.</label>
+              <InputField id="check-no" value={checkNo} disabled={printLater} onChange={(event) => setCheckNo(event.target.value)} className="w-[214px]" />
+              <label className="mt-3 flex cursor-pointer items-center gap-3 text-sm"><input type="checkbox" checked={printLater} onChange={(event) => setPrintLater(event.target.checked)} className={CHECKBOX} />Print later</label>
+            </div>
+          </div>
+        ) : (
         <div className="flex flex-wrap gap-6 pb-6">
           <div>
             <label className={LABEL} htmlFor="expense-date">Payment Date</label>
@@ -402,6 +453,7 @@ export function ExpenseFormPage() {
             <InputField id="expense-ref" value={refNo} onChange={(event) => setRefNo(event.target.value)} className="w-[214px]" />
           </div>
         </div>
+        )}
 
         <section className="rounded-lg bg-[var(--color-container-background-primary)] px-6 pb-6 pt-2">
           <button type="button" onClick={() => setLinesOpen((v) => !v)} aria-expanded={linesOpen} aria-label="Toggle category details" className="mx-auto mb-2 flex text-[var(--color-icon-secondary)]">

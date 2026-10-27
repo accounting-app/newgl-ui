@@ -11,7 +11,7 @@ import { ChevronDown } from "lucide-react";
 const QUICK_ADD_LINKS: { label: string; href: string }[] = [
   { label: "+ Sales Receipt", href: "/salesreceipt" },
   { label: "+ Deposit", href: "/deposit" },
-  { label: "+ Check", href: "" },
+  { label: "+ Check", href: "/check" },
   { label: "+ CC Credit", href: "" },
   { label: "+ Journal", href: "" },
   { label: "+ Receive Payment", href: "" },
@@ -88,6 +88,7 @@ export function QuickAddMenu({ accountId }: { accountId?: string }) {
             {QUICK_ADD_LINKS.map((link) => (
               <li key={link.label}>
                 <a
+                  target="_blank"
                   href={link.href ? (accountId ? `${link.href}?rtAccountId=${encodeURIComponent(accountId)}&rt=close` : `${link.href}?rt=close`) : "#"}
                   onClick={(event) => {
                     if (!link.href) event.preventDefault();

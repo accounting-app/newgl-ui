@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ChevronDown, CircleHelp, Copy, GripVertical, Lock, LockOpen, Plus, Trash2 } from "lucide-react";
-import { FullScreenFormShell, RT_TOOLBAR_LINK } from "@/components/accounting/full-screen-form-shell";
+import { FullScreenFormShell, RT_TOOLBAR_LINK, leaveFormPage } from "@/components/accounting/full-screen-form-shell";
 import { ProductServicePanel } from "@/components/accounting/product-service-panel";
 import { AddAccountModal } from "@/components/bank-register/add-account-modal";
 import { PayeeSideModal } from "@/components/bank-register/payee-side-modal";
@@ -123,10 +123,7 @@ export function SalesReceiptFormPage() {
   const incomeAccountOptions = useMemo(() => incomeAccounts.map((a) => ({ value: a.id, label: a.name })), [incomeAccounts]);
   const totalCents = lines.reduce((sum, l) => sum + lineAmount(l), 0);
 
-  function closePage() {
-    if (window.history.length > 1) router.back();
-    else router.push("/all-apps/bank-transactions");
-  }
+  const closePage = () => leaveFormPage(router);
   function resetForm(nextNumber?: string) {
     setCustomer("");
     setEmail("");

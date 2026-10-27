@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ChevronDown, ChevronUp, GripVertical, Trash2 } from "lucide-react";
-import { FullScreenFormShell, RT_TOOLBAR_LINK } from "@/components/accounting/full-screen-form-shell";
+import { FullScreenFormShell, RT_TOOLBAR_LINK, leaveFormPage } from "@/components/accounting/full-screen-form-shell";
 import { AddAccountModal } from "@/components/bank-register/add-account-modal";
 import { Button } from "@/components/ui/button";
 import { INPUT_BASE_CLASSES, InputField } from "@/components/ui/input-field";
@@ -104,10 +104,7 @@ export function DepositFormPage() {
   const totalCents = otherFundsCents - cashBackCents;
 
   const updateLine = (id: string, patch: Partial<Line>) => setLines((current) => current.map((l) => (l.id === id ? { ...l, ...patch } : l)));
-  function closePage() {
-    if (window.history.length > 1) router.back();
-    else router.push("/all-apps/bank-transactions");
-  }
+  const closePage = () => leaveFormPage(router);
   function resetForm() {
     setLines(startingLines());
     setMemo("");
