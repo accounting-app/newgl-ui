@@ -43,6 +43,21 @@ import type {
   BankRegisterTransactionTypeOption
 } from "@/modules/accounting/presentation/transaction-type-policy";
 import { TriangleArrowDownIcon } from "../icons/triangle-arrow-down-icon";
+import { BatchEditRow } from "@/components/bank-register/batch-edit-row";
+import { BatchFieldsModal } from "@/components/bank-register/batch-fields-modal";
+import { requestConfirmation } from "@/components/ui/confirm-dialog";
+import { useToast } from "@/components/ui/toast/toast-context";
+import type { BatchRegisterEntryUpdate } from "@/modules/accounting/application/contracts";
+import {
+  EMPTY_BATCH_FIELDS,
+  EMPTY_BATCH_VALUES,
+  batchLockedReason,
+  buildBatchUpdates,
+  isBatchSelectable,
+  summarizeBatchSelection,
+  validateBatchEdit
+} from "@/lib/accounting/register-batch";
+import type { BatchEditFields, BatchEditValues } from "@/lib/accounting/register-batch";
 
 type RegisterTableProps = {
   entries: RegisterEntry[];
@@ -60,6 +75,11 @@ type RegisterTableProps = {
   onDraftReconcileCycle: () => void;
   onUpdateEntry: (entryId: string, input: InlineEntryEditorInput) => Promise<void>;
   onDeleteEntry: (entryId: string) => Promise<void>;
+  /** Every update applies or none does (one ledger version per batch). */
+  onBatchUpdate: (updates: BatchRegisterEntryUpdate[]) => Promise<void>;
+  onBatchDelete: (entryIds: string[]) => Promise<void>;
+  /** The register's own account, so a batch can't make it its own offset. */
+  registerAccountId: string;
   onCycleReconcileStatus: (entryId: string) => void;
   accountOptions: SelectFieldOption[];
   accounts: Account[];
@@ -81,6 +101,8 @@ type RegisterTableProps = {
   onRemoveSplitLine: (clientId: string) => void;
   onUpdateSplitLine: (clientId: string, patch: Partial<Omit<DraftSplitLine, "clientId">>) => void;
 };
+
+const batchSelectedRowClass = "bg-[color-mix(in_srgb,var(--color-negative)_10%,transparent)]";
 
 function rowStyle(status: RegisterEntry["status"]): string {
   if (status === "VOIDED" || status === "DELETED") {
@@ -112,6 +134,9 @@ export function RegisterTable({
   onDraftReconcileCycle,
   onUpdateEntry,
   onDeleteEntry,
+  onBatchUpdate,
+  onBatchDelete,
+  registerAccountId,
   onCycleReconcileStatus,
   accountOptions,
   accounts,
@@ -156,6 +181,26 @@ export function RegisterTable({
   const [rowsPerPage, setRowsPerPage] = useState<number>(40);
   const [currentPage, setCurrentPage] = useState<number>(1);
   const appliedDeepLinkRef = useRef(false);
+  const { toast } = useToast();
+  const topRef = useRef<HTMLDivElement>(null);
+
+  // Batch mode: BATCH -> tick rows -> EDIT (pick fields, fill the pink row,
+  // Confirm Batch) or DELETE. Selection is by id so it survives paging and
+  // refreshes; rows that stop being selectable (cleared meanwhile) drop out
+  // in selectedBatchEntries below.
+  const [isBatchMode, setIsBatchMode] = useState(false);
+  const [batchSelectedIds, setBatchSelectedIds] = useState<Set<string>>(() => new Set());
+  const [batchFields, setBatchFields] = useState<BatchEditFields>(EMPTY_BATCH_FIELDS);
+  const [batchValues, setBatchValues] = useState<BatchEditValues>(EMPTY_BATCH_VALUES);
+  const [isChoosingBatchFields, setIsChoosingBatchFields] = useState(false);
+  const [isBatchEditing, setIsBatchEditing] = useState(false);
+  const [isApplyingBatch, setIsApplyingBatch] = useState(false);
+  const [batchError, setBatchError] = useState<string | null>(null);
+
+  // Jump To Last: the last row you opened or ticked, so after paging away
+  // or scrolling you can get straight back to it.
+  const [lastTouchedEntryId, setLastTouchedEntryId] = useState<string | null>(null);
+  const [jumpTargetId, setJumpTargetId] = useState<string | null>(null);
 
   const payeeOptions = useMemo(
     () =>
@@ -277,6 +322,26 @@ export function RegisterTable({
     });
   }, [entries]);
 
+  const selectableEntries = useMemo(() => filteredEntries.filter(isBatchSelectable), [filteredEntries]);
+  const selectedBatchEntries = useMemo(
+    () => entries.filter((entry) => batchSelectedIds.has(entry.id) && isBatchSelectable(entry)),
+    [batchSelectedIds, entries]
+  );
+
+  // Scroll to and flash the Jump To Last target once its page is showing.
+  useEffect(() => {
+    if (!jumpTargetId) return;
+    const element = document.querySelector<HTMLElement>(`[data-entry-id="${jumpTargetId}"]`);
+    if (!element) return;
+    element.scrollIntoView({ behavior: "smooth", block: "center" });
+    element.style.outline = "2px solid var(--override-focus)";
+    const timer = window.setTimeout(() => {
+      element.style.outline = "";
+    }, 1600);
+    setJumpTargetId(null);
+    return () => window.clearTimeout(timer);
+  }, [jumpTargetId, paginatedEntries]);
+
   useEffect(() => {
     if (!selectedEntryId) return;
     const stillVisible = paginatedEntries.some((entry) => entry.id === selectedEntryId);
@@ -323,7 +388,114 @@ export function RegisterTable({
     return () => document.removeEventListener("mousedown", handleOutsideClick);
   }, []);
 
+  function jumpToLast() {
+    if (!lastTouchedEntryId) return;
+    const index = filteredEntries.findIndex((entry) => entry.id === lastTouchedEntryId);
+    if (index < 0) {
+      toast({ variant: "info", title: "That transaction isn't in the current view" });
+      return;
+    }
+    setCurrentPage(Math.floor(index / rowsPerPage) + 1);
+    setJumpTargetId(lastTouchedEntryId);
+  }
+
+  function resetBatch() {
+    setIsBatchMode(false);
+    setBatchSelectedIds(new Set());
+    setBatchFields(EMPTY_BATCH_FIELDS);
+    setBatchValues(EMPTY_BATCH_VALUES);
+    setIsChoosingBatchFields(false);
+    setIsBatchEditing(false);
+    setIsApplyingBatch(false);
+    setBatchError(null);
+  }
+
+  function startBatch() {
+    setSelectedEntryId(null);
+    setRowError(null);
+    setIsBatchMode(true);
+  }
+
+  function toggleBatchEntry(entry: RegisterEntry) {
+    if (!isBatchSelectable(entry)) return;
+    setLastTouchedEntryId(entry.id);
+    setBatchSelectedIds((current) => {
+      const next = new Set(current);
+      if (next.has(entry.id)) next.delete(entry.id);
+      else next.add(entry.id);
+      return next;
+    });
+  }
+
+  function toggleSelectAllBatch() {
+    setBatchSelectedIds((current) =>
+      selectableEntries.length > 0 && selectableEntries.every((entry) => current.has(entry.id))
+        ? new Set()
+        : new Set(selectableEntries.map((entry) => entry.id))
+    );
+  }
+
+  function activateRow(entry: RegisterEntry) {
+    if (isBatchMode) {
+      toggleBatchEntry(entry);
+      return;
+    }
+    openRowEditor(entry);
+  }
+
+  async function confirmBatchEdit() {
+    const problem = validateBatchEdit(batchFields, batchValues, registerAccountId);
+    if (problem) {
+      setBatchError(problem);
+      return;
+    }
+    const { count, paymentTotal, depositTotal } = summarizeBatchSelection(selectedBatchEntries);
+    const confirmed = await requestConfirmation({
+      title: `Apply batch edit to ${count} transaction${count === 1 ? "" : "s"}?`,
+      message:
+        `Payments ${paymentTotal.toFixed(2)}, deposits ${depositTotal.toFixed(2)} are affected. ` +
+        "All changes are applied together or not at all, and the batch is one entry in Settings > Ledger > Version history if you need to undo it.",
+      confirmLabel: "Confirm Batch"
+    });
+    if (!confirmed) return;
+    try {
+      setIsApplyingBatch(true);
+      setBatchError(null);
+      await onBatchUpdate(buildBatchUpdates(selectedBatchEntries, batchFields, batchValues));
+      toast({ variant: "success", title: `Updated ${count} transaction${count === 1 ? "" : "s"}` });
+      resetBatch();
+    } catch (error) {
+      setBatchError(error instanceof Error ? error.message : "The batch couldn't be applied. Nothing was changed.");
+      setIsApplyingBatch(false);
+    }
+  }
+
+  async function deleteBatch() {
+    const { count, paymentTotal, depositTotal } = summarizeBatchSelection(selectedBatchEntries);
+    if (count === 0) return;
+    const confirmed = await requestConfirmation({
+      title: `Delete ${count} transaction${count === 1 ? "" : "s"}?`,
+      message:
+        `Payments ${paymentTotal.toFixed(2)}, deposits ${depositTotal.toFixed(2)} will be removed from the ledger. ` +
+        "All are deleted together or none are, and the batch is one entry in Settings > Ledger > Version history.",
+      confirmLabel: "Delete"
+    });
+    if (!confirmed) return;
+    try {
+      await onBatchDelete(selectedBatchEntries.map((entry) => entry.id));
+      toast({ variant: "success", title: `Deleted ${count} transaction${count === 1 ? "" : "s"}` });
+      resetBatch();
+    } catch (error) {
+      toast({
+        variant: "error",
+        title: "Delete failed",
+        description: error instanceof Error ? error.message : "Nothing was deleted."
+      });
+    }
+  }
+
   function openRowEditor(entry: RegisterEntry) {
+    setLastTouchedEntryId(entry.id);
     setSelectedEntryId(entry.id);
     setRowError(null);
     const matchedAccount = accountOptions.find((option) => option.label === entry.accountLabel);
@@ -392,17 +564,17 @@ export function RegisterTable({
   }
 
   const renderReadOnlyEntryTable = (entry: RegisterEntry) => (
-    <div key={entry.id}>
+    <div key={entry.id} data-entry-id={entry.id}>
       <table className="group w-full min-w-[1025px] table-fixed border-collapse text-sm">
         <RegisterTableColumnGroup />
         <tbody>
           <tr
-            className={`cursor-pointer group-hover:bg-[var(--color-table-row-hover)] ${rowStyle(entry.status)}`}
-            onClick={() => openRowEditor(entry)}
+            className={`cursor-pointer group-hover:bg-[var(--color-table-row-hover)] ${rowStyle(entry.status)} ${batchSelectedIds.has(entry.id) ? batchSelectedRowClass : ""}`}
+            onClick={() => activateRow(entry)}
             onKeyDown={(event) => {
               if (event.key !== "Enter" && event.key !== " ") return;
               event.preventDefault();
-              openRowEditor(entry);
+              activateRow(entry);
             }}
             role="button"
             tabIndex={0}
@@ -433,18 +605,30 @@ export function RegisterTable({
             </td>
           </tr>
           <tr
-            className={`cursor-pointer border-b border-[var(--color-divider-tertiary)] bg-[var(--color-table-row-secondary)] group-hover:bg-[var(--color-table-row-secondary-hover)]`}
-            onClick={() => openRowEditor(entry)}
+            className={`cursor-pointer border-b border-[var(--color-divider-tertiary)] bg-[var(--color-table-row-secondary)] group-hover:bg-[var(--color-table-row-secondary-hover)] ${batchSelectedIds.has(entry.id) ? batchSelectedRowClass : ""}`}
+            onClick={() => activateRow(entry)}
             onKeyDown={(event) => {
               if (event.key !== "Enter" && event.key !== " ") return;
               event.preventDefault();
-              openRowEditor(entry);
+              activateRow(entry);
             }}
             role="button"
             tabIndex={0}
           >
             <td className="p-2 text-[13px] align-top text-[var(--color-icon-secondary)]">
-              &nbsp;
+              {isBatchMode ? (
+                <input
+                  type="checkbox"
+                  checked={batchSelectedIds.has(entry.id)}
+                  disabled={!isBatchSelectable(entry)}
+                  title={batchLockedReason(entry) ?? undefined}
+                  aria-label={`Select transaction ${entry.refNumber || entry.date}`}
+                  onClick={(event) => event.stopPropagation()}
+                  onChange={() => toggleBatchEntry(entry)}
+                />
+              ) : (
+                <>&nbsp;</>
+              )}
             </td>
             <td className="border-l border-l-dotted border-l-[var(--color-divider-tertiary)] p-2 text-[13px] align-top text-[var(--color-icon-secondary)]">
               {formatTransactionTypeLabel(entry.transactionType)}
@@ -473,6 +657,7 @@ export function RegisterTable({
 
   return (
     <>
+      <div ref={topRef} />
       <TablePagination
         totalItems={filteredEntries.length}
         currentPage={filteredEntries.length > 0 ? currentPage : 0}
@@ -523,6 +708,21 @@ export function RegisterTable({
           ) : (
             <span>All</span>
           )}
+          <button
+            type="button"
+            className="ml-3 text-[13px] text-[var(--color-link-text)] hover:underline"
+            onClick={resetBatch}
+          >
+            Reset Batch Buttons
+          </button>
+          <button
+            type="button"
+            className="ml-3 text-[13px] text-[var(--color-link-text)] hover:underline disabled:cursor-not-allowed disabled:text-[var(--color-text-disabled)] disabled:no-underline"
+            onClick={jumpToLast}
+            disabled={!lastTouchedEntryId}
+          >
+            Jump To Last
+          </button>
           {isFilterPopoverOpen ? (
             <FilterFormPopover
               popoverRef={filterPopoverRef}
@@ -617,7 +817,17 @@ export function RegisterTable({
         </div>
       </div>
 
-      <RegisterTableHeader />
+      <RegisterTableHeader
+        batch={{
+          active: isBatchMode,
+          selectedCount: selectedBatchEntries.length,
+          selectableCount: selectableEntries.length,
+          onStart: startBatch,
+          onEdit: () => setIsChoosingBatchFields(true),
+          onDelete: () => void deleteBatch(),
+          onToggleSelectAll: toggleSelectAllBatch
+        }}
+      />
 
       <div className="content-table">
         <div className="actions-quickadd">
@@ -629,7 +839,29 @@ export function RegisterTable({
           />
         </div>
 
-        {draftTransaction ? (
+        {isBatchEditing ? (
+          <BatchEditRow
+            fields={batchFields}
+            values={batchValues}
+            selectedCount={selectedBatchEntries.length}
+            payeeOptions={payeeOptions}
+            accountOptions={accountOptions}
+            error={batchError}
+            isApplying={isApplyingBatch}
+            onChange={(patch) => {
+              setBatchValues((current) => ({ ...current, ...patch }));
+              setBatchError(null);
+            }}
+            onChooseFields={() => setIsChoosingBatchFields(true)}
+            onConfirm={() => void confirmBatchEdit()}
+            onCancel={() => {
+              setIsBatchEditing(false);
+              setBatchError(null);
+            }}
+          />
+        ) : null}
+
+        {draftTransaction && !isBatchEditing ? (
           <AddTransactionForm
             draftTransaction={draftTransaction}
             draftErrors={draftErrors}
@@ -708,10 +940,23 @@ export function RegisterTable({
         start={paginationStart}
         end={paginationEnd}
         onPageChange={setCurrentPage}
+        onBackToTop={() => topRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
       />
       {/**
        * Aqui
        */}
+      <BatchFieldsModal
+        open={isChoosingBatchFields}
+        selectedCount={selectedBatchEntries.length}
+        fields={batchFields}
+        onChange={setBatchFields}
+        onClose={() => setIsChoosingBatchFields(false)}
+        onContinue={() => {
+          setIsChoosingBatchFields(false);
+          setIsBatchEditing(true);
+          setBatchError(null);
+        }}
+      />
       <PayeeSideModal
         open={isPayeeModalOpen}
         onClose={() => setIsPayeeModalOpen(false)}

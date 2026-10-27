@@ -62,9 +62,23 @@ export interface RegisterService {
       counterpartyAccountId?: string;
     }
   ): Promise<RegisterEntry>;
+  /**
+   * Several updates applied as ONE change: all of them or none (and one ledger
+   * version, so one undo). Each item is a full single-entry update, minus the
+   * amount -- amounts are edited one transaction at a time.
+   */
+  batchUpdateRegisterEntries(updates: BatchRegisterEntryUpdate[]): Promise<RegisterEntry[]>;
   setReconcileStatus(entryId: string, status: ReconcileStatus): Promise<RegisterEntry>;
   deleteRegisterEntry(entryId: string): Promise<RegisterEntry>;
+  /** Deletes several entries' transactions as one change: all or none. */
+  batchDeleteRegisterEntries(entryIds: string[]): Promise<RegisterEntry[]>;
 }
+
+export type BatchRegisterEntryUpdate = Pick<RegisterEntry, "date" | "refNumber" | "payee" | "memo"> & {
+  entryId: string;
+  reconcileStatus?: ReconcileStatus;
+  counterpartyAccountId?: string;
+};
 
 export interface BankRuleService {
   listRules(): Promise<BankRule[]>;

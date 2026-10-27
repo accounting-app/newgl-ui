@@ -1,6 +1,19 @@
 import { RegisterTableColumnGroup } from "@/components/bank-register/register-table-column-group";
 
-export function RegisterTableHeader() {
+export type RegisterBatchControls = {
+  active: boolean;
+  selectedCount: number;
+  selectableCount: number;
+  onStart: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
+  onToggleSelectAll: () => void;
+};
+
+const BATCH_LINK =
+  "text-[11px] font-semibold uppercase text-[var(--color-link-text)] hover:underline disabled:cursor-not-allowed disabled:text-[var(--color-text-disabled)] disabled:no-underline";
+
+export function RegisterTableHeader({ batch }: { batch?: RegisterBatchControls }) {
   return (
     <div className="header-table">
       <table className="w-full min-w-[1025px] table-fixed border-collapse text-sm">
@@ -34,7 +47,29 @@ export function RegisterTableHeader() {
           </tr>
           <tr>
             <th className=" px-2 pb-[6px] pt-0 text-left tracking-normal">
-              &nbsp;
+              {batch && !batch.active ? (
+                <button
+                  type="button"
+                  onClick={batch.onStart}
+                  className="rounded border border-[var(--color-button-border)] px-2 text-[11px] font-semibold uppercase text-[var(--color-text-primary)] hover:bg-[var(--color-action-standard-subtle-hover)]"
+                >
+                  Batch
+                </button>
+              ) : batch ? (
+                <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                  <button type="button" className={BATCH_LINK} disabled={batch.selectedCount === 0} onClick={batch.onEdit}>
+                    Edit
+                  </button>
+                  <button type="button" className={BATCH_LINK} disabled={batch.selectedCount === 0} onClick={batch.onDelete}>
+                    Delete
+                  </button>
+                  <button type="button" className={BATCH_LINK} disabled={batch.selectableCount === 0} onClick={batch.onToggleSelectAll}>
+                    {batch.selectedCount > 0 && batch.selectedCount === batch.selectableCount ? "Select none" : "Select all"}
+                  </button>
+                </span>
+              ) : (
+                <>&nbsp;</>
+              )}
             </th>
             <th className="border-l-custom px-2 pb-[6px] pt-0 text-left tracking-normal">
               Type

@@ -21,6 +21,7 @@ import {
   toDomainTransactionType
 } from "@/modules/accounting/presentation/transaction-type-policy";
 import { generateNextRefNumber } from "@/modules/accounting/domain/accounting-reports";
+import type { BatchRegisterEntryUpdate } from "@/modules/accounting/application/contracts";
 import { nextAccountCode } from "@/lib/accounting/next-account-code";
 import type {
   BankRegisterTransactionTypeId,
@@ -127,12 +128,17 @@ export function useBankRegister() {
   const refreshAccounts = useCallback(async () => {
     const accountList = await services.accountService.listAccounts();
     setAccounts(accountList);
-    if (!selectedAccountId && accountList.length > 0) {
+    if (accountList.length > 0) {
       const firstRegisterAccount =
         accountList.find((account) => isRegisterAccountCategory(account.category)) ?? accountList[0];
-      setSelectedAccountId(firstRegisterAccount.id);
+      // Functional update, not a read of selectedAccountId: this call can still
+      // be in flight (React runs effects twice in dev, and ledger events
+      // trigger more) when a deep link like /register?accountId=... has
+      // already picked an account, and a stale closure that saw "no
+      // selection" would overwrite that pick with the default.
+      setSelectedAccountId((current) => current || firstRegisterAccount.id);
     }
-  }, [selectedAccountId, services.accountService]);
+  }, [services.accountService]);
 
   const refreshEntries = useCallback(async () => {
     if (!selectedAccountId) {
@@ -628,6 +634,22 @@ export function useBankRegister() {
     [refreshAccounts, refreshEntries, services.registerService]
   );
 
+  const batchUpdateRegisterEntries = useCallback(
+    async (updates: BatchRegisterEntryUpdate[]) => {
+      await services.registerService.batchUpdateRegisterEntries(updates);
+      await Promise.all([refreshEntries(), refreshAccounts()]);
+    },
+    [refreshAccounts, refreshEntries, services.registerService]
+  );
+
+  const batchDeleteRegisterEntries = useCallback(
+    async (entryIds: string[]) => {
+      await services.registerService.batchDeleteRegisterEntries(entryIds);
+      await Promise.all([refreshEntries(), refreshAccounts()]);
+    },
+    [refreshAccounts, refreshEntries, services.registerService]
+  );
+
   return {
     accounts,
     entries,
@@ -651,6 +673,8 @@ export function useBankRegister() {
     cycleReconcileStatus,
     deleteRegisterEntryInline,
     updateRegisterEntryInline,
+    batchUpdateRegisterEntries,
+    batchDeleteRegisterEntries,
     selectTransactionType,
     saveDraftTransaction,
     selectTransaction,

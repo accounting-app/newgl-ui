@@ -2,11 +2,12 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { forwardRef, useEffect, useRef, useState } from "react";
-import { BookOpen, Home, LayoutGrid, Settings2, Wallet } from "lucide-react";
+import { usePathname, useSearchParams } from "next/navigation";
+import { Suspense, forwardRef, useEffect, useRef, useState } from "react";
+import { BookOpen, Ellipsis, Home, Settings2 } from "lucide-react";
 import type { ComponentType, FocusEvent, KeyboardEvent } from "react";
 import { AppsFlyout } from "@/components/layout/apps-flyout";
+import { ALL_APPS_CATEGORIES, MORE_APPS_CATEGORIES, PRIMARY_NAV_CATEGORIES, getActiveAppCategoryId } from "@/constants/apps";
 
 // Hover-intent delay before the flyout opens -- long enough that just
 // passing over the icon on the way to something else doesn't pop it open.
@@ -51,17 +52,41 @@ const NavSquareItem = forwardRef<HTMLAnchorElement, NavSquareItemProps>(function
   );
 });
 
+// Active state depends on the query string for one case (Contractors is
+// reachable from both Expenses and Team at the same path, told apart only by
+// ?jobId=), and useSearchParams needs a Suspense boundary -- so the rail
+// renders once without the query (path-only, correct for every other page)
+// and re-renders with it as soon as it's available.
 export function SideNav() {
   const pathname = usePathname();
+  return (
+    <Suspense fallback={<SideNavView pathname={pathname} searchParams={null} />}>
+      <SideNavWithSearchParams pathname={pathname} />
+    </Suspense>
+  );
+}
+
+function SideNavWithSearchParams({ pathname }: { pathname: string }) {
+  const searchParams = useSearchParams();
+  return <SideNavView pathname={pathname} searchParams={searchParams} />;
+}
+
+function SideNavView({ pathname, searchParams }: { pathname: string; searchParams: URLSearchParams | null }) {
   const [isFlyoutOpen, setIsFlyoutOpen] = useState(false);
   const openTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const allAppsTriggerRef = useRef<HTMLAnchorElement>(null);
   const allAppsWrapperRef = useRef<HTMLDivElement>(null);
 
   const isHomeSelected = pathname === "/";
-  const isRegisterSelected = pathname.startsWith("/register");
   const isReportsSelected = pathname.startsWith("/reports");
-  const isAllAppsSelected = pathname.startsWith("/all-apps");
+  // The register isn't a rail item of its own (QBO has none) -- it's reached
+  // from Bank transactions / Chart of accounts, both under Accounting, so
+  // Accounting stays highlighted while on it.
+  const activeCategoryId = pathname.startsWith("/register") ? "accounting" : getActiveAppCategoryId(pathname, searchParams);
+  const isMoreAppsSelected = activeCategoryId
+    ? MORE_APPS_CATEGORIES.some((category) => category.id === activeCategoryId)
+    : pathname.startsWith("/all-apps");
+  const moreAppsHref = MORE_APPS_CATEGORIES[0]?.items[0]?.href ?? "/all-apps";
   const isSettingsSelected = pathname.startsWith("/settings");
 
   function scheduleOpen() {
@@ -119,12 +144,21 @@ export function SideNav() {
 
         <div className="mx-[4px] flex flex-col">
           <NavSquareItem label="Home" icon={Home} href="/" active={isHomeSelected} />
-          <NavSquareItem label="Register" icon={Wallet} href="/register" active={isRegisterSelected} />
           <NavSquareItem label="Reports" icon={BookOpen} href="/reports" active={isReportsSelected} />
 
-          {/* Hovering opens the flyout after a short delay; clicking navigates
-              straight to the /all-apps accordion page (its own submenu view,
-              same pattern as Settings) -- see UI_DESIGN_SYSTEM_PLAN.md Part 3.
+          {/* Accounting / Expenses / Sales sit directly on the rail, as in QBO.
+              Each lands on its category's first item; the /all-apps sidebar
+              still lets you move between that category's pages. */}
+          {PRIMARY_NAV_CATEGORIES.map(({ id, railLabel }) => {
+            const category = ALL_APPS_CATEGORIES.find((candidate) => candidate.id === id);
+            const landingHref = category?.items[0]?.href;
+            if (!category || !landingHref) return null;
+            return <NavSquareItem key={id} label={railLabel} icon={category.icon} href={landingHref} active={activeCategoryId === id} />;
+          })}
+
+          {/* "More apps" holds every category not promoted onto the rail.
+              Hovering opens the flyout after a short delay; clicking navigates
+              straight to its first page -- see UI_DESIGN_SYSTEM_PLAN.md Part 3.
               Keyboard-focus anywhere inside this wrapper (the trigger or,
               once open, the flyout's own links) opens it instantly and keeps
               it open; Escape closes it and returns focus to the trigger. */}
@@ -139,10 +173,10 @@ export function SideNav() {
           >
             <NavSquareItem
               ref={allAppsTriggerRef}
-              label="All apps"
-              icon={LayoutGrid}
-              href="/all-apps"
-              active={isAllAppsSelected || isFlyoutOpen}
+              label="More apps"
+              icon={Ellipsis}
+              href={moreAppsHref}
+              active={isMoreAppsSelected || isFlyoutOpen}
             />
             {isFlyoutOpen ? (
               <div className="absolute left-full top-0 z-50 ml-1">

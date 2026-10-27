@@ -4,7 +4,12 @@ import { getAccessToken, request } from "@/lib/services/http-service-container";
 // Receipts for the caller's CURRENTLY ACTIVE company (see newgl-api's
 // receipts.ts). Phase 1.5, Step 5 -- the file itself lives in Supabase
 // Storage; this is just the metadata + review fields.
+// Separate file lists per area of the app: the Receipts inbox, the quick-add forms
+// (Expense / Sales Receipt / Deposit) and the Bank transactions screen.
+export type ReceiptZone = "receipts" | "forms" | "bank";
+
 export type ReceiptRecord = {
+  zone: ReceiptZone;
   id: string;
   fileName: string;
   fileSizeBytes: number;
@@ -31,8 +36,8 @@ export type UpdateReceiptInput = {
   linkedTransactionId?: string | null;
 };
 
-export function listReceipts(): Promise<ReceiptRecord[]> {
-  return request<ReceiptRecord[]>(BASE_API_URL, "/receipts");
+export function listReceipts(zone?: ReceiptZone): Promise<ReceiptRecord[]> {
+  return request<ReceiptRecord[]>(BASE_API_URL, zone ? `/receipts?zone=${zone}` : "/receipts");
 }
 
 // multipart/form-data, so this bypasses the shared request() helper (which
@@ -41,7 +46,7 @@ export function listReceipts(): Promise<ReceiptRecord[]> {
 // functions.
 export async function uploadReceipt(
   file: File,
-  fields: { vendorId?: string; paymentAccountId?: string; categoryAccountId?: string; amount?: number; taxAmount?: number; note?: string } = {}
+  fields: { zone?: ReceiptZone; linkedTransactionId?: string; vendorId?: string; paymentAccountId?: string; categoryAccountId?: string; amount?: number; taxAmount?: number; note?: string } = {}
 ): Promise<ReceiptRecord> {
   const accessToken = await getAccessToken();
   const form = new FormData();

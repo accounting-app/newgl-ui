@@ -17,6 +17,7 @@ import type {
 } from "@/modules/accounting/domain/models";
 import type {
   AccountService,
+  BatchRegisterEntryUpdate,
   LedgerService,
   RegisterService,
   TransactionService
@@ -1061,6 +1062,40 @@ export class MockRegisterService implements RegisterService {
     }
     entry.reconcileStatus = status;
     return entry;
+  }
+
+  // The batch methods below validate every entry before changing any, so a
+  // failure leaves the mock store untouched -- the real API is all-or-nothing
+  // too, and callers shouldn't see different semantics depending on the backend.
+  async batchUpdateRegisterEntries(updates: BatchRegisterEntryUpdate[]): Promise<RegisterEntry[]> {
+    for (const { entryId, date } of updates) {
+      const entry = this.store.registerEntries.find((item) => item.id === entryId);
+      if (!entry) {
+        throw new Error(`Register entry ${entryId} not found`);
+      }
+      assertEntryEditable(entry.reconcileStatus);
+      validateTransactionPeriod(date);
+    }
+    const results: RegisterEntry[] = [];
+    for (const { entryId, ...input } of updates) {
+      results.push(await this.updateRegisterEntry(entryId, input));
+    }
+    return results;
+  }
+
+  async batchDeleteRegisterEntries(entryIds: string[]): Promise<RegisterEntry[]> {
+    for (const entryId of entryIds) {
+      const entry = this.store.registerEntries.find((item) => item.id === entryId);
+      if (!entry) {
+        throw new Error(`Register entry ${entryId} not found`);
+      }
+      assertEntryDeletable(entry.reconcileStatus);
+    }
+    const results: RegisterEntry[] = [];
+    for (const entryId of entryIds) {
+      results.push(await this.deleteRegisterEntry(entryId));
+    }
+    return results;
   }
 
   async deleteRegisterEntry(entryId: string): Promise<RegisterEntry> {

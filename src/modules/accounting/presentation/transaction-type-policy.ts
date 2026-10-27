@@ -279,6 +279,21 @@ export function isRegisterAccountCategory(category: Account["category"]): boolea
   return REGISTER_ACCOUNT_CATEGORIES.has(category);
 }
 
+/**
+ * Whether Chart of accounts offers "View register" for this account (as
+ * opposed to "Run report", which is all QBO shows for the rest). That's the
+ * register-capable categories above, minus Retained Earnings -- an Equity
+ * account, but QBO treats it like a P&L account with no register of its own
+ * (confirmed against its Chart of accounts: Retained Earnings shows "Run
+ * report" while every other Equity account shows "View register").
+ */
+export function accountHasRegister(account: Pick<Account, "category" | "name" | "subtype">): boolean {
+  if (!isRegisterAccountCategory(account.category)) return false;
+  const isRetainedEarnings =
+    account.name.trim().toLowerCase() === "retained earnings" || /retained[ _]?earnings/i.test(account.subtype ?? "");
+  return !isRetainedEarnings;
+}
+
 const BANK_OR_CREDIT_CARD_CATEGORIES = new Set<Account["category"]>(["BANK", "CREDIT_CARD"]);
 
 /**

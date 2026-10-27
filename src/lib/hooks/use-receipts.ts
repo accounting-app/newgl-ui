@@ -7,6 +7,7 @@ import {
   updateReceipt,
   uploadReceipt,
   type ReceiptRecord,
+  type ReceiptZone,
   type UpdateReceiptInput
 } from "@/lib/services/receipts-service";
 
@@ -16,14 +17,14 @@ import {
  * shape/rationale as use-vendors.ts and friends, except `add` here takes
  * a File plus optional fields (an upload), not a plain object.
  */
-export function useReceipts() {
+export function useReceipts(zone: ReceiptZone = "receipts") {
   const [items, setItems] = useState<ReceiptRecord[]>([]);
   const [hydrated, setHydrated] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     try {
-      const receipts = await listReceipts();
+      const receipts = await listReceipts(zone);
       setItems(receipts);
       setError(null);
     } catch (err) {
@@ -31,17 +32,17 @@ export function useReceipts() {
     } finally {
       setHydrated(true);
     }
-  }, []);
+  }, [zone]);
 
   useEffect(() => {
     refresh();
   }, [refresh]);
 
   const add = useCallback(async (file: File, fields?: Parameters<typeof uploadReceipt>[1]): Promise<ReceiptRecord> => {
-    const created = await uploadReceipt(file, fields);
+    const created = await uploadReceipt(file, { zone, ...fields });
     setItems((current) => [created, ...current]);
     return created;
-  }, []);
+  }, [zone]);
 
   const update = useCallback(async (id: string, patch: UpdateReceiptInput): Promise<ReceiptRecord> => {
     const updated = await updateReceipt(id, patch);

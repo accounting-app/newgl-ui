@@ -3,29 +3,30 @@
 import { useState } from "react";
 import Link from "next/link";
 import { ChevronRight, Gem } from "lucide-react";
-import { ALL_APPS_CATEGORIES } from "@/constants/apps";
+import { MORE_APPS_CATEGORIES } from "@/constants/apps";
 
 type AppsFlyoutProps = {
   onNavigate: () => void;
 };
 
-// Two-level hover flyout modeled directly after QuickBooks Online's "All
+// Two-level hover flyout modeled directly after QuickBooks Online's "More
 // apps" menu (screenshots in UI_DESIGN_SYSTEM_PLAN.md Part 3): a category
-// list, each expandable to its own sub-items panel to the right. Sourced
-// from the same ALL_APPS_CATEGORIES as the /all-apps accordion page, so a
-// category/item marked `locked` (a QBO feature we haven't built, or that's
-// paid-tier there) renders the same grayed-out, non-navigating treatment
-// in both places instead of drifting apart.
+// list, each expandable to its own sub-items panel to the right. Lists only
+// MORE_APPS_CATEGORIES -- Accounting, Expenses and Sales have their own
+// side-rail items, as in QBO. Same category data as the /all-apps sidebar,
+// so a category/item marked `locked` (a QBO feature we haven't built, or
+// that's paid-tier there) renders the same grayed-out, non-navigating
+// treatment in both places instead of drifting apart.
 export function AppsFlyout({ onNavigate }: AppsFlyoutProps) {
-  const [hoveredId, setHoveredId] = useState<string | null>(ALL_APPS_CATEGORIES[0]?.id ?? null);
+  const [hoveredId, setHoveredId] = useState<string | null>(MORE_APPS_CATEGORIES[0]?.id ?? null);
 
   return (
     <div role="menu" className="flex items-start">
       <div className="w-64 rounded-lg border border-[var(--color-divider-tertiary)] bg-[var(--color-container-background-primary)] py-2 shadow-lg">
         <p className="px-4 pb-2 pt-1 text-xs font-semibold uppercase tracking-wide text-[var(--color-icon-secondary)]">
-          All apps
+          More apps
         </p>
-        {ALL_APPS_CATEGORIES.map((category) => {
+        {MORE_APPS_CATEGORIES.map((category) => {
           const Icon = category.icon;
           const hasItems = category.items.length > 0;
           const isHovered = hoveredId === category.id;
@@ -56,7 +57,7 @@ export function AppsFlyout({ onNavigate }: AppsFlyoutProps) {
               className="relative"
             >
               <Link
-                href={category.items[0]?.href ?? "/all-apps"}
+                href={category.items[0]?.href ?? "/"}
                 onClick={onNavigate}
                 role="menuitem"
                 className={`flex items-center justify-between gap-3 px-4 py-2.5 text-sm text-[var(--color-text-global)] transition-colors ${

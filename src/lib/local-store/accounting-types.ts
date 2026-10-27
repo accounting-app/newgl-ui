@@ -15,6 +15,20 @@ export type PendingBankTxn = {
   received?: number;
   payee?: string;
   categoryAccountId?: string;
+  /** QBO's Purpose column; unset reads as Business. */
+  purpose?: "BUSINESS" | "PERSONAL";
+  memo?: string;
+  /** Which directory the payee came from (a vendor or a customer). */
+  payeeKind?: "CUSTOMER" | "VENDOR";
+  /** Overrides the type derived from direction (money in = Deposit, money out = Expense). */
+  txnType?: "Deposit" | "Expense" | "Transfer";
+  /** The Products & Services item chosen for a deposit. */
+  productServiceId?: string;
+  /** Set when the row was posted as a split across this many categories. */
+  splitLineCount?: number;
+  /** Set when Post created the real ledger transaction; Undo voids it. */
+  postedTransactionId?: string;
+  postedType?: "Deposit" | "Expense";
   status: PendingTxnStatus;
   createdAt: string;
 };

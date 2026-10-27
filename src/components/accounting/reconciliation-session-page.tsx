@@ -434,7 +434,7 @@ export function ReconciliationSessionPage({ accountId }: { accountId: string }) 
 
   const paymentColumnLabel = creditNormal ? "Charge" : "Payment";
   const depositColumnLabel = creditNormal ? "Payment" : "Deposit";
-  const registerLink = `/register?account=${accountId}`;
+  const registerLink = `/register?accountId=${accountId}`;
 
   return (
     <>
