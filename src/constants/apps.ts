@@ -1,4 +1,4 @@
-import { Banknote, Building2, Car, CreditCard, Database, FileStack, FileText, Handshake, Landmark, LayoutGrid, Package, Receipt, ScrollText, ShoppingCart, Sparkles, Users, UsersRound, Wallet } from "lucide-react";
+import { Banknote, Building2, Car, CreditCard, Database, FileStack, FileText, Handshake, Landmark, LayoutGrid, Package, Receipt, Repeat, ScrollText, ShoppingCart, Sparkles, Users, UsersRound, Wallet } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 export type AppNavItem = {
@@ -42,7 +42,8 @@ export const ALL_APPS_CATEGORIES: AppCategory[] = [
       { label: "Receipts", href: "/all-apps/receipts", icon: Receipt },
       { label: "Reconcile", href: "/all-apps/reconcile", icon: ScrollText },
       { label: "Chart of Accounts", href: "/all-apps/chart-of-accounts", icon: Building2 },
-      { label: "Bank Rules", href: "/all-apps/bank-rules", icon: Landmark }
+      { label: "Bank Rules", href: "/all-apps/bank-rules", icon: Landmark },
+      { label: "Recurring Transactions", href: "/all-apps/recurring-transactions", icon: Repeat }
     ]
   },
   {
