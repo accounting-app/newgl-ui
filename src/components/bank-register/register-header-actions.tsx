@@ -12,7 +12,6 @@ const QUICK_ADD_LINKS: { label: string; href: string }[] = [
   { label: "+ Sales Receipt", href: "/salesreceipt" },
   { label: "+ Deposit", href: "/deposit" },
   { label: "+ Check", href: "/check" },
-  { label: "+ CC Credit", href: "" },
   { label: "+ Journal", href: "/journal" },
   { label: "+ Receive Payment", href: "/recvpayment" },
   { label: "+ Pay Bills", href: "/paybills" }
