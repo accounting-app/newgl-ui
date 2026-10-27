@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { MAX_ATTACHMENT_BYTES } from "@/lib/hooks/use-form-attachments";
-import { deleteReceipt, listReceipts, uploadReceipt, type ReceiptRecord, type ReceiptZone } from "@/lib/services/receipts-service";
+import { listReceipts, uploadReceipt, type ReceiptRecord, type ReceiptZone } from "@/lib/services/receipts-service";
 
 export const FILES_CHANGED_EVENT = "newgl:files-changed";
 
@@ -43,10 +43,18 @@ export function useLinkedFiles(zone: ReceiptZone, linkedId?: string) {
     }
   }, [zone, linkedId]);
 
-  const remove = useCallback(async (id: string) => {
-    await deleteReceipt(id).catch(() => undefined);
-    window.dispatchEvent(new Event(FILES_CHANGED_EVENT));
-  }, []);
+  // Upload to any record of the zone (the row buttons on the bank list). Resolves to an error message, if any.
+  const uploadTo = useCallback(async (id: string, files: File[]): Promise<string | null> => {
+    const tooBig = files.find((f) => f.size > MAX_ATTACHMENT_BYTES);
+    if (tooBig) return `${tooBig.name} is over the 20 MB limit.`;
+    try {
+      for (const file of files) await uploadReceipt(file, { zone, linkedTransactionId: id });
+      window.dispatchEvent(new Event(FILES_CHANGED_EVENT));
+      return null;
+    } catch (err) {
+      return err instanceof Error ? err.message : "Could not upload this file.";
+    }
+  }, [zone]);
 
-  return { items, all, busy, error, upload, remove };
+  return { items, all, busy, error, upload, uploadTo };
 }
