@@ -13,9 +13,9 @@ const QUICK_ADD_LINKS: { label: string; href: string }[] = [
   { label: "+ Deposit", href: "/deposit" },
   { label: "+ Check", href: "/check" },
   { label: "+ CC Credit", href: "" },
-  { label: "+ Journal", href: "" },
-  { label: "+ Receive Payment", href: "" },
-  { label: "+ Pay Bills", href: "" }
+  { label: "+ Journal", href: "/journal" },
+  { label: "+ Receive Payment", href: "/recvpayment" },
+  { label: "+ Pay Bills", href: "/paybills" }
 ];
 
 export const PILL =
