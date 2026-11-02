@@ -73,7 +73,7 @@ export function AppsFlyout({ onNavigate }: AppsFlyoutProps) {
               </Link>
 
               {hasItems && isHovered ? (
-                <div className="absolute left-full top-0 z-50 ml-1 w-64 rounded-lg border border-[var(--color-divider-tertiary)] bg-[var(--color-container-background-primary)] py-2 shadow-lg">
+                <div className="absolute left-[calc(100%-10px)] top-0 z-50 w-64 rounded-lg border border-[var(--color-divider-tertiary)] bg-[var(--color-container-background-primary)] py-2 shadow-lg">
                   {category.items.map((item) => {
                     const ItemIcon = item.icon;
                     if (item.locked) {

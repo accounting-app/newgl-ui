@@ -106,7 +106,7 @@ function FlyoutNavItem({
       }}
     >
       <NavSquareItem ref={trigger} label={label} icon={icon} href={href} active={active || open} />
-      {open ? <div className="absolute left-full top-0 z-50 pl-1">{children(close)}</div> : null}
+      {open ? <div className="absolute left-[90%] top-0 z-50">{children(close)}</div> : null}
     </div>
   );
 }
@@ -242,7 +242,7 @@ function SideNavView({ pathname, searchParams }: { pathname: string; searchParam
               active={isMoreAppsSelected || isFlyoutOpen}
             />
             {isFlyoutOpen ? (
-              <div className="absolute left-full top-0 z-50 pl-1">
+              <div className="absolute left-[90%] top-0 z-50">
                 <AppsFlyout onNavigate={cancelOpenAndClose} />
               </div>
             ) : null}
