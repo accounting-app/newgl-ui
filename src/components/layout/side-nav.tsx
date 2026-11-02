@@ -5,8 +5,8 @@ import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { Suspense, forwardRef, useEffect, useRef, useState } from "react";
 import { BookOpen, Ellipsis, Home, Settings2 } from "lucide-react";
-import type { ComponentType, FocusEvent, KeyboardEvent } from "react";
-import { AppsFlyout } from "@/components/layout/apps-flyout";
+import type { ComponentType, FocusEvent, KeyboardEvent, ReactNode } from "react";
+import { AppsFlyout, CategoryFlyout } from "@/components/layout/apps-flyout";
 import { ALL_APPS_CATEGORIES, MORE_APPS_CATEGORIES, PRIMARY_NAV_CATEGORIES, getActiveAppCategoryId } from "@/constants/apps";
 
 // Hover-intent delay before the flyout opens -- long enough that just
@@ -51,6 +51,65 @@ const NavSquareItem = forwardRef<HTMLAnchorElement, NavSquareItemProps>(function
     </Link>
   );
 });
+
+// A rail item that opens a flyout on hover (after a short intent delay) or
+// keyboard focus, closes when the pointer or focus leaves both the item and
+// the flyout, and on Escape returns focus to the item.
+function FlyoutNavItem({
+  label,
+  icon,
+  href,
+  active,
+  children
+}: {
+  label: string;
+  icon: ComponentType<{ className?: string }>;
+  href: string;
+  active: boolean;
+  children: (close: () => void) => ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const trigger = useRef<HTMLAnchorElement>(null);
+  const wrapper = useRef<HTMLDivElement>(null);
+
+  const clear = () => {
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = null;
+  };
+  const close = () => {
+    clear();
+    setOpen(false);
+  };
+  useEffect(() => clear, []);
+
+  return (
+    <div
+      ref={wrapper}
+      className="relative"
+      onMouseEnter={() => {
+        clear();
+        timer.current = setTimeout(() => setOpen(true), HOVER_OPEN_DELAY_MS);
+      }}
+      onMouseLeave={close}
+      onFocusCapture={() => {
+        clear();
+        setOpen(true);
+      }}
+      onBlurCapture={(event: FocusEvent) => {
+        if (!wrapper.current?.contains(event.relatedTarget as Node)) close();
+      }}
+      onKeyDown={(event: KeyboardEvent) => {
+        if (event.key !== "Escape") return;
+        close();
+        trigger.current?.focus();
+      }}
+    >
+      <NavSquareItem ref={trigger} label={label} icon={icon} href={href} active={active || open} />
+      {open ? <div className="absolute left-full top-0 z-50 pl-1">{children(close)}</div> : null}
+    </div>
+  );
+}
 
 // Active state depends on the query string for one case (Contractors is
 // reachable from both Expenses and Team at the same path, told apart only by
@@ -147,13 +206,17 @@ function SideNavView({ pathname, searchParams }: { pathname: string; searchParam
           <NavSquareItem label="Reports" icon={BookOpen} href="/reports" active={isReportsSelected} />
 
           {/* Accounting / Expenses / Sales sit directly on the rail, as in QBO.
-              Each lands on its category's first item; the /all-apps sidebar
-              still lets you move between that category's pages. */}
+              Clicking lands on the category's first item; hovering (or focusing)
+              opens a flyout listing every page in it, as in QBO. */}
           {PRIMARY_NAV_CATEGORIES.map(({ id, railLabel }) => {
             const category = ALL_APPS_CATEGORIES.find((candidate) => candidate.id === id);
             const landingHref = category?.items[0]?.href;
             if (!category || !landingHref) return null;
-            return <NavSquareItem key={id} label={railLabel} icon={category.icon} href={landingHref} active={activeCategoryId === id} />;
+            return (
+              <FlyoutNavItem key={id} label={railLabel} icon={category.icon} href={landingHref} active={activeCategoryId === id}>
+                {(close) => <CategoryFlyout category={category} title={category.label} onNavigate={close} />}
+              </FlyoutNavItem>
+            );
           })}
 
           {/* "More apps" holds every category not promoted onto the rail.
@@ -179,7 +242,7 @@ function SideNavView({ pathname, searchParams }: { pathname: string; searchParam
               active={isMoreAppsSelected || isFlyoutOpen}
             />
             {isFlyoutOpen ? (
-              <div className="absolute left-full top-0 z-50 ml-1">
+              <div className="absolute left-full top-0 z-50 pl-1">
                 <AppsFlyout onNavigate={cancelOpenAndClose} />
               </div>
             ) : null}
