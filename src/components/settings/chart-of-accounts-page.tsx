@@ -361,7 +361,7 @@ export function ChartOfAccountsPage() {
         }
         actions={
           <div className="flex items-center gap-[9px]">
-            <Link href="/all-apps/reconcile" className="mr-[10px] inline-flex h-[25px] items-center rounded-[4px] bg-[var(--color-rt-red)] px-3 text-sm font-bold text-white hover:opacity-90">
+            <Link href="/all-apps/reconcile" className="mr-[10px] inline-flex h-[37px] items-center rounded-md bg-[var(--color-action-standard)] px-4 text-[15px] font-semibold text-white hover:brightness-90">
               Reconcile Dashboard
             </Link>
             <button type="button" onClick={() => toast({ variant: "info", title: "Clean up isn't available yet" })} className={`${OUTLINE_BUTTON} !px-3`}>
