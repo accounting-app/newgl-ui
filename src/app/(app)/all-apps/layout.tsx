@@ -85,7 +85,7 @@ export default function AllAppsLayout({ children }: AllAppsLayoutProps) {
           </Suspense>
         </div>
       </div>
-      <div className={`relative min-w-0 flex-1 overflow-y-auto bg-[var(--color-container-background-accent)] p-5 ${motion} ${submenuOpen ? "" : "pl-12"}`}>
+      <div className={`relative min-w-0 flex-1 overflow-y-auto bg-[var(--color-container-background-primary)] p-5 ${motion} ${submenuOpen ? "" : "pl-12"}`}>
         {/* Floating toggle: slides out to the left when the sub menu opens
             and back in from the left when it closes. */}
         <button

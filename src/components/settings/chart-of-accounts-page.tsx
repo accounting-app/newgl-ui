@@ -2,10 +2,9 @@
 
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
-import { ChevronDown, ChevronLeft, ChevronRight, Pencil, Printer, Search, Settings, Share } from "lucide-react";
+import { ArrowUp, ChevronDown, ChevronLeft, ChevronRight, Pencil, Printer, Search, Settings, Share } from "lucide-react";
 import { AddAccountModal } from "@/components/bank-register/add-account-modal";
 import { PageHeader } from "@/components/layout/page-header";
-import { SECONDARY, SplitButton } from "@/components/bank-register/register-header-actions";
 import { Button } from "@/components/ui/button";
 import { FilterSelect } from "@/components/ui/filter-select";
 import { Card } from "@/components/ui/card";
@@ -27,6 +26,26 @@ const CATEGORY_OPTIONS = ACCOUNT_ROOT_GROUPS.flatMap((group) =>
   [...group.categories].map((category) => ({ value: category, label: ACCOUNT_CATEGORY_LABELS[category] }))
 );
 const TYPE_FILTER_OPTIONS = [{ value: "", label: "All" }, ...CATEGORY_OPTIONS];
+
+// QBO lists the chart as one flat table sorted by account type, in this order.
+const ACCOUNT_TYPE_ORDER: Account["category"][] = [
+  "BANK",
+  "ACCOUNTS_RECEIVABLE",
+  "OTHER_CURRENT_ASSET",
+  "FIXED_ASSET",
+  "ACCOUNTS_PAYABLE",
+  "CREDIT_CARD",
+  "OTHER_CURRENT_LIABILITY",
+  "LONG_TERM_LIABILITY",
+  "EQUITY",
+  "INCOME",
+  "EXPENSE",
+  "OTHER_INCOME",
+  "OTHER_EXPENSE"
+];
+
+const OUTLINE_BUTTON =
+  "inline-flex h-9 items-center gap-2 rounded-md border border-[var(--color-qbo-green-border)] bg-[var(--color-container-background-primary)] px-4 text-base font-medium text-[var(--color-qbo-green-text)] hover:bg-[var(--color-action-passive-subtle-hover)]";
 
 function formatMoney(value: number): string {
   return value.toLocaleString("en-US", {
@@ -126,17 +145,33 @@ export function ChartOfAccountsPage() {
   // account behind it to act on.
   const sections = useMemo(
     () =>
-      ACCOUNT_ROOT_GROUPS.map((group) => {
-        const groupAccounts = activeAccounts.filter((a) => group.categories.has(a.category));
-        const rows = buildRollupHierarchyRows(groupAccounts.map((a) => ({ name: a.name, amount: a.currentBalance })));
-        const accountByName = new Map(groupAccounts.map((a) => [a.name, a]));
-        return { ...group, rows, accountByName };
+      ACCOUNT_TYPE_ORDER.map((category) => {
+        const typeAccounts = activeAccounts.filter((a) => a.category === category);
+        const rows = buildRollupHierarchyRows(typeAccounts.map((a) => ({ name: a.name, amount: a.currentBalance })));
+        const accountByName = new Map(typeAccounts.map((a) => [a.name, a]));
+        return { key: category, rows, accountByName };
       }),
     [activeAccounts]
   );
 
   // Rows actually shown (real accounts only, not synthetic rollup headers) -- drives the "1 - N" pager.
   const totalShown = useMemo(() => sections.reduce((sum, section) => sum + section.rows.filter((row) => section.accountByName.has(row.fullName)).length, 0), [sections]);
+
+  // Row selection (the checkboxes), real accounts only.
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const shownAccountIds = useMemo(
+    () => sections.flatMap((section) => section.rows.map((row) => section.accountByName.get(row.fullName)?.id).filter((id): id is string => Boolean(id))),
+    [sections]
+  );
+  const allSelected = shownAccountIds.length > 0 && shownAccountIds.every((id) => selectedIds.has(id));
+  const someSelected = shownAccountIds.some((id) => selectedIds.has(id));
+  function toggleSelected(id: string) {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  }
 
   function startAdd() {
     setEditingAccount(null);
@@ -280,39 +315,43 @@ export function ChartOfAccountsPage() {
         title="Chart of accounts"
         actions={
           <>
-            <Link href="/all-apps/reconcile" className="inline-flex h-8 items-center rounded-md bg-[#8f1111] px-3 text-sm font-semibold text-white hover:opacity-90">
+            <Link href="/all-apps/reconcile" className="inline-flex h-6 items-center rounded-[3px] bg-[var(--color-rt-red)] px-3 text-[13px] font-bold text-white hover:opacity-90">
               Reconcile Dashboard
             </Link>
-            <button type="button" disabled title="Not available yet" className={`inline-flex h-8 cursor-not-allowed items-center gap-2 rounded-full border px-4 text-sm font-semibold opacity-60 ${SECONDARY}`}>
+            <button type="button" onClick={() => toast({ variant: "info", title: "Clean up isn't available yet" })} className={OUTLINE_BUTTON}>
               Clean up
               <ChevronDown className="h-4 w-4" aria-hidden="true" />
             </button>
-            <button type="button" disabled title="Not available yet" className={`inline-flex h-8 cursor-not-allowed items-center rounded-full border px-4 text-sm font-semibold opacity-60 ${SECONDARY}`}>
+            <button type="button" onClick={() => toast({ variant: "info", title: "Reports for the chart of accounts aren't available yet" })} className={OUTLINE_BUTTON}>
               Run report
             </button>
-            <div className="relative" ref={newAccountMenuRef}>
-              <SplitButton
-                label="New account"
-                toggleLabel="More new-account options"
-                expanded={newAccountMenuOpen}
-                onMainClick={startAdd}
-                onToggle={() => setNewAccountMenuOpen((v) => !v)}
+            <div className="relative inline-flex" ref={newAccountMenuRef}>
+              <button type="button" onClick={startAdd} className="h-9 rounded-l-md bg-[var(--color-qbo-green)] px-4 text-base font-medium text-white hover:bg-[var(--color-qbo-green-hover)]">
+                New account
+              </button>
+              <button
+                type="button"
+                aria-label="More new-account options"
+                aria-expanded={newAccountMenuOpen}
+                onClick={() => setNewAccountMenuOpen((v) => !v)}
+                className="flex h-9 w-10 items-center justify-center rounded-r-md border-l border-white/40 bg-[var(--color-qbo-green)] text-white hover:bg-[var(--color-qbo-green-hover)]"
               >
-                {newAccountMenuOpen ? (
-                  <div className="absolute right-0 top-full z-20 mt-1 w-40 rounded-lg border border-[var(--color-divider-tertiary)] bg-[var(--color-container-background-primary)] py-1 shadow-lg">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setNewAccountMenuOpen(false);
-                        setBulkOpen(true);
-                      }}
-                      className="block w-full px-3 py-1.5 text-left text-sm text-[var(--color-text-global)] hover:bg-[var(--color-action-passive-subtle-hover)]"
-                    >
-                      Import accounts
-                    </button>
-                  </div>
-                ) : null}
-              </SplitButton>
+                <ChevronDown className="h-4 w-4" aria-hidden="true" />
+              </button>
+              {newAccountMenuOpen ? (
+                <div className="absolute right-0 top-full z-20 mt-1 w-44 rounded-lg border border-[var(--color-divider-tertiary)] bg-[var(--color-container-background-primary)] py-1 shadow-lg">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setNewAccountMenuOpen(false);
+                      setBulkOpen(true);
+                    }}
+                    className="block w-full px-3 py-1.5 text-left text-sm text-[var(--color-text-global)] hover:bg-[var(--color-action-passive-subtle-hover)]"
+                  >
+                    Import accounts
+                  </button>
+                </div>
+              ) : null}
             </div>
           </>
         }
@@ -359,73 +398,95 @@ export function ChartOfAccountsPage() {
         </Card>
       ) : null}
 
-      {/* Toolbar + table in one bordered panel, laid out like Bank transactions. */}
-      <div className="overflow-hidden rounded-lg border border-[var(--color-divider-tertiary)] bg-[var(--color-container-background-primary)]">
-        <div className="flex flex-wrap items-center justify-between gap-3 px-4 pb-5 pt-3">
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="relative w-[320px] max-w-full">
-              <InputField placeholder="Filter by name or number" value={search} onChange={(e) => setSearch(e.target.value)} className="h-[38px] pl-10" />
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--color-icon-secondary)]" aria-hidden="true" />
-            </div>
-            <FilterSelect value={typeFilter} onChange={setTypeFilter} label="Filter by account type" className="w-[240px]">
-              {TYPE_FILTER_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>{option.label}</option>
-              ))}
-            </FilterSelect>
-            <span title="Not available yet" className="inline-flex h-[38px] cursor-not-allowed items-center rounded border border-[var(--color-negative)] px-3 text-sm text-[var(--color-negative)] opacity-80">
-              -- Default Account Filter --
-            </span>
+      {/* Toolbar + table sit straight on the page, as in QBO (no bordered panel). */}
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="relative w-[246px] max-w-full">
+            <InputField placeholder="Filter by name or number" value={search} onChange={(e) => setSearch(e.target.value)} className="h-9 border-[var(--color-field-border)] pl-10" />
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--color-icon-secondary)]" aria-hidden="true" />
           </div>
-          <div className="flex flex-wrap items-center gap-4 text-sm text-[var(--color-text-primary)]">
-            {batchEditOpen ? null : (
-              <button type="button" onClick={startBatchEdit} className="flex items-center gap-1.5 text-sm font-medium text-[var(--color-text-primary)] hover:text-[var(--color-text-global)]">
-                <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
-                Batch edit
-              </button>
-            )}
-            <span className="flex items-center gap-3 text-[var(--color-icon-secondary)]">
-              <IconButton icon={Printer} label="Print" size="sm" />
-              <IconButton icon={Share} label="Export" size="sm" />
-              <IconButton icon={Settings} label="Settings" size="sm" />
-            </span>
-          </div>
-        </div>
-        <div className="flex items-center justify-end gap-4 px-4 pb-3 text-sm text-[var(--color-text-primary)]">
-          <span className="flex items-center gap-1 text-[var(--color-text-disabled)]">
-            <ChevronLeft className="h-4 w-4" aria-hidden="true" />
-            Previous
-          </span>
-          <span>{totalShown === 0 ? "0" : `1 - ${totalShown}`}</span>
-          <span className="flex items-center gap-1 text-[var(--color-text-disabled)]">
-            Next
-            <ChevronRight className="h-4 w-4" aria-hidden="true" />
+          <FilterSelect value={typeFilter} onChange={setTypeFilter} label="Filter by account type" className="w-[255px] [&>select]:h-9 [&>select]:border-[#d9ddde]">
+            {TYPE_FILTER_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>{option.label}</option>
+            ))}
+          </FilterSelect>
+          <span title="Not available yet" className="inline-flex h-8 w-[192px] cursor-not-allowed items-center rounded-[3px] border border-[var(--color-rt-red-border)] bg-[var(--color-container-background-primary)] px-2 text-sm text-[var(--color-text-global)]">
+            -- Default Account Filter --
           </span>
         </div>
+        <div className="flex items-center gap-4 text-[var(--color-icon-secondary)]">
+          {batchEditOpen ? null : (
+            <button type="button" onClick={startBatchEdit} className="flex items-center gap-1.5 text-sm font-medium text-[var(--color-text-primary)] hover:text-[var(--color-text-global)]">
+              <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
+              Batch edit
+            </button>
+          )}
+          <IconButton icon={Share} label="Export" size="sm" />
+          <IconButton icon={Printer} label="Print" size="sm" />
+          <IconButton icon={Settings} label="Settings" size="sm" />
+        </div>
+      </div>
+      <div className="mb-3 flex items-center justify-end gap-5 text-[15px] text-[#535557]">
+        <span className="flex items-center gap-1 text-[#bbbbbb]">
+          <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+          Previous
+        </span>
+        <span className="text-[var(--color-text-global)]">{totalShown === 0 ? "0" : `1 - ${totalShown}`}</span>
+        <span className="flex items-center gap-1 text-[#bbbbbb]">
+          Next
+          <ChevronRight className="h-4 w-4" aria-hidden="true" />
+        </span>
+      </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[1000px] border-collapse text-sm">
-            <thead className="bg-[var(--color-container-background-accent)] text-left text-[var(--color-text-global)]">
-              <tr className="[&>th]:h-[46px] [&>th]:px-[10px] [&>th]:py-0 [&>th]:text-sm [&>th]:font-semibold">
-                <th className="w-10">
-                  <input type="checkbox" disabled aria-label="Select all accounts" />
-                </th>
-                <th className="border-l border-[var(--color-divider-tertiary)]">Name</th>
-                <th className="border-l border-[var(--color-divider-tertiary)]" title="Grouped by account type">Account type</th>
-                <th className="border-l border-[var(--color-divider-tertiary)] text-right">QuickBooks balance</th>
-                <th className="border-l border-[var(--color-divider-tertiary)] text-right">Bank balance</th>
-                <th className="w-44 border-l-2 border-[var(--color-divider-tertiary)] text-right">Action</th>
-              </tr>
-            </thead>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[1000px] table-fixed border-collapse text-sm">
+          <colgroup>
+            <col style={{ width: "2.8%" }} />
+            <col style={{ width: "26.2%" }} />
+            <col style={{ width: "24.2%" }} />
+            <col style={{ width: "18.2%" }} />
+            <col style={{ width: "9.9%" }} />
+            <col style={{ width: "8.7%" }} />
+            <col style={{ width: "10%" }} />
+          </colgroup>
+          <thead className="text-left text-[#373737]">
+            <tr className="border-b border-[var(--color-table-divider-strong)] [&>th]:h-12 [&>th]:px-[10px] [&>th]:py-0 [&>th]:text-[15px] [&>th]:font-semibold">
+              <th className="pl-0">
+                <input
+                  type="checkbox"
+                  className="qbo-checkbox ml-[7px]"
+                  aria-label="Select all accounts"
+                  checked={allSelected}
+                  ref={(node) => {
+                    if (node) node.indeterminate = someSelected && !allSelected;
+                  }}
+                  onChange={(event) => setSelectedIds(event.target.checked ? new Set(shownAccountIds) : new Set())}
+                />
+              </th>
+              <th className="border-l border-[var(--color-table-divider)]">Name</th>
+              <th className="border-l border-[var(--color-table-divider)]" title="Grouped by account type">
+                Account type
+                <ArrowUp className="ml-3 inline h-3.5 w-3.5" aria-hidden="true" />
+              </th>
+              <th className="border-l border-[var(--color-table-divider)]">Detail type</th>
+              <th className="truncate border-l border-[var(--color-table-divider)] text-right">QuickBooks balance</th>
+              <th className="truncate border-l border-[var(--color-table-divider)] text-right">Bank balance</th>
+              <th className="border-l border-[var(--color-table-divider)] text-right">
+                <span className="mr-2 inline-flex h-6 items-center rounded-[3px] bg-[var(--color-rt-red)] px-2 align-middle text-[13px] font-bold text-white">New</span>
+                Action
+              </th>
+            </tr>
+          </thead>
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={6} className="px-3 py-6 text-center text-sm text-[var(--color-text-primary)]">
+                <td colSpan={7} className="px-3 py-6 text-center text-sm text-[var(--color-text-primary)]">
                   Loading…
                 </td>
               </tr>
             ) : loadError ? (
               <tr>
-                <td colSpan={6} className="px-3 py-6 text-center text-sm text-[var(--color-negative)]">
+                <td colSpan={7} className="px-3 py-6 text-center text-sm text-[var(--color-negative)]">
                   {loadError}
                 </td>
               </tr>
@@ -434,7 +495,6 @@ export function ChartOfAccountsPage() {
                 section.rows.length === 0 ? null : (
                   <SectionRows
                     key={section.key}
-                    label={section.label}
                     rows={filterCollapsed(section.rows, collapsedNames)}
                     accountByName={section.accountByName}
                     collapsedNames={collapsedNames}
@@ -446,13 +506,14 @@ export function ChartOfAccountsPage() {
                     batchEditOpen={batchEditOpen}
                     batchDrafts={batchDrafts}
                     onBatchDraftChange={(id, value) => setBatchDrafts((current) => ({ ...current, [id]: value }))}
+                    selectedIds={selectedIds}
+                    onToggleSelected={toggleSelected}
                   />
                 )
               )
             )}
           </tbody>
-          </table>
-        </div>
+        </table>
       </div>
 
       {batchEditOpen ? (
@@ -470,7 +531,6 @@ export function ChartOfAccountsPage() {
 }
 
 function SectionRows({
-  label,
   rows,
   accountByName,
   collapsedNames,
@@ -481,9 +541,10 @@ function SectionRows({
   busyAccountId,
   batchEditOpen,
   batchDrafts,
-  onBatchDraftChange
+  onBatchDraftChange,
+  selectedIds,
+  onToggleSelected
 }: {
-  label: string;
   rows: HierarchyRow[];
   accountByName: Map<string, Account>;
   collapsedNames: Set<string>;
@@ -495,23 +556,27 @@ function SectionRows({
   batchEditOpen: boolean;
   batchDrafts: Record<string, string>;
   onBatchDraftChange: (accountId: string, value: string) => void;
+  selectedIds: Set<string>;
+  onToggleSelected: (accountId: string) => void;
 }) {
   return (
     <>
-      <tr>
-        <td colSpan={6} className="h-[38px] bg-[var(--color-container-background-accent)] px-[10px] py-0 text-sm font-semibold text-[var(--color-text-global)]">
-          {label}
-        </td>
-      </tr>
       {rows.map((row) => {
         const account = accountByName.get(row.fullName);
         const isCollapsed = row.hasChildren && collapsedNames.has(row.fullName);
         return (
-          <tr key={row.fullName} className="h-[50px] border-t border-[var(--color-divider-tertiary)] hover:bg-[var(--color-table-row-hover)]">
-            <td className="px-[10px] py-0 align-middle">
-              <input type="checkbox" disabled aria-label={`Select ${row.label}`} />
+          <tr key={row.fullName} className="h-12 border-t border-[var(--color-table-divider)] hover:bg-[var(--color-table-row-hover)]">
+            <td className="pl-[17px] py-0 align-middle">
+              <input
+                type="checkbox"
+                className="qbo-checkbox"
+                aria-label={`Select ${row.label}`}
+                disabled={!account}
+                checked={account ? selectedIds.has(account.id) : false}
+                onChange={() => account && onToggleSelected(account.id)}
+              />
             </td>
-            <td className="border-l border-[var(--color-divider-tertiary)] px-[10px] py-0 align-middle text-sm leading-[21px]">
+            <td className="border-l border-[var(--color-table-divider)] px-[10px] py-0 align-middle text-sm leading-[21px]">
               <div className="flex items-center gap-1.5" style={{ paddingLeft: `${row.depth * 1.25}rem` }}>
                 {row.hasChildren ? (
                   <button
@@ -522,9 +587,7 @@ function SectionRows({
                   >
                     {isCollapsed ? <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" /> : <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />}
                   </button>
-                ) : (
-                  <span className="inline-block w-3.5" />
-                )}
+                ) : null}
                 {account && batchEditOpen ? (
                   <InputField size="sm" value={batchDrafts[account.id] ?? row.label} onChange={(e) => onBatchDraftChange(account.id, e.target.value)} />
                 ) : (
@@ -532,15 +595,18 @@ function SectionRows({
                 )}
               </div>
             </td>
-            <td className="border-l border-[var(--color-divider-tertiary)] px-[10px] py-0 align-middle text-sm leading-[21px] text-[var(--color-text-primary)]">
+            <td className="border-l border-[var(--color-table-divider)] px-[10px] py-0 align-middle text-sm leading-[21px] text-[var(--color-text-primary)]">
               {account ? ACCOUNT_CATEGORY_LABELS[account.category] : ""}
             </td>
-            <td className="border-l border-[var(--color-divider-tertiary)] px-[10px] py-0 align-middle text-right text-sm leading-[21px] text-[var(--color-text-global)]">{formatMoney(row.amount)}</td>
-            <td className="border-l border-[var(--color-divider-tertiary)] px-[10px] py-0 align-middle text-right text-sm leading-[21px] text-[var(--color-text-disabled)]">
+            <td className="border-l border-[var(--color-table-divider)] px-[10px] py-0 align-middle text-sm leading-[21px] text-[var(--color-text-primary)]">
+              {account?.subtype ?? ""}
+            </td>
+            <td className="border-l border-[var(--color-table-divider)] px-[10px] py-0 align-middle text-right text-sm leading-[21px] text-[var(--color-text-global)]">{formatMoney(row.amount)}</td>
+            <td className="border-l border-[var(--color-table-divider)] px-[10px] py-0 align-middle text-right text-sm leading-[21px] text-[var(--color-text-disabled)]">
               {/* No live bank feed yet (Phase 1.5) -- honestly blank rather than a fabricated number. */}
               {account ? "--" : ""}
             </td>
-            <td className="border-l-2 border-[var(--color-divider-tertiary)] px-[10px] py-0 align-middle text-right">
+            <td className="border-l border-[var(--color-table-divider)] px-[10px] py-0 align-middle text-right">
               {account ? (
                 <AccountRowActions
                   account={account}
@@ -609,7 +675,7 @@ function AccountRowActions({
   // P&L Detail already filters by account name, which is the closest thing to
   // QBO's single-account "Run report" we have for income/expense accounts.
   const reportHref = PROFIT_AND_LOSS_CATEGORIES.has(account.category) ? `/reports/pl-detail?account=${encodeURIComponent(account.name)}` : null;
-  const primaryLinkClass = `font-medium text-[var(--color-link-action)] hover:underline ${busy ? "pointer-events-none opacity-60" : ""}`;
+  const primaryLinkClass = `font-medium text-[var(--color-qbo-link)] hover:underline ${busy ? "pointer-events-none opacity-60" : ""}`;
 
   return (
     <div className="relative inline-flex items-center justify-end gap-1 text-sm" ref={ref}>

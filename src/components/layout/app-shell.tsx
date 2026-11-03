@@ -13,7 +13,7 @@ export function AppShell({ children }: AppShellProps) {
         <SideNav />
         <div className="flex min-w-0 flex-1 flex-col">
           <TopHeader />
-          <div className="min-h-0 flex-1 overflow-auto rounded-b-[var(--radius-x-large)]">{children}</div>
+          <div className="min-h-0 flex-1 overflow-auto rounded-b-[var(--radius-x-large)] bg-[var(--color-container-background-primary)]">{children}</div>
         </div>
       </div>
     </div>
