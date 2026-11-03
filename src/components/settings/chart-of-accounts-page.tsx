@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
-import { ArrowUp, ChevronDown, ChevronLeft, ChevronRight, Pencil, Printer, Search, Settings, Share } from "lucide-react";
+import { ArrowUp, ChevronDown, ChevronLeft, ChevronRight, Maximize, MessageSquarePlus, Pencil, Printer, Search, Settings, Share, SquareArrowOutUpRight } from "lucide-react";
 import { AddAccountModal } from "@/components/bank-register/add-account-modal";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
@@ -44,8 +44,10 @@ const ACCOUNT_TYPE_ORDER: Account["category"][] = [
   "OTHER_EXPENSE"
 ];
 
+const LAST_ACCOUNT_KEY = "newgl:chart-last-account";
+
 const OUTLINE_BUTTON =
-  "inline-flex h-9 items-center gap-2 rounded-md border border-[var(--color-qbo-green-border)] bg-[var(--color-container-background-primary)] px-4 text-base font-medium text-[var(--color-qbo-green-text)] hover:bg-[var(--color-action-passive-subtle-hover)]";
+  "inline-flex h-[37px] items-center gap-2 rounded-md border border-[var(--color-qbo-green-border)] bg-[var(--color-container-background-primary)] px-4 text-base font-medium text-[var(--color-qbo-green-text)] hover:bg-[var(--color-action-passive-subtle-hover)]";
 
 function formatMoney(value: number): string {
   return value.toLocaleString("en-US", {
@@ -171,6 +173,32 @@ export function ChartOfAccountsPage() {
       next.has(id) ? next.delete(id) : next.add(id);
       return next;
     });
+  }
+
+  // "Jump to Last" (RightTool): back to the account row you last opened or edited.
+  function rememberLast(accountId: string) {
+    try {
+      window.sessionStorage.setItem(LAST_ACCOUNT_KEY, accountId);
+    } catch {
+      // storage unavailable: nothing to jump back to
+    }
+  }
+  function jumpToLast() {
+    let id: string | null = null;
+    try {
+      id = window.sessionStorage.getItem(LAST_ACCOUNT_KEY);
+    } catch {
+      // ignore
+    }
+    const row = id ? document.querySelector<HTMLElement>(`[data-account-id="${id}"]`) : null;
+    if (!row) return toast({ variant: "info", title: "No account to jump back to yet", description: "Open or edit an account first." });
+    row.scrollIntoView({ block: "center" });
+    row.classList.add("bg-[var(--color-action-passive-subtle-hover)]");
+    window.setTimeout(() => row.classList.remove("bg-[var(--color-action-passive-subtle-hover)]"), 1800);
+  }
+  function toggleFullscreen() {
+    if (document.fullscreenElement) void document.exitFullscreen();
+    else void document.documentElement.requestFullscreen?.().catch(() => toast({ variant: "info", title: "Full screen isn't available in this browser" }));
   }
 
   function startAdd() {
@@ -313,12 +341,30 @@ export function ChartOfAccountsPage() {
       <PageHeader
         section="Accounting"
         title="Chart of accounts"
+        className="min-h-[35px] [&>nav]:pl-[21px] [&>nav>span:first-child]:text-[#252728] [&>nav>span:last-child]:text-[#555756]"
+        topRight={
+          <div className="flex items-center text-sm text-[#585a5c]">
+            <button type="button" onClick={jumpToLast} className="mr-3 inline-flex h-[35px] items-center rounded-full bg-[var(--color-rt-red)] px-[21px] text-[15px] font-bold text-white hover:opacity-90">
+              Jump to Last
+            </button>
+            <button type="button" onClick={() => toast({ variant: "info", title: "Feedback isn't available yet" })} className="mr-[17px] flex items-center gap-1.5 hover:text-[var(--color-text-global)]">
+              <MessageSquarePlus className="h-4 w-4 text-[#4d5252]" aria-hidden="true" />
+              Feedback
+            </button>
+            <button type="button" aria-label="Open in a new window" title="Open in a new window" onClick={() => window.open(window.location.href, "_blank")} className="mr-[15px] text-[#505252] hover:text-[var(--color-text-global)]">
+              <SquareArrowOutUpRight className="h-4 w-4" aria-hidden="true" />
+            </button>
+            <button type="button" aria-label="Toggle full screen" title="Full screen" onClick={toggleFullscreen} className="text-[#515353] hover:text-[var(--color-text-global)]">
+              <Maximize className="h-4 w-4" aria-hidden="true" />
+            </button>
+          </div>
+        }
         actions={
-          <>
-            <Link href="/all-apps/reconcile" className="inline-flex h-6 items-center rounded-[3px] bg-[var(--color-rt-red)] px-3 text-[13px] font-bold text-white hover:opacity-90">
+          <div className="flex items-center gap-[9px]">
+            <Link href="/all-apps/reconcile" className="mr-[10px] inline-flex h-[25px] items-center rounded-[4px] bg-[var(--color-rt-red)] px-3 text-sm font-bold text-white hover:opacity-90">
               Reconcile Dashboard
             </Link>
-            <button type="button" onClick={() => toast({ variant: "info", title: "Clean up isn't available yet" })} className={OUTLINE_BUTTON}>
+            <button type="button" onClick={() => toast({ variant: "info", title: "Clean up isn't available yet" })} className={`${OUTLINE_BUTTON} !px-3`}>
               Clean up
               <ChevronDown className="h-4 w-4" aria-hidden="true" />
             </button>
@@ -326,7 +372,7 @@ export function ChartOfAccountsPage() {
               Run report
             </button>
             <div className="relative inline-flex" ref={newAccountMenuRef}>
-              <button type="button" onClick={startAdd} className="h-9 rounded-l-md bg-[var(--color-qbo-green)] px-4 text-base font-medium text-white hover:bg-[var(--color-qbo-green-hover)]">
+              <button type="button" onClick={startAdd} className="h-[37px] rounded-l-md bg-[var(--color-qbo-green)] px-4 text-base font-medium text-white hover:bg-[var(--color-qbo-green-hover)]">
                 New account
               </button>
               <button
@@ -334,7 +380,7 @@ export function ChartOfAccountsPage() {
                 aria-label="More new-account options"
                 aria-expanded={newAccountMenuOpen}
                 onClick={() => setNewAccountMenuOpen((v) => !v)}
-                className="flex h-9 w-10 items-center justify-center rounded-r-md border-l border-white/40 bg-[var(--color-qbo-green)] text-white hover:bg-[var(--color-qbo-green-hover)]"
+                className="flex h-[37px] w-[38px] items-center justify-center rounded-r-md border-l border-white/40 bg-[var(--color-qbo-green)] text-white hover:bg-[var(--color-qbo-green-hover)]"
               >
                 <ChevronDown className="h-4 w-4" aria-hidden="true" />
               </button>
@@ -353,7 +399,7 @@ export function ChartOfAccountsPage() {
                 </div>
               ) : null}
             </div>
-          </>
+          </div>
         }
       />
 
@@ -508,6 +554,7 @@ export function ChartOfAccountsPage() {
                     onBatchDraftChange={(id, value) => setBatchDrafts((current) => ({ ...current, [id]: value }))}
                     selectedIds={selectedIds}
                     onToggleSelected={toggleSelected}
+                    onRemember={rememberLast}
                   />
                 )
               )
@@ -543,7 +590,8 @@ function SectionRows({
   batchDrafts,
   onBatchDraftChange,
   selectedIds,
-  onToggleSelected
+  onToggleSelected,
+  onRemember
 }: {
   rows: HierarchyRow[];
   accountByName: Map<string, Account>;
@@ -558,6 +606,7 @@ function SectionRows({
   onBatchDraftChange: (accountId: string, value: string) => void;
   selectedIds: Set<string>;
   onToggleSelected: (accountId: string) => void;
+  onRemember: (accountId: string) => void;
 }) {
   return (
     <>
@@ -565,7 +614,7 @@ function SectionRows({
         const account = accountByName.get(row.fullName);
         const isCollapsed = row.hasChildren && collapsedNames.has(row.fullName);
         return (
-          <tr key={row.fullName} className="h-12 border-t border-[var(--color-table-divider)] hover:bg-[var(--color-table-row-hover)]">
+          <tr key={row.fullName} data-account-id={account?.id} onClick={() => account && onRemember(account.id)} className="h-12 border-t border-[var(--color-table-divider)] hover:bg-[var(--color-table-row-hover)]">
             <td className="pl-[17px] py-0 align-middle">
               <input
                 type="checkbox"
