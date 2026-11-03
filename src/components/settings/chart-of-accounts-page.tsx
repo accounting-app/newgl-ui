@@ -45,6 +45,44 @@ const ACCOUNT_TYPE_ORDER: Account["category"][] = [
 ];
 
 const LAST_ACCOUNT_KEY = "newgl:chart-last-account";
+const DEFAULT_FILTER_KEY = "newgl:chart-default-filter";
+
+type CategoryName = Account["category"];
+type FilterRule = { label: string; matches: (account: Account) => boolean };
+const inCategories = (...categories: CategoryName[]) => (account: Account) => categories.includes(account.category);
+const subtypeLike = (pattern: RegExp) => (account: Account) => pattern.test(account.subtype ?? "");
+const ALL_ACCOUNTS = () => true;
+const NO_ACCOUNTS = () => false;
+
+// RightTool's "Default Account Filter" presets, in QBO's order. Ones QBO splits
+// by detail type (Revenue, COGS, Payroll...) match on the account's detail
+// type; ones our chart has no account type for (Other Assets) match nothing.
+const DEFAULT_FILTERS: Record<string, FilterRule> = {
+  default: { label: "-- Default Account Filter --", matches: ALL_ACCOUNTS },
+  all: { label: "All Accounts", matches: ALL_ACCOUNTS },
+  bank: { label: "Bank", matches: inCategories("BANK") },
+  ar: { label: "Accounts Receivable (A/R)", matches: inCategories("ACCOUNTS_RECEIVABLE") },
+  currentAssets: { label: "Current Assets", matches: inCategories("BANK", "ACCOUNTS_RECEIVABLE", "OTHER_CURRENT_ASSET") },
+  otherCurrentAssets: { label: "Other Current Assets", matches: inCategories("OTHER_CURRENT_ASSET") },
+  fixedAssets: { label: "Fixed Assets", matches: inCategories("FIXED_ASSET") },
+  ppe: { label: "Property, Plant and Equipment", matches: inCategories("FIXED_ASSET") },
+  otherAssets: { label: "Other Assets", matches: NO_ACCOUNTS },
+  ap: { label: "Accounts Payable (A/P)", matches: inCategories("ACCOUNTS_PAYABLE") },
+  creditCard: { label: "Credit Card", matches: inCategories("CREDIT_CARD") },
+  otherCurrentLiabilities: { label: "Other Current Liabilities", matches: inCategories("OTHER_CURRENT_LIABILITY") },
+  longTermLiabilities: { label: "Long Term Liabilities", matches: inCategories("LONG_TERM_LIABILITY") },
+  equity: { label: "Equity", matches: inCategories("EQUITY") },
+  income: { label: "Income", matches: inCategories("INCOME") },
+  revenue: { label: "Revenue", matches: inCategories("INCOME") },
+  otherIncome: { label: "Other Income", matches: inCategories("OTHER_INCOME") },
+  otherRevenue: { label: "Other Revenue", matches: inCategories("OTHER_INCOME") },
+  cogs: { label: "Cost Of Goods Sold", matches: subtypeLike(/cost of goods|cogs/i) },
+  expenses: { label: "Expenses", matches: inCategories("EXPENSE") },
+  otherExpense: { label: "Other Expense", matches: inCategories("OTHER_EXPENSE") },
+  expenditures: { label: "Expenditures", matches: inCategories("EXPENSE") },
+  otherExpenditures: { label: "Other Expenditures", matches: inCategories("OTHER_EXPENSE") },
+  payrollExpenses: { label: "Payroll Expenses", matches: (account) => account.category === "EXPENSE" && /payroll/i.test(account.subtype ?? "") }
+};
 
 const OUTLINE_BUTTON =
   "inline-flex h-[37px] items-center gap-2 rounded-md border border-[var(--color-qbo-green-border)] bg-[var(--color-container-background-primary)] px-4 text-base font-medium text-[var(--color-qbo-green-text)] hover:bg-[var(--color-action-passive-subtle-hover)]";
@@ -77,6 +115,23 @@ export function ChartOfAccountsPage() {
   const [initialParentAccount, setInitialParentAccount] = useState<Account | null>(null);
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
+  const [defaultFilter, setDefaultFilterState] = useState("default");
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem(DEFAULT_FILTER_KEY);
+      if (stored && stored in DEFAULT_FILTERS) setDefaultFilterState(stored);
+    } catch {
+      // storage unavailable: start unfiltered
+    }
+  }, []);
+  function setDefaultFilter(value: string) {
+    setDefaultFilterState(value);
+    try {
+      window.localStorage.setItem(DEFAULT_FILTER_KEY, value);
+    } catch {
+      // not persisted
+    }
+  }
   const [newAccountMenuOpen, setNewAccountMenuOpen] = useState(false);
   const newAccountMenuRef = useRef<HTMLDivElement>(null);
 
@@ -133,9 +188,10 @@ export function ChartOfAccountsPage() {
         (a) =>
           a.status !== "ARCHIVED" &&
           (search.trim() === "" || a.name.toLowerCase().includes(search.trim().toLowerCase())) &&
-          (typeFilter === "" || a.category === typeFilter)
+          (typeFilter === "" || a.category === typeFilter) &&
+          (DEFAULT_FILTERS[defaultFilter] ?? DEFAULT_FILTERS.default).matches(a)
       ),
-    [accounts, search, typeFilter]
+    [accounts, search, typeFilter, defaultFilter]
   );
 
   // Real hierarchy tree (colon-segment parents roll up their children's
@@ -200,6 +256,11 @@ export function ChartOfAccountsPage() {
     if (document.fullscreenElement) void document.exitFullscreen();
     else void document.documentElement.requestFullscreen?.().catch(() => toast({ variant: "info", title: "Full screen isn't available in this browser" }));
   }
+
+  const defaultFilterOptions = useMemo(
+    () => Object.entries(DEFAULT_FILTERS).map(([value, rule]) => ({ value, label: value === "all" ? `${rule.label} (${accounts.filter((a) => a.status !== "ARCHIVED").length})` : rule.label })),
+    [accounts]
+  );
 
   function startAdd() {
     setEditingAccount(null);
@@ -456,9 +517,9 @@ export function ChartOfAccountsPage() {
               <option key={option.value} value={option.value}>{option.label}</option>
             ))}
           </FilterSelect>
-          <span title="Not available yet" className="inline-flex h-8 w-[192px] cursor-not-allowed items-center rounded-[3px] border border-[var(--color-action-standard)] bg-[var(--color-container-background-primary)] px-2 text-sm text-[var(--color-text-global)]">
-            -- Default Account Filter --
-          </span>
+          <div className="w-[230px] [&_input]:h-8 [&_input]:border-[var(--color-action-standard)] [&_input]:py-0 [&_input]:text-sm">
+            <Select value={defaultFilter} onChange={setDefaultFilter} options={defaultFilterOptions} placeholder="-- Default Account Filter --" allowCustomValue={false} optionSize="sm" showCheckmark />
+          </div>
         </div>
         <div className="flex items-center gap-4 text-[var(--color-icon-secondary)]">
           {batchEditOpen ? null : (
