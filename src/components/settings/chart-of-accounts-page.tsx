@@ -2,9 +2,12 @@
 
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
-import { ChevronDown, ChevronRight, MessageSquarePlus, Pencil, Printer, Settings } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, Pencil, Printer, Search, Settings, Share } from "lucide-react";
 import { AddAccountModal } from "@/components/bank-register/add-account-modal";
+import { PageHeader } from "@/components/layout/page-header";
+import { SECONDARY, SplitButton } from "@/components/bank-register/register-header-actions";
 import { Button } from "@/components/ui/button";
+import { FilterSelect } from "@/components/ui/filter-select";
 import { Card } from "@/components/ui/card";
 import { IconButton } from "@/components/ui/icon-button";
 import { InputField } from "@/components/ui/input-field";
@@ -131,6 +134,9 @@ export function ChartOfAccountsPage() {
       }),
     [activeAccounts]
   );
+
+  // Rows actually shown (real accounts only, not synthetic rollup headers) -- drives the "1 - N" pager.
+  const totalShown = useMemo(() => sections.reduce((sum, section) => sum + section.rows.filter((row) => section.accountByName.has(row.fullName)).length, 0), [sections]);
 
   function startAdd() {
     setEditingAccount(null);
@@ -269,44 +275,48 @@ export function ChartOfAccountsPage() {
 
   return (
     <>
-      <h1 className="mb-4 text-2xl font-semibold text-[var(--color-text-global)]">Chart of accounts</h1>
-
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-        <span className="text-sm text-[var(--color-text-disabled)]">All lists</span>
-        <div className="flex items-center gap-4">
-          <button type="button" disabled title="Not available yet" className="flex cursor-not-allowed items-center gap-1.5 text-sm font-medium text-[var(--color-text-disabled)]">
-            <MessageSquarePlus className="h-4 w-4" aria-hidden="true" />
-            Give feedback
-          </button>
-          <button type="button" disabled title="Not available yet" className="cursor-not-allowed rounded-full border border-[var(--color-button-border)] px-4 py-1.5 text-sm font-medium text-[var(--color-text-disabled)]">
-            Run report
-          </button>
-          <div className="relative" ref={newAccountMenuRef}>
-            <div className="flex overflow-hidden rounded-full">
-              <Button className="rounded-r-none" onClick={startAdd}>
-                New account
-              </Button>
-              <Button className="rounded-l-none border-l border-l-white/20 px-2" aria-label="More new-account options" onClick={() => setNewAccountMenuOpen((v) => !v)}>
-                <ChevronDown className="h-4 w-4" aria-hidden="true" />
-              </Button>
+      <PageHeader
+        section="Accounting"
+        title="Chart of accounts"
+        actions={
+          <>
+            <Link href="/all-apps/reconcile" className="inline-flex h-8 items-center rounded-md bg-[#8f1111] px-3 text-sm font-semibold text-white hover:opacity-90">
+              Reconcile Dashboard
+            </Link>
+            <button type="button" disabled title="Not available yet" className={`inline-flex h-8 cursor-not-allowed items-center gap-2 rounded-full border px-4 text-sm font-semibold opacity-60 ${SECONDARY}`}>
+              Clean up
+              <ChevronDown className="h-4 w-4" aria-hidden="true" />
+            </button>
+            <button type="button" disabled title="Not available yet" className={`inline-flex h-8 cursor-not-allowed items-center rounded-full border px-4 text-sm font-semibold opacity-60 ${SECONDARY}`}>
+              Run report
+            </button>
+            <div className="relative" ref={newAccountMenuRef}>
+              <SplitButton
+                label="New account"
+                toggleLabel="More new-account options"
+                expanded={newAccountMenuOpen}
+                onMainClick={startAdd}
+                onToggle={() => setNewAccountMenuOpen((v) => !v)}
+              >
+                {newAccountMenuOpen ? (
+                  <div className="absolute right-0 top-full z-20 mt-1 w-40 rounded-lg border border-[var(--color-divider-tertiary)] bg-[var(--color-container-background-primary)] py-1 shadow-lg">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setNewAccountMenuOpen(false);
+                        setBulkOpen(true);
+                      }}
+                      className="block w-full px-3 py-1.5 text-left text-sm text-[var(--color-text-global)] hover:bg-[var(--color-action-passive-subtle-hover)]"
+                    >
+                      Import accounts
+                    </button>
+                  </div>
+                ) : null}
+              </SplitButton>
             </div>
-            {newAccountMenuOpen ? (
-              <div className="absolute right-0 top-full z-20 mt-1 w-40 rounded-lg border border-[var(--color-divider-tertiary)] bg-[var(--color-container-background-primary)] py-1 shadow-lg">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setNewAccountMenuOpen(false);
-                    setBulkOpen(true);
-                  }}
-                  className="block w-full px-3 py-1.5 text-left text-sm text-[var(--color-text-global)] hover:bg-[var(--color-action-passive-subtle-hover)]"
-                >
-                  Import accounts
-                </button>
-              </div>
-            ) : null}
-          </div>
-        </div>
-      </div>
+          </>
+        }
+      />
 
       <AddAccountModal
         open={isAccountModalOpen}
@@ -349,47 +359,64 @@ export function ChartOfAccountsPage() {
         </Card>
       ) : null}
 
-      <div className="mb-2 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="w-64">
-            <InputField placeholder="Filter by name or number" value={search} onChange={(e) => setSearch(e.target.value)} />
+      {/* Toolbar + table in one bordered panel, laid out like Bank transactions. */}
+      <div className="overflow-hidden rounded-lg border border-[var(--color-divider-tertiary)] bg-[var(--color-container-background-primary)]">
+        <div className="flex flex-wrap items-center justify-between gap-3 px-4 pb-5 pt-3">
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="relative w-[320px] max-w-full">
+              <InputField placeholder="Filter by name or number" value={search} onChange={(e) => setSearch(e.target.value)} className="h-[38px] pl-10" />
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--color-icon-secondary)]" aria-hidden="true" />
+            </div>
+            <FilterSelect value={typeFilter} onChange={setTypeFilter} label="Filter by account type" className="w-[240px]">
+              {TYPE_FILTER_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </FilterSelect>
+            <span title="Not available yet" className="inline-flex h-[38px] cursor-not-allowed items-center rounded border border-[var(--color-negative)] px-3 text-sm text-[var(--color-negative)] opacity-80">
+              -- Default Account Filter --
+            </span>
           </div>
-          <div className="w-44">
-            <Select value={typeFilter} onChange={setTypeFilter} options={TYPE_FILTER_OPTIONS} placeholder="All" allowCustomValue={false} optionSize="sm" />
+          <div className="flex flex-wrap items-center gap-4 text-sm text-[var(--color-text-primary)]">
+            {batchEditOpen ? null : (
+              <button type="button" onClick={startBatchEdit} className="flex items-center gap-1.5 text-sm font-medium text-[var(--color-text-primary)] hover:text-[var(--color-text-global)]">
+                <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
+                Batch edit
+              </button>
+            )}
+            <span className="flex items-center gap-3 text-[var(--color-icon-secondary)]">
+              <IconButton icon={Printer} label="Print" size="sm" />
+              <IconButton icon={Share} label="Export" size="sm" />
+              <IconButton icon={Settings} label="Settings" size="sm" />
+            </span>
           </div>
         </div>
-        <div className="flex items-center gap-1">
-          {batchEditOpen ? null : (
-            <button type="button" onClick={startBatchEdit} className="flex items-center gap-1.5 px-2 py-1 text-sm font-medium text-[var(--color-text-primary)] hover:text-[var(--color-text-global)]">
-              <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
-              Batch edit
-            </button>
-          )}
-          <IconButton icon={Printer} label="Print" size="sm" />
-          <IconButton icon={Settings} label="Settings" size="sm" />
+        <div className="flex items-center justify-end gap-4 px-4 pb-3 text-sm text-[var(--color-text-primary)]">
+          <span className="flex items-center gap-1 text-[var(--color-text-disabled)]">
+            <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+            Previous
+          </span>
+          <span>{totalShown === 0 ? "0" : `1 - ${totalShown}`}</span>
+          <span className="flex items-center gap-1 text-[var(--color-text-disabled)]">
+            Next
+            <ChevronRight className="h-4 w-4" aria-hidden="true" />
+          </span>
         </div>
-      </div>
 
-      {/* Table -- same header-table/content-table styling as /register and
-          the rest of the Accounting screens, so the app's tables stay
-          visually consistent. */}
-      <div className="tw-override overflow-auto rounded-lg border border-[var(--color-divider-tertiary)]">
-        <table className="w-full min-w-[1000px] border-collapse text-sm">
-          <thead className="header-table text-left uppercase tracking-wide">
-            <tr>
-              <th className="w-10 px-2 pb-[5px] pt-2 text-left align-middle">
-                <input type="checkbox" disabled />
-              </th>
-              <th className="border-l-custom px-2 pb-[5px] pt-2 text-left align-middle">Name</th>
-              <th className="border-l-custom px-2 pb-[5px] pt-2 text-left align-middle" title="Grouped by account type">
-                Account type
-              </th>
-              <th className="border-l-custom px-2 pb-[5px] pt-2 text-right align-middle">QuickBooks balance</th>
-              <th className="border-l-custom px-2 pb-[5px] pt-2 text-right align-middle">Bank balance</th>
-              <th className="border-l-custom px-2 pb-[5px] pt-2 text-right align-middle">Action</th>
-            </tr>
-          </thead>
-          <tbody className="content-table">
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[1000px] border-collapse text-sm">
+            <thead className="bg-[var(--color-container-background-accent)] text-left text-[var(--color-text-global)]">
+              <tr className="[&>th]:h-[46px] [&>th]:px-[10px] [&>th]:py-0 [&>th]:text-sm [&>th]:font-semibold">
+                <th className="w-10">
+                  <input type="checkbox" disabled aria-label="Select all accounts" />
+                </th>
+                <th className="border-l border-[var(--color-divider-tertiary)]">Name</th>
+                <th className="border-l border-[var(--color-divider-tertiary)]" title="Grouped by account type">Account type</th>
+                <th className="border-l border-[var(--color-divider-tertiary)] text-right">QuickBooks balance</th>
+                <th className="border-l border-[var(--color-divider-tertiary)] text-right">Bank balance</th>
+                <th className="w-44 border-l-2 border-[var(--color-divider-tertiary)] text-right">Action</th>
+              </tr>
+            </thead>
+          <tbody>
             {loading ? (
               <tr>
                 <td colSpan={6} className="px-3 py-6 text-center text-sm text-[var(--color-text-primary)]">
@@ -424,7 +451,8 @@ export function ChartOfAccountsPage() {
               )
             )}
           </tbody>
-        </table>
+          </table>
+        </div>
       </div>
 
       {batchEditOpen ? (
@@ -471,7 +499,7 @@ function SectionRows({
   return (
     <>
       <tr>
-        <td colSpan={6} className="bg-[var(--color-container-background-accent)] p-2 text-[13px] font-semibold text-[var(--color-text-primary)]">
+        <td colSpan={6} className="h-[38px] bg-[var(--color-container-background-accent)] px-[10px] py-0 text-sm font-semibold text-[var(--color-text-global)]">
           {label}
         </td>
       </tr>
@@ -479,11 +507,11 @@ function SectionRows({
         const account = accountByName.get(row.fullName);
         const isCollapsed = row.hasChildren && collapsedNames.has(row.fullName);
         return (
-          <tr key={row.fullName} className="border-t border-[var(--color-divider-tertiary)] hover:bg-[var(--color-table-row-hover)]">
-            <td className="p-2 align-top">
-              <input type="checkbox" disabled />
+          <tr key={row.fullName} className="h-[50px] border-t border-[var(--color-divider-tertiary)] hover:bg-[var(--color-table-row-hover)]">
+            <td className="px-[10px] py-0 align-middle">
+              <input type="checkbox" disabled aria-label={`Select ${row.label}`} />
             </td>
-            <td className="border-l border-l-dotted border-l-[var(--color-divider-tertiary)] p-2 align-top text-[13px]">
+            <td className="border-l border-[var(--color-divider-tertiary)] px-[10px] py-0 align-middle text-sm leading-[21px]">
               <div className="flex items-center gap-1.5" style={{ paddingLeft: `${row.depth * 1.25}rem` }}>
                 {row.hasChildren ? (
                   <button
@@ -500,22 +528,19 @@ function SectionRows({
                 {account && batchEditOpen ? (
                   <InputField size="sm" value={batchDrafts[account.id] ?? row.label} onChange={(e) => onBatchDraftChange(account.id, e.target.value)} />
                 ) : (
-                  <div>
-                    <p className="text-[var(--color-text-global)]">{row.label}</p>
-                    {account ? <p className="text-xs text-[var(--color-icon-secondary)]">{ACCOUNT_CATEGORY_LABELS[account.category]}</p> : null}
-                  </div>
+                  <span className="text-[var(--color-text-global)]">{row.label}</span>
                 )}
               </div>
             </td>
-            <td className="border-l border-l-dotted border-l-[var(--color-divider-tertiary)] p-2 align-top text-[13px] text-[var(--color-text-primary)]">
+            <td className="border-l border-[var(--color-divider-tertiary)] px-[10px] py-0 align-middle text-sm leading-[21px] text-[var(--color-text-primary)]">
               {account ? ACCOUNT_CATEGORY_LABELS[account.category] : ""}
             </td>
-            <td className="border-l border-l-dotted border-l-[var(--color-divider-tertiary)] p-2 align-top text-right text-[13px] text-[var(--color-text-global)]">{formatMoney(row.amount)}</td>
-            <td className="border-l border-l-dotted border-l-[var(--color-divider-tertiary)] p-2 align-top text-right text-[13px] text-[var(--color-text-disabled)]">
+            <td className="border-l border-[var(--color-divider-tertiary)] px-[10px] py-0 align-middle text-right text-sm leading-[21px] text-[var(--color-text-global)]">{formatMoney(row.amount)}</td>
+            <td className="border-l border-[var(--color-divider-tertiary)] px-[10px] py-0 align-middle text-right text-sm leading-[21px] text-[var(--color-text-disabled)]">
               {/* No live bank feed yet (Phase 1.5) -- honestly blank rather than a fabricated number. */}
               {account ? "--" : ""}
             </td>
-            <td className="border-l border-l-dotted border-l-[var(--color-divider-tertiary)] p-2 align-top text-right">
+            <td className="border-l-2 border-[var(--color-divider-tertiary)] px-[10px] py-0 align-middle text-right">
               {account ? (
                 <AccountRowActions
                   account={account}
@@ -545,8 +570,8 @@ const PROFIT_AND_LOSS_CATEGORIES = new Set<Account["category"]>(["INCOME", "EXPE
 const BANK_FEED_CATEGORIES = new Set<Account["category"]>(["BANK", "CREDIT_CARD"]);
 
 const MENU_ITEM_CLASS =
-  "block w-full px-3 py-1.5 text-left text-[13px] text-[var(--color-text-global)] hover:bg-[var(--color-action-passive-subtle-hover)]";
-const DISABLED_MENU_ITEM_CLASS = "block w-full cursor-not-allowed px-3 py-1.5 text-left text-[13px] text-[var(--color-text-disabled)]";
+  "block w-full px-3 py-1.5 text-left text-sm text-[var(--color-text-global)] hover:bg-[var(--color-action-passive-subtle-hover)]";
+const DISABLED_MENU_ITEM_CLASS = "block w-full cursor-not-allowed px-3 py-1.5 text-left text-sm text-[var(--color-text-disabled)]";
 
 function AccountRowActions({
   account,
@@ -587,7 +612,7 @@ function AccountRowActions({
   const primaryLinkClass = `font-medium text-[var(--color-link-action)] hover:underline ${busy ? "pointer-events-none opacity-60" : ""}`;
 
   return (
-    <div className="relative inline-flex items-center justify-end gap-1 text-[13px]" ref={ref}>
+    <div className="relative inline-flex items-center justify-end gap-1 text-sm" ref={ref}>
       {hasRegister ? (
         <Link href={`/register?accountId=${account.id}`} aria-disabled={busy} className={primaryLinkClass}>
           View register
