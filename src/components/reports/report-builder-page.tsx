@@ -262,7 +262,7 @@ export function ReportBuilderPage() {
       <div className="mx-auto mt-8 max-w-[1000px] rounded border border-[var(--color-divider-tertiary)] px-6 pb-6 pt-4 print:border-0">
         <div className="mb-4 flex items-center justify-between border-b border-[var(--color-divider-tertiary)] pb-3 print:hidden">
           <span className="flex items-center gap-1">Compact | 100%<ChevronDown className="h-3.5 w-3.5" aria-hidden="true" /></span>
-          <Link href="/reports/balance-sheet" className="font-semibold text-[#8f1111] hover:underline">Open Balance Sheet</Link>
+          <Link href="/reports/balance-sheet" className="font-semibold text-[var(--color-link-action)] hover:underline">Open Balance Sheet</Link>
           <div className="relative flex items-center gap-1">
             <button type="button" aria-label="Refresh" title="Refresh" onClick={() => setTick((n) => n + 1)} className={iconBtn}><RefreshCw className="h-4 w-4" /></button>
             <button type="button" aria-label="Expand all" title="Expand / collapse all" onClick={() => setClosed((c): Record<string, boolean> => (Object.values(c).some(Boolean) ? {} : { income: true, expense: true, otherIncome: true, otherExpense: true }))} className={iconBtn}><Maximize2 className="h-4 w-4" /></button>

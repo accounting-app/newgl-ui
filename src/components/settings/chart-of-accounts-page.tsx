@@ -344,7 +344,7 @@ export function ChartOfAccountsPage() {
         className="min-h-[35px] [&>nav]:pl-[21px] [&>nav>span:first-child]:text-[#252728] [&>nav>span:last-child]:text-[#555756]"
         topRight={
           <div className="flex items-center text-sm text-[#585a5c]">
-            <button type="button" onClick={jumpToLast} className="mr-3 inline-flex h-[35px] items-center rounded-full bg-[var(--color-rt-red)] px-[21px] text-[15px] font-bold text-white hover:opacity-90">
+            <button type="button" onClick={jumpToLast} className="mr-3 inline-flex h-[35px] items-center rounded-full bg-[var(--color-action-standard)] px-[21px] text-[15px] font-bold text-white hover:opacity-90">
               Jump to Last
             </button>
             <button type="button" onClick={() => toast({ variant: "info", title: "Feedback isn't available yet" })} className="mr-[17px] flex items-center gap-1.5 hover:text-[var(--color-text-global)]">
@@ -456,7 +456,7 @@ export function ChartOfAccountsPage() {
               <option key={option.value} value={option.value}>{option.label}</option>
             ))}
           </FilterSelect>
-          <span title="Not available yet" className="inline-flex h-8 w-[192px] cursor-not-allowed items-center rounded-[3px] border border-[var(--color-rt-red-border)] bg-[var(--color-container-background-primary)] px-2 text-sm text-[var(--color-text-global)]">
+          <span title="Not available yet" className="inline-flex h-8 w-[192px] cursor-not-allowed items-center rounded-[3px] border border-[var(--color-action-standard)] bg-[var(--color-container-background-primary)] px-2 text-sm text-[var(--color-text-global)]">
             -- Default Account Filter --
           </span>
         </div>
@@ -518,7 +518,7 @@ export function ChartOfAccountsPage() {
               <th className="truncate border-l border-[var(--color-table-divider)] text-right">QuickBooks balance</th>
               <th className="truncate border-l border-[var(--color-table-divider)] text-right">Bank balance</th>
               <th className="border-l border-[var(--color-table-divider)] text-right">
-                <span className="mr-2 inline-flex h-6 items-center rounded-[3px] bg-[var(--color-rt-red)] px-2 align-middle text-[13px] font-bold text-white">New</span>
+                <span className="mr-2 inline-flex h-6 items-center rounded-[3px] bg-[var(--color-action-standard)] px-2 align-middle text-[13px] font-bold text-white">New</span>
                 Action
               </th>
             </tr>
