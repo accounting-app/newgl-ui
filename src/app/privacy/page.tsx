@@ -20,7 +20,7 @@ export default function PrivacyPage() {
     <main className="min-h-screen bg-[var(--color-container-background-primary)] px-6 py-12">
       <article className="mx-auto max-w-2xl text-[var(--color-text-primary)]">
         <Link href="/" className="inline-block">
-          <Image
+          {/* <Image
             className="hidden dark:block"
             style={{ height: "auto", width: "auto" }}
             src="/logo-simple-white.png"
@@ -35,7 +35,7 @@ export default function PrivacyPage() {
             alt="New GL"
             width={120}
             height={39}
-          />
+          /> */}
         </Link>
 
         <h1 className="mt-10 text-3xl font-semibold text-[var(--color-text-global)]">Privacy Policy</h1>
