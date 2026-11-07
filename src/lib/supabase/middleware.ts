@@ -5,8 +5,8 @@ import { NextResponse, type NextRequest } from "next/server";
 // there is no anonymous/demo mode. Everything not listed here requires a
 // session. "/dev" is the design-system reference (/dev/ui-kit) -- no user
 // data, no auth needed, and it 404s outside development regardless (see
-// src/app/dev/ui-kit/page.tsx).
-const PUBLIC_PATHS = ["/login", "/signup", "/auth/callback", "/auth/confirm", "/dev"];
+// src/app/dev/ui-kit/page.tsx). "/privacy" is the public privacy policy.
+const PUBLIC_PATHS = ["/login", "/signup", "/auth/callback", "/auth/confirm", "/dev", "/privacy"];
 
 export async function updateSession(request: NextRequest) {
   let response = NextResponse.next({ request });
