@@ -6,12 +6,15 @@ import { useTheme } from "next-themes";
 
 type ThemeOption = { value: "light" | "dark" | "modern" | "america250" | "pretty"; label: string };
 
+// Only light and dark for now -- the other skins are hidden, not removed
+// (their CSS is still in place). To bring one back, uncomment it here and
+// add it to AVAILABLE_THEMES in ./index.tsx.
 const THEME_OPTIONS: ThemeOption[] = [
   { value: "light", label: "Light" },
-  { value: "dark", label: "Dark" },
-  { value: "modern", label: "Modern" },
-  { value: "america250", label: "America 250" },
-  { value: "pretty", label: "Pretty" }
+  { value: "dark", label: "Dark" }
+  // { value: "modern", label: "Modern" },
+  // { value: "america250", label: "America 250" },
+  // { value: "pretty", label: "Pretty" }
 ];
 
 type ThemeToggleProps = {
