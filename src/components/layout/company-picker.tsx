@@ -130,7 +130,7 @@ export function CompanyPicker() {
         disabled={isSwitching}
       >
         <Building2 className="h-4 w-4 text-[var(--color-icon-secondary)]" aria-hidden="true" />
-        {isSwitching ? "Switching…" : activeCompany.name}
+        {isSwitching ? "Switching…" : activeCompany.label || activeCompany.name}
         <ChevronDown className="h-3.5 w-3.5 text-[var(--color-icon-secondary)]" aria-hidden="true" />
       </button>
 
@@ -143,7 +143,7 @@ export function CompanyPicker() {
             deletingName === company.name ? (
               <div key={company.name} className="flex flex-col gap-2 px-3 py-2">
                 <p className="text-xs text-[var(--color-text-primary)]">
-                  Delete <span className="font-medium">{company.name}</span>? This permanently removes its chart of
+                  Delete <span className="font-medium">{company.label || company.name}</span>? This permanently removes its chart of
                   accounts and transactions and can&apos;t be undone.
                 </p>
                 {deleteError ? <p className="text-xs text-[var(--color-negative)]">{deleteError}</p> : null}
@@ -179,14 +179,14 @@ export function CompanyPicker() {
                     company.isActive ? "text-[var(--color-link-action)]" : "text-[var(--color-text-global)]"
                   }`}
                 >
-                  {company.name}
+                  {company.label || company.name}
                 </button>
                 {company.isPrimary ? (
                   <span className="text-[11px] text-[var(--color-icon-secondary)]">Primary</span>
                 ) : (
                   <button
                     type="button"
-                    aria-label={`Delete ${company.name}`}
+                    aria-label={`Delete ${company.label || company.name}`}
                     onClick={() => {
                       setDeletingName(company.name);
                       setDeleteError(null);
@@ -239,7 +239,7 @@ export function CompanyPicker() {
                     label="Duplicate from"
                     value={duplicateFromName}
                     onChange={setDuplicateFromName}
-                    options={companies.map((company) => ({ value: company.name, label: company.name }))}
+                    options={companies.map((company) => ({ value: company.name, label: company.label || company.name }))}
                     placeholder="Select a company"
                     allowCustomValue={false}
                     optionSize="sm"

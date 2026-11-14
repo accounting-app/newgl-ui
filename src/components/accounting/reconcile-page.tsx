@@ -499,7 +499,7 @@ export function ReconcilePage() {
         <div className="rounded-lg border border-[var(--color-divider-tertiary)]">
           <div className="flex items-center justify-between border-b border-[var(--color-divider-tertiary)] px-4 py-4 text-center">
             <div className="flex-1">
-              <p className="text-lg text-[var(--color-text-global)]">{userName ?? activeCompany.name}</p>
+              <p className="text-lg text-[var(--color-text-global)]">{userName ?? (activeCompany.label || activeCompany.name)}</p>
               <p className="mt-1 text-sm font-semibold uppercase tracking-wide text-[var(--color-text-primary)]">Reconciliation summary</p>
             </div>
             <div className="flex items-center gap-1">
