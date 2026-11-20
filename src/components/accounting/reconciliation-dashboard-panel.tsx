@@ -3,17 +3,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { ArrowDown, ArrowUp, ArrowUpDown, ChevronDown } from "lucide-react";
+import { Modal } from "@/components/ui/modal";
 import { FullScreenFormShell } from "@/components/accounting/full-screen-form-shell";
 import { Select } from "@/components/ui/select";
 import { useToast } from "@/components/ui/toast/toast-context";
 import { useCompany } from "@/lib/company/company-provider";
 import { companyScopedKey, useLocalCollection } from "@/lib/local-store/use-local-collection";
 import type { PendingBankTxn } from "@/lib/local-store/accounting-types";
-import { listReconciliations } from "@/lib/services/reconciliation-service";
+import { finishReconciliation, getReconciliationSetup, listReconciliations, ReconciliationOutOfBalanceError } from "@/lib/services/reconciliation-service";
 import type { Reconciliation } from "@/lib/services/reconciliation-service";
 import { getServiceContainer } from "@/lib/services/service-container-v2";
 import type { Account } from "@/modules/accounting/domain/models";
-import { accountHasRegister } from "@/modules/accounting/presentation/transaction-type-policy";
+import { accountHasRegister, isCreditNormalCategory } from "@/modules/accounting/presentation/transaction-type-policy";
 
 type TypeGroup = "Bank" | "CC" | "Assets" | "Liabilities" | "Equity";
 type ColumnKey = "lastRecDate" | "lastRecAmount" | "discrepancy" | "account" | "type" | "registerBalance" | "bankFeedsBalance" | "inBankFeeds" | "unreconciled" | "lastTxnDate" | "accountNumber" | "detailType" | "lastRecBy" | "entriesReconciled";
@@ -115,6 +116,9 @@ export function ReconciliationDashboardPanel({ open, onClose }: { open: boolean;
   const [columnsOpen, setColumnsOpen] = useState(false);
   const [sort, setSort] = useState<{ key: ColumnKey; dir: "asc" | "desc" } | null>(null);
   const [menu, setMenu] = useState<{ row: Row; top: number; right: number } | null>(null);
+  // "Instant Reconcile": what it would do, shown for confirmation before anything is written.
+  const [instant, setInstant] = useState<{ row: Row; ids: string[]; startDate: string; endingDate: string; endingBalance: number } | null>(null);
+  const [instantBusy, setInstantBusy] = useState(false);
   const columnsRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -272,6 +276,45 @@ export function ReconciliationDashboardPanel({ open, onClose }: { open: boolean;
     }
   }
 
+  // Instant Reconcile clears every posted, unreconciled entry dated through
+  // today and records a reconciliation whose statement ending balance is exactly
+  // what those entries add up to -- so it always balances.
+  async function prepareInstant(row: Row) {
+    setMenu(null);
+    try {
+      const [entries, setup] = await Promise.all([services.registerService.listRegisterEntries(row.account.id), getReconciliationSetup(row.account.id)]);
+      const today = new Date().toLocaleDateString("en-CA");
+      const open = entries.filter((e) => e.status === "POSTED" && e.reconcileStatus !== "R" && e.date <= today);
+      const payments = open.reduce((sum, e) => sum + (e.payment ?? 0), 0);
+      const deposits = open.reduce((sum, e) => sum + (e.deposit ?? 0), 0);
+      const creditNormal = isCreditNormalCategory(row.account.category);
+      const endingBalance = Math.round((setup.beginningBalance - (creditNormal ? deposits : payments) + (creditNormal ? payments : deposits)) * 100) / 100;
+      setInstant({ row, ids: open.map((e) => e.transactionId), startDate: setup.lastStatementEndingDate ?? row.account.createdAt.slice(0, 10), endingDate: today, endingBalance });
+    } catch (err) {
+      toast({ variant: "error", title: err instanceof Error ? err.message : "Could not prepare the instant reconcile" });
+    }
+  }
+
+  async function runInstant() {
+    if (!instant || instantBusy) return;
+    setInstantBusy(true);
+    try {
+      await finishReconciliation(instant.row.account.id, {
+        statementStartDate: instant.startDate,
+        statementEndingDate: instant.endingDate,
+        statementEndingBalance: instant.endingBalance,
+        clearedTransactionIds: instant.ids
+      });
+      toast({ variant: "success", title: `${instant.row.account.name} reconciled`, description: `${instant.ids.length} transaction${instant.ids.length === 1 ? "" : "s"} cleared through ${display(instant.endingDate)}` });
+      setInstant(null);
+      await load();
+    } catch (err) {
+      toast({ variant: "error", title: err instanceof ReconciliationOutOfBalanceError ? "The books and the statement don't match" : err instanceof Error ? err.message : "Could not reconcile this account" });
+    } finally {
+      setInstantBusy(false);
+    }
+  }
+
   // RightTool's export: uppercase headings, money as "$900.00", blanks where a
   // bank feed isn't connected, and a final TOTALS row. Respects the current
   // filters, sort and visible columns; downloads ReconciliationDashboard.csv.
@@ -425,16 +468,32 @@ export function ReconciliationDashboardPanel({ open, onClose }: { open: boolean;
             </p>
           </div>
         </div>
+        <Modal open={instant !== null} onClose={() => (instantBusy ? undefined : setInstant(null))} title="Instant Reconcile" size="sm">
+          {instant ? (
+            <div className="text-sm text-[var(--color-text-global)]">
+              <p>
+                Reconcile <strong>{instant.row.account.name}</strong> now? This clears <strong>{instant.ids.length}</strong> posted transaction{instant.ids.length === 1 ? "" : "s"} dated through {display(instant.endingDate)} and records a reconciliation with an ending balance of <strong>{money(instant.endingBalance)}</strong>.
+              </p>
+              <p className="mt-2 text-[var(--color-text-primary)]">You can undo it later from the reconciliation report.</p>
+              <div className="mt-5 flex justify-end gap-3">
+                <button type="button" onClick={() => setInstant(null)} disabled={instantBusy} className="rounded-md border border-[var(--color-button-border)] px-4 py-1.5 hover:bg-[var(--color-action-passive-subtle-hover)] disabled:opacity-60">Cancel</button>
+                <button type="button" onClick={() => void runInstant()} disabled={instantBusy} className="rounded-md bg-[var(--color-action-standard)] px-4 py-1.5 font-semibold text-white hover:brightness-90 disabled:opacity-60">{instantBusy ? "Reconciling..." : "Instant Reconcile"}</button>
+              </div>
+            </div>
+          ) : null}
+        </Modal>
       </FullScreenFormShell>
 
       {menu ? (
         <>
           <button type="button" aria-label="Close menu" tabIndex={-1} className="fixed inset-0 z-[85] cursor-default" onClick={() => setMenu(null)} />
           <ul role="menu" style={{ top: menu.top, right: menu.right }} className="fixed z-[90] w-56 rounded-lg border border-[var(--color-divider-tertiary)] bg-[var(--color-container-background-primary)] py-1 text-sm shadow-lg">
-            <li><Link role="menuitem" href={`/all-apps/reconcile?accountId=${menu.row.account.id}`} className="block px-4 py-2 text-[var(--color-text-global)] hover:bg-[var(--color-action-passive-subtle-hover)]">Reconcile</Link></li>
-            <li><Link role="menuitem" href={`/register?accountId=${menu.row.account.id}`} className="block px-4 py-2 text-[var(--color-text-global)] hover:bg-[var(--color-action-passive-subtle-hover)]">View register</Link></li>
-            {menu.row.lastRec ? <li><Link role="menuitem" href={`/all-apps/reconcile/report/${menu.row.lastRec.id}`} className="block px-4 py-2 text-[var(--color-text-global)] hover:bg-[var(--color-action-passive-subtle-hover)]">Last reconciliation report</Link></li> : null}
-            <li><Link role="menuitem" href={`/all-apps/reconcile/discrepancies/${menu.row.account.id}`} className="block px-4 py-2 text-[var(--color-text-global)] hover:bg-[var(--color-action-passive-subtle-hover)]">Discrepancy report</Link></li>
+            <li><Link role="menuitem" href={`/all-apps/reconcile?accountId=${menu.row.account.id}`} className="block px-4 py-2.5 text-[var(--color-text-global)] hover:bg-[var(--color-action-passive-subtle-hover)]">Go To Reconcile</Link></li>
+            {menu.row.lastRec ? null : (
+              <li className="border-t border-[var(--color-divider-tertiary)]">
+                <button type="button" role="menuitem" onClick={() => void prepareInstant(menu.row)} className="block w-full px-4 py-2.5 text-left text-[var(--color-text-global)] hover:bg-[var(--color-action-passive-subtle-hover)]">Instant Reconcile</button>
+              </li>
+            )}
           </ul>
         </>
       ) : null}
