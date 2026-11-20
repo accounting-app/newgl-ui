@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { ArrowUp, ChevronDown, ChevronLeft, ChevronRight, Maximize, MessageSquarePlus, Pencil, Printer, Search, Settings, Share, SquareArrowOutUpRight } from "lucide-react";
+import { ReconciliationDashboardPanel } from "@/components/accounting/reconciliation-dashboard-panel";
 import { AddAccountModal } from "@/components/bank-register/add-account-modal";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
@@ -115,6 +116,7 @@ export function ChartOfAccountsPage() {
   const [initialParentAccount, setInitialParentAccount] = useState<Account | null>(null);
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
+  const [dashboardOpen, setDashboardOpen] = useState(false);
   const [defaultFilter, setDefaultFilterState] = useState("default");
   useEffect(() => {
     try {
@@ -422,9 +424,9 @@ export function ChartOfAccountsPage() {
         }
         actions={
           <div className="flex items-center gap-[9px]">
-            <Link href="/all-apps/reconcile" className="mr-[10px] inline-flex h-[37px] items-center rounded-md bg-[var(--color-action-standard)] px-4 text-[15px] font-semibold text-white hover:brightness-90">
+            <button type="button" onClick={() => setDashboardOpen(true)} className="mr-[10px] inline-flex h-[37px] items-center rounded-md bg-[var(--color-action-standard)] px-4 text-[15px] font-semibold text-white hover:brightness-90">
               Reconcile Dashboard
-            </Link>
+            </button>
             <button type="button" onClick={() => toast({ variant: "info", title: "Clean up isn't available yet" })} className={`${OUTLINE_BUTTON} !px-3`}>
               Clean up
               <ChevronDown className="h-4 w-4" aria-hidden="true" />
@@ -463,6 +465,8 @@ export function ChartOfAccountsPage() {
           </div>
         }
       />
+
+      <ReconciliationDashboardPanel open={dashboardOpen} onClose={() => setDashboardOpen(false)} />
 
       <AddAccountModal
         open={isAccountModalOpen}
