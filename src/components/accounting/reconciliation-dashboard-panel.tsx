@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { ArrowDown, ArrowUp, ArrowUpDown, ChevronDown, X } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { ArrowDown, ArrowUp, ArrowUpDown, ChevronDown } from "lucide-react";
+import { FullScreenFormShell } from "@/components/accounting/full-screen-form-shell";
 import { Select } from "@/components/ui/select";
 import { useToast } from "@/components/ui/toast/toast-context";
 import { useCompany } from "@/lib/company/company-provider";
@@ -74,7 +74,12 @@ const TYPE_OPTIONS = [
 
 const money = (n: number) => n.toLocaleString("en-US", { style: "currency", currency: "USD" });
 const display = (iso: string | null) => (iso ? `${Number(iso.slice(5, 7))}/${Number(iso.slice(8, 10))}/${iso.slice(0, 4)}` : "");
-const TH = "cursor-pointer select-none border-l border-[var(--color-table-divider)] px-2.5 py-0 text-left text-[13px] font-semibold uppercase leading-tight text-[var(--color-text-global)]";
+// Same table look as Bank transactions: accent header (46px), solid column dividers, 50px rows.
+const TH = "cursor-pointer select-none border-l border-[var(--color-divider-tertiary)]";
+const CELL = "border-l border-[var(--color-divider-tertiary)] px-[10px] py-0 align-middle text-sm leading-[21px]";
+const RIGHT_COLUMNS = new Set<ColumnKey>(["lastRecAmount", "discrepancy", "registerBalance", "unreconciled"]);
+const RT_BUTTON = "rounded-md border border-[var(--color-negative)] px-3 py-1.5 text-sm text-[var(--color-negative)] hover:bg-[var(--color-action-passive-subtle-hover)]";
+const LABEL = "mb-1 block text-sm text-[var(--color-text-primary)]";
 const LINK = "text-[var(--color-link-action)] hover:underline";
 
 // RightTool's Reconciliation Dashboard: every register account with its last
@@ -275,106 +280,108 @@ export function ReconciliationDashboardPanel({ open, onClose }: { open: boolean;
   }
 
   if (!open) return null;
+  const footer = (
+    <div className="flex items-center gap-6">
+      <button type="button" onClick={onClose} className="text-base font-medium text-[var(--color-text-global)] hover:underline">Close</button>
+      <button type="button" onClick={() => { void load(); toast({ variant: "info", title: "Dashboard refreshed" }); }} className="text-base font-medium text-[var(--color-text-global)] hover:underline">Refresh</button>
+    </div>
+  );
   return (
-    <div className="fixed inset-0 z-[80] flex justify-end bg-black/30">
-      <button type="button" aria-label="Close dashboard" tabIndex={-1} className="h-full flex-1" onClick={onClose} />
-      <aside role="dialog" aria-label="Reconciliation Dashboard" className="flex h-full w-[min(1650px,94vw)] flex-col overflow-hidden bg-[var(--color-container-background-primary)] px-8 pb-6 pt-6 shadow-2xl">
-        <div className="relative text-center">
-          <h2 className="text-lg font-semibold text-[var(--color-text-global)]">Reconciliation Dashboard</h2>
-          <button type="button" onClick={onClose} aria-label="Close" className="absolute right-0 top-0 -mt-1 rounded-md p-1.5 text-[var(--color-icon-secondary)] hover:text-[var(--color-text-global)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--color-ui-primary)]">
-            <X className="h-6 w-6" aria-hidden="true" />
-          </button>
-        </div>
-
-        <div className="mt-5 flex flex-wrap items-end justify-between gap-x-8 gap-y-4">
-          <div className="flex flex-wrap items-end gap-8">
-            <div className="w-[190px]">
-              <span className="mb-1 block text-sm font-semibold text-[var(--color-text-global)]">Select Account Type:</span>
-              <Select value={typeFilter} onChange={setTypeFilter} options={TYPE_OPTIONS} placeholder="All Accounts" allowCustomValue={false} optionSize="sm" />
-            </div>
-            <div className="flex flex-col gap-2 pb-1 text-sm font-semibold text-[var(--color-text-global)]">
-              <label className="flex cursor-pointer items-center gap-2"><input type="checkbox" className="qbo-checkbox" checked={hideNever} onChange={(e) => setHideNever(e.target.checked)} />Hide Accounts Never Reconciled</label>
-              <label className="flex cursor-pointer items-center gap-2"><input type="checkbox" className="qbo-checkbox" checked={hideZero} onChange={(e) => setHideZero(e.target.checked)} />Hide $0 Register Accounts</label>
-            </div>
-          </div>
-          <div className="flex flex-wrap items-start gap-3">
-            <div>
-              <label htmlFor="rec-before" className="mb-1 block text-sm font-semibold text-[var(--color-text-global)]">Last Reconciled Before:</label>
-              <input id="rec-before" type="date" value={before} onChange={(e) => setBefore(e.target.value)} className="h-9 rounded border border-[var(--color-input-border-primary)] bg-[var(--color-input-background)] px-2 text-sm text-[var(--color-input-text)]" />
-            </div>
-            <div className="flex flex-col items-end gap-1">
-              <div className="flex gap-3">
-                <Button className="!rounded-md" onClick={() => saveVisible(lastTxnShown ? visible.filter((k) => k !== "lastTxnDate") : [...visible, "lastTxnDate"])}>
-                  {lastTxnShown ? "Remove Last Txn Date" : "Add Last Txn Date"}
-                </Button>
-                <div ref={columnsRef} className="relative">
-                  <Button className="!rounded-md" onClick={() => setColumnsOpen((v) => !v)} aria-expanded={columnsOpen}>Column Options</Button>
-                  {columnsOpen ? (
-                    <div role="dialog" aria-label="Column options" className="absolute right-0 top-full z-20 mt-2 w-[240px] rounded-lg border border-[var(--color-divider-tertiary)] bg-[var(--color-container-background-primary)] p-4 shadow-lg">
-                      <ul className="space-y-3 text-sm text-[var(--color-text-global)]">
-                        {COLUMNS.map((c) => (
-                          <li key={c.key}>
-                            <label className={`flex items-center gap-3 ${c.locked ? "opacity-60" : "cursor-pointer"}`}>
-                              <input type="checkbox" className="qbo-checkbox" disabled={c.locked} checked={c.locked || visible.includes(c.key)} onChange={(e) => saveVisible(e.target.checked ? [...visible, c.key] : visible.filter((k) => k !== c.key))} />
-                              {c.label}
-                            </label>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  ) : null}
-                </div>
-                <Button className="!rounded-md" onClick={exportCsv}>Export To CSV</Button>
+    <>
+      <FullScreenFormShell title="Reconciliation Dashboard" onClose={onClose} footer={footer}>
+        <div className="px-6 pb-8 pt-5">
+          <div className="flex flex-wrap items-end justify-between gap-x-8 gap-y-4 pb-6">
+            <div className="flex flex-wrap items-end gap-8">
+              <div className="w-[230px]">
+                <span className={LABEL}>Select Account Type</span>
+                <Select value={typeFilter} onChange={setTypeFilter} options={TYPE_OPTIONS} placeholder="All Accounts" allowCustomValue={false} />
               </div>
-              <button type="button" onClick={() => { void load(); toast({ variant: "info", title: "Dashboard refreshed" }); }} className="text-base italic text-[var(--color-icon-secondary)] hover:text-[var(--color-text-global)]">Refresh</button>
+              <div className="flex flex-col gap-2 pb-1 text-sm text-[var(--color-text-global)]">
+                <label className="flex cursor-pointer items-center gap-2"><input type="checkbox" className="qbo-checkbox" checked={hideNever} onChange={(e) => setHideNever(e.target.checked)} />Hide Accounts Never Reconciled</label>
+                <label className="flex cursor-pointer items-center gap-2"><input type="checkbox" className="qbo-checkbox" checked={hideZero} onChange={(e) => setHideZero(e.target.checked)} />Hide $0 Register Accounts</label>
+              </div>
+              <div>
+                <label htmlFor="rec-before" className={LABEL}>Last Reconciled Before</label>
+                <input id="rec-before" type="date" value={before} onChange={(e) => setBefore(e.target.value)} className="h-[38px] w-[200px] rounded border border-[var(--color-input-border-primary)] bg-[var(--color-input-background)] px-3 text-sm text-[var(--color-input-text)]" />
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              <button type="button" className={RT_BUTTON} onClick={() => saveVisible(lastTxnShown ? visible.filter((k) => k !== "lastTxnDate") : [...visible, "lastTxnDate"])}>
+                {lastTxnShown ? "Remove Last Txn Date" : "Add Last Txn Date"}
+              </button>
+              <div ref={columnsRef} className="relative">
+                <button type="button" className={RT_BUTTON} onClick={() => setColumnsOpen((v) => !v)} aria-expanded={columnsOpen}>Column Options</button>
+                {columnsOpen ? (
+                  <div role="dialog" aria-label="Column options" className="absolute right-0 top-full z-20 mt-2 w-[250px] rounded-lg border border-[var(--color-divider-tertiary)] bg-[var(--color-container-background-primary)] px-4 pb-4 pt-3 shadow-lg">
+                    <span aria-hidden="true" className="absolute -top-[7px] right-[22px] h-3 w-3 rotate-45 border-l border-t border-[var(--color-divider-tertiary)] bg-[var(--color-container-background-primary)]" />
+                    <p className="text-sm text-[var(--color-text-global)]">Columns</p>
+                    <ul className="mt-3 space-y-3 text-sm uppercase text-[var(--color-text-global)]">
+                      {COLUMNS.map((c) => (
+                        <li key={c.key}>
+                          <label className={`flex items-center gap-3 ${c.locked ? "opacity-60" : "cursor-pointer"}`}>
+                            <input type="checkbox" className="qbo-checkbox" disabled={c.locked} checked={c.locked || visible.includes(c.key)} onChange={(e) => saveVisible(e.target.checked ? [...visible, c.key] : visible.filter((k) => k !== c.key))} />
+                            {c.label}
+                          </label>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+              </div>
+              <button type="button" className={RT_BUTTON} onClick={exportCsv}>Export To CSV</button>
             </div>
           </div>
-        </div>
 
-        <div className="mt-4 min-h-0 flex-1 overflow-auto border-t-2 border-[var(--color-table-divider-strong)] pt-4">
-          {error ? <p className="py-6 text-center text-[var(--color-negative)]" role="alert">{error}</p> : loading && rows.length === 0 ? <p className="py-6 text-center">Loading...</p> : (
-            <table className="w-full min-w-[960px] border-collapse text-sm">
-              <thead className="sticky top-0 z-10 bg-[var(--color-container-background-primary)]">
-                <tr className="h-12 border-y border-[var(--color-table-divider-strong)]">
-                  {columns.map((c) => (
-                    <th key={c.key} className={TH} onClick={() => toggleSort(c.key)} aria-sort={sort?.key === c.key ? (sort.dir === "asc" ? "ascending" : "descending") : "none"}>
-                      {c.label}
-                      {sort?.key === c.key ? (sort.dir === "asc" ? <ArrowUp className="ml-1.5 inline h-3.5 w-3.5" aria-hidden="true" /> : <ArrowDown className="ml-1.5 inline h-3.5 w-3.5" aria-hidden="true" />) : <ArrowUpDown className="ml-1.5 inline h-3.5 w-3.5 opacity-50" aria-hidden="true" />}
-                    </th>
-                  ))}
-                  <th className="w-[120px]" />
-                </tr>
-              </thead>
-              <tbody>
-                {shown.length === 0 ? (
-                  <tr><td colSpan={columns.length + 1} className="py-10 text-center text-[var(--color-text-primary)]">No accounts match these filters.</td></tr>
-                ) : shown.map((row, index) => (
-                  <tr key={row.account.id} className={`h-12 border-b border-[var(--color-table-divider)] text-[var(--color-text-global)] ${index % 2 === 0 ? "bg-[color-mix(in_srgb,var(--color-action-standard)_10%,var(--color-container-background-primary))]" : ""}`}>
-                    {columns.map((c) => (
-                      <td key={c.key} className={`border-l border-[var(--color-table-divider)] px-2.5 py-0 align-middle ${c.key === "account" ? "min-w-[200px]" : ""}`}>{cell(row, c.key)}</td>
+          <div className="overflow-hidden rounded-lg border border-[var(--color-divider-tertiary)] bg-[var(--color-container-background-primary)]">
+            {error ? <p className="py-6 text-center text-[var(--color-negative)]" role="alert">{error}</p> : loading && rows.length === 0 ? <p className="py-6 text-center">Loading...</p> : (
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[960px] border-collapse text-sm">
+                  <thead className="bg-[var(--color-container-background-accent)] text-left text-[var(--color-text-global)]">
+                    <tr className="[&>th]:h-[46px] [&>th]:whitespace-nowrap [&>th]:px-[10px] [&>th]:py-0 [&>th]:text-sm [&>th]:font-semibold">
+                      {columns.map((c, i) => (
+                        <th key={c.key} className={`${i === 0 ? "" : TH} ${RIGHT_COLUMNS.has(c.key) ? "text-right" : ""}`} onClick={() => toggleSort(c.key)} aria-sort={sort?.key === c.key ? (sort.dir === "asc" ? "ascending" : "descending") : "none"}>
+                          {c.label}
+                          {sort?.key === c.key ? (sort.dir === "asc" ? <ArrowUp className="ml-1.5 inline h-3.5 w-3.5" aria-hidden="true" /> : <ArrowDown className="ml-1.5 inline h-3.5 w-3.5" aria-hidden="true" />) : <ArrowUpDown className="ml-1.5 inline h-3.5 w-3.5 opacity-40" aria-hidden="true" />}
+                        </th>
+                      ))}
+                      <th className="w-28 border-l-2 border-[var(--color-divider-tertiary)] text-right">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {shown.length === 0 ? (
+                      <tr><td colSpan={columns.length + 1} className="px-3 py-8 text-center text-sm text-[var(--color-text-primary)]">No accounts match these filters.</td></tr>
+                    ) : shown.map((row, index) => (
+                      <tr key={row.account.id} className={`h-[50px] border-t border-[var(--color-divider-tertiary)] text-[var(--color-text-global)] hover:bg-[var(--color-table-row-hover)] ${index % 2 === 1 ? "bg-[var(--color-table-row-secondary)]" : ""}`}>
+                        {columns.map((c, i) => (
+                          <td key={c.key} className={`${CELL} ${i === 0 ? "border-l-0" : ""} ${RIGHT_COLUMNS.has(c.key) ? "text-right" : ""} ${c.key === "account" ? "min-w-[200px]" : ""}`}>{cell(row, c.key)}</td>
+                        ))}
+                        <td className="border-l-2 border-[var(--color-divider-tertiary)] px-[10px] py-0 text-right align-middle">
+                          <button
+                            type="button"
+                            aria-haspopup="menu"
+                            aria-label={`Actions for ${row.account.name}`}
+                            onClick={(event) => {
+                              const rect = event.currentTarget.getBoundingClientRect();
+                              setMenu(menu?.row.account.id === row.account.id ? null : { row, top: rect.bottom + 4, right: window.innerWidth - rect.right });
+                            }}
+                            className="inline-flex items-center gap-1 text-sm font-medium text-[var(--color-link-action)] hover:underline"
+                          >
+                            Actions
+                            <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
+                          </button>
+                        </td>
+                      </tr>
                     ))}
-                    <td className="px-2 py-0 text-right align-middle">
-                      <button
-                        type="button"
-                        aria-haspopup="menu"
-                        aria-label={`Actions for ${row.account.name}`}
-                        onClick={(event) => {
-                          const rect = event.currentTarget.getBoundingClientRect();
-                          setMenu(menu?.row.account.id === row.account.id ? null : { row, top: rect.bottom + 4, right: window.innerWidth - rect.right });
-                        }}
-                        className="inline-flex h-9 items-center gap-2 rounded-md bg-[var(--color-action-standard)] px-3 text-sm font-semibold text-white hover:brightness-90"
-                      >
-                        Actions
-                        <ChevronDown className="h-4 w-4" aria-hidden="true" />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            <p className="border-t border-[var(--color-divider-tertiary)] px-4 py-3 text-right text-sm text-[var(--color-text-primary)]">
+              {shown.length === 0 ? "0-0" : `1-${shown.length}`} of {shown.length} items
+            </p>
+          </div>
         </div>
-      </aside>
+      </FullScreenFormShell>
 
       {menu ? (
         <>
@@ -387,6 +394,6 @@ export function ReconciliationDashboardPanel({ open, onClose }: { open: boolean;
           </ul>
         </>
       ) : null}
-    </div>
+    </>
   );
 }
