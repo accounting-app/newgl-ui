@@ -272,18 +272,22 @@ export function ReconciliationDashboardPanel({ open, onClose }: { open: boolean;
     }
   }
 
+  // RightTool's export: uppercase headings, money as "$900.00", blanks where a
+  // bank feed isn't connected, and a final TOTALS row. Respects the current
+  // filters, sort and visible columns; downloads ReconciliationDashboard.csv.
   function exportCsv() {
-    const escape = (v: string) => `"${v.replaceAll('"', '""')}"`;
+    const csvField = (value: string) => (/[",\n]/.test(value) ? `"${value.replaceAll('"', '""')}"` : value);
+    const usd = (n: number) => `${n < 0 ? "-" : ""}$${Math.abs(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
     const text = (row: Row, key: ColumnKey): string => {
       switch (key) {
         case "lastRecDate": return row.lastRecDate ? display(row.lastRecDate) : "Never";
-        case "lastRecAmount": return row.lastRecAmount.toFixed(2);
-        case "discrepancy": return row.discrepancy.toFixed(2);
+        case "lastRecAmount": return usd(row.lastRecAmount);
+        case "discrepancy": return usd(row.discrepancy);
         case "account": return row.account.name;
         case "type": return row.type;
-        case "registerBalance": return row.registerBalance.toFixed(2);
-        case "bankFeedsBalance": return "Not Connected";
-        case "inBankFeeds": return row.pending > 0 ? String(row.pending) : "N/A";
+        case "registerBalance": return usd(row.registerBalance);
+        case "bankFeedsBalance": return ""; // "Not Connected" on screen, blank in the file
+        case "inBankFeeds": return row.pending > 0 ? String(row.pending) : "";
         case "unreconciled": return String(row.unreconciled);
         case "lastTxnDate": return display(row.lastTxnDate);
         case "accountNumber": return row.account.code;
@@ -292,13 +296,25 @@ export function ReconciliationDashboardPanel({ open, onClose }: { open: boolean;
         case "entriesReconciled": return row.lastRec ? String(row.entriesReconciled) : "";
       }
     };
-    const lines = [columns.map((c) => c.label), ...shown.map((r) => columns.map((c) => text(r, c.key)))];
-    const url = URL.createObjectURL(new Blob([lines.map((l) => l.map(escape).join(",")).join("\n")], { type: "text/csv" }));
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "reconciliation-dashboard.csv";
-    a.click();
-    URL.revokeObjectURL(url);
+    const totals = (key: ColumnKey): string => {
+      if (key === "discrepancy") return usd(shown.reduce((sum, r) => sum + r.discrepancy, 0));
+      if (key === "inBankFeeds") return String(shown.reduce((sum, r) => sum + r.pending, 0));
+      if (key === "unreconciled") return String(shown.reduce((sum, r) => sum + r.unreconciled, 0));
+      return "";
+    };
+    const lines = [
+      columns.map((c) => c.label.toUpperCase()),
+      ...shown.map((r) => columns.map((c) => text(r, c.key))),
+      columns.map((c, i) => (i === 0 ? "TOTALS" : totals(c.key)))
+    ];
+    const blob = new Blob([lines.map((l) => l.map(csvField).join(",")).join("\n") + "\n"], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "ReconciliationDashboard.csv";
+    link.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    toast({ variant: "success", title: "ReconciliationDashboard.csv downloaded", description: `${shown.length} account${shown.length === 1 ? "" : "s"}` });
   }
 
   if (!open) return null;
