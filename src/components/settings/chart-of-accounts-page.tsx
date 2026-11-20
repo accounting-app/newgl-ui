@@ -2,9 +2,12 @@
 
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
-import { ChevronDown, ChevronRight, MessageSquarePlus, Pencil, Printer, Settings } from "lucide-react";
+import { ArrowUp, ChevronDown, ChevronLeft, ChevronRight, Maximize, MessageSquarePlus, Pencil, Printer, Search, Settings, Share, SquareArrowOutUpRight } from "lucide-react";
+import { ReconciliationDashboardPanel } from "@/components/accounting/reconciliation-dashboard-panel";
 import { AddAccountModal } from "@/components/bank-register/add-account-modal";
+import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
+import { FilterSelect } from "@/components/ui/filter-select";
 import { Card } from "@/components/ui/card";
 import { IconButton } from "@/components/ui/icon-button";
 import { InputField } from "@/components/ui/input-field";
@@ -24,6 +27,66 @@ const CATEGORY_OPTIONS = ACCOUNT_ROOT_GROUPS.flatMap((group) =>
   [...group.categories].map((category) => ({ value: category, label: ACCOUNT_CATEGORY_LABELS[category] }))
 );
 const TYPE_FILTER_OPTIONS = [{ value: "", label: "All" }, ...CATEGORY_OPTIONS];
+
+// QBO lists the chart as one flat table sorted by account type, in this order.
+const ACCOUNT_TYPE_ORDER: Account["category"][] = [
+  "BANK",
+  "ACCOUNTS_RECEIVABLE",
+  "OTHER_CURRENT_ASSET",
+  "FIXED_ASSET",
+  "ACCOUNTS_PAYABLE",
+  "CREDIT_CARD",
+  "OTHER_CURRENT_LIABILITY",
+  "LONG_TERM_LIABILITY",
+  "EQUITY",
+  "INCOME",
+  "EXPENSE",
+  "OTHER_INCOME",
+  "OTHER_EXPENSE"
+];
+
+const LAST_ACCOUNT_KEY = "newgl:chart-last-account";
+const DEFAULT_FILTER_KEY = "newgl:chart-default-filter";
+
+type CategoryName = Account["category"];
+type FilterRule = { label: string; matches: (account: Account) => boolean };
+const inCategories = (...categories: CategoryName[]) => (account: Account) => categories.includes(account.category);
+const subtypeLike = (pattern: RegExp) => (account: Account) => pattern.test(account.subtype ?? "");
+const ALL_ACCOUNTS = () => true;
+const NO_ACCOUNTS = () => false;
+
+// RightTool's "Default Account Filter" presets, in QBO's order. Ones QBO splits
+// by detail type (Revenue, COGS, Payroll...) match on the account's detail
+// type; ones our chart has no account type for (Other Assets) match nothing.
+const DEFAULT_FILTERS: Record<string, FilterRule> = {
+  default: { label: "-- Default Account Filter --", matches: ALL_ACCOUNTS },
+  all: { label: "All Accounts", matches: ALL_ACCOUNTS },
+  bank: { label: "Bank", matches: inCategories("BANK") },
+  ar: { label: "Accounts Receivable (A/R)", matches: inCategories("ACCOUNTS_RECEIVABLE") },
+  currentAssets: { label: "Current Assets", matches: inCategories("BANK", "ACCOUNTS_RECEIVABLE", "OTHER_CURRENT_ASSET") },
+  otherCurrentAssets: { label: "Other Current Assets", matches: inCategories("OTHER_CURRENT_ASSET") },
+  fixedAssets: { label: "Fixed Assets", matches: inCategories("FIXED_ASSET") },
+  ppe: { label: "Property, Plant and Equipment", matches: inCategories("FIXED_ASSET") },
+  otherAssets: { label: "Other Assets", matches: NO_ACCOUNTS },
+  ap: { label: "Accounts Payable (A/P)", matches: inCategories("ACCOUNTS_PAYABLE") },
+  creditCard: { label: "Credit Card", matches: inCategories("CREDIT_CARD") },
+  otherCurrentLiabilities: { label: "Other Current Liabilities", matches: inCategories("OTHER_CURRENT_LIABILITY") },
+  longTermLiabilities: { label: "Long Term Liabilities", matches: inCategories("LONG_TERM_LIABILITY") },
+  equity: { label: "Equity", matches: inCategories("EQUITY") },
+  income: { label: "Income", matches: inCategories("INCOME") },
+  revenue: { label: "Revenue", matches: inCategories("INCOME") },
+  otherIncome: { label: "Other Income", matches: inCategories("OTHER_INCOME") },
+  otherRevenue: { label: "Other Revenue", matches: inCategories("OTHER_INCOME") },
+  cogs: { label: "Cost Of Goods Sold", matches: subtypeLike(/cost of goods|cogs/i) },
+  expenses: { label: "Expenses", matches: inCategories("EXPENSE") },
+  otherExpense: { label: "Other Expense", matches: inCategories("OTHER_EXPENSE") },
+  expenditures: { label: "Expenditures", matches: inCategories("EXPENSE") },
+  otherExpenditures: { label: "Other Expenditures", matches: inCategories("OTHER_EXPENSE") },
+  payrollExpenses: { label: "Payroll Expenses", matches: (account) => account.category === "EXPENSE" && /payroll/i.test(account.subtype ?? "") }
+};
+
+const OUTLINE_BUTTON =
+  "inline-flex h-[37px] items-center gap-2 rounded-md border border-[var(--color-qbo-green-border)] bg-[var(--color-container-background-primary)] px-4 text-base font-medium text-[var(--color-qbo-green-text)] hover:bg-[var(--color-action-passive-subtle-hover)]";
 
 function formatMoney(value: number): string {
   return value.toLocaleString("en-US", {
@@ -53,6 +116,24 @@ export function ChartOfAccountsPage() {
   const [initialParentAccount, setInitialParentAccount] = useState<Account | null>(null);
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
+  const [dashboardOpen, setDashboardOpen] = useState(false);
+  const [defaultFilter, setDefaultFilterState] = useState("default");
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem(DEFAULT_FILTER_KEY);
+      if (stored && stored in DEFAULT_FILTERS) setDefaultFilterState(stored);
+    } catch {
+      // storage unavailable: start unfiltered
+    }
+  }, []);
+  function setDefaultFilter(value: string) {
+    setDefaultFilterState(value);
+    try {
+      window.localStorage.setItem(DEFAULT_FILTER_KEY, value);
+    } catch {
+      // not persisted
+    }
+  }
   const [newAccountMenuOpen, setNewAccountMenuOpen] = useState(false);
   const newAccountMenuRef = useRef<HTMLDivElement>(null);
 
@@ -109,9 +190,10 @@ export function ChartOfAccountsPage() {
         (a) =>
           a.status !== "ARCHIVED" &&
           (search.trim() === "" || a.name.toLowerCase().includes(search.trim().toLowerCase())) &&
-          (typeFilter === "" || a.category === typeFilter)
+          (typeFilter === "" || a.category === typeFilter) &&
+          (DEFAULT_FILTERS[defaultFilter] ?? DEFAULT_FILTERS.default).matches(a)
       ),
-    [accounts, search, typeFilter]
+    [accounts, search, typeFilter, defaultFilter]
   );
 
   // Real hierarchy tree (colon-segment parents roll up their children's
@@ -123,13 +205,63 @@ export function ChartOfAccountsPage() {
   // account behind it to act on.
   const sections = useMemo(
     () =>
-      ACCOUNT_ROOT_GROUPS.map((group) => {
-        const groupAccounts = activeAccounts.filter((a) => group.categories.has(a.category));
-        const rows = buildRollupHierarchyRows(groupAccounts.map((a) => ({ name: a.name, amount: a.currentBalance })));
-        const accountByName = new Map(groupAccounts.map((a) => [a.name, a]));
-        return { ...group, rows, accountByName };
+      ACCOUNT_TYPE_ORDER.map((category) => {
+        const typeAccounts = activeAccounts.filter((a) => a.category === category);
+        const rows = buildRollupHierarchyRows(typeAccounts.map((a) => ({ name: a.name, amount: a.currentBalance })));
+        const accountByName = new Map(typeAccounts.map((a) => [a.name, a]));
+        return { key: category, rows, accountByName };
       }),
     [activeAccounts]
+  );
+
+  // Rows actually shown (real accounts only, not synthetic rollup headers) -- drives the "1 - N" pager.
+  const totalShown = useMemo(() => sections.reduce((sum, section) => sum + section.rows.filter((row) => section.accountByName.has(row.fullName)).length, 0), [sections]);
+
+  // Row selection (the checkboxes), real accounts only.
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const shownAccountIds = useMemo(
+    () => sections.flatMap((section) => section.rows.map((row) => section.accountByName.get(row.fullName)?.id).filter((id): id is string => Boolean(id))),
+    [sections]
+  );
+  const allSelected = shownAccountIds.length > 0 && shownAccountIds.every((id) => selectedIds.has(id));
+  const someSelected = shownAccountIds.some((id) => selectedIds.has(id));
+  function toggleSelected(id: string) {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  }
+
+  // "Jump to Last" (RightTool): back to the account row you last opened or edited.
+  function rememberLast(accountId: string) {
+    try {
+      window.sessionStorage.setItem(LAST_ACCOUNT_KEY, accountId);
+    } catch {
+      // storage unavailable: nothing to jump back to
+    }
+  }
+  function jumpToLast() {
+    let id: string | null = null;
+    try {
+      id = window.sessionStorage.getItem(LAST_ACCOUNT_KEY);
+    } catch {
+      // ignore
+    }
+    const row = id ? document.querySelector<HTMLElement>(`[data-account-id="${id}"]`) : null;
+    if (!row) return toast({ variant: "info", title: "No account to jump back to yet", description: "Open or edit an account first." });
+    row.scrollIntoView({ block: "center" });
+    row.classList.add("bg-[var(--color-action-passive-subtle-hover)]");
+    window.setTimeout(() => row.classList.remove("bg-[var(--color-action-passive-subtle-hover)]"), 1800);
+  }
+  function toggleFullscreen() {
+    if (document.fullscreenElement) void document.exitFullscreen();
+    else void document.documentElement.requestFullscreen?.().catch(() => toast({ variant: "info", title: "Full screen isn't available in this browser" }));
+  }
+
+  const defaultFilterOptions = useMemo(
+    () => Object.entries(DEFAULT_FILTERS).map(([value, rule]) => ({ value, label: value === "all" ? `${rule.label} (${accounts.filter((a) => a.status !== "ARCHIVED").length})` : rule.label })),
+    [accounts]
   );
 
   function startAdd() {
@@ -269,44 +401,72 @@ export function ChartOfAccountsPage() {
 
   return (
     <>
-      <h1 className="mb-4 text-2xl font-semibold text-[var(--color-text-global)]">Chart of accounts</h1>
-
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-        <span className="text-sm text-[var(--color-text-disabled)]">All lists</span>
-        <div className="flex items-center gap-4">
-          <button type="button" disabled title="Not available yet" className="flex cursor-not-allowed items-center gap-1.5 text-sm font-medium text-[var(--color-text-disabled)]">
-            <MessageSquarePlus className="h-4 w-4" aria-hidden="true" />
-            Give feedback
-          </button>
-          <button type="button" disabled title="Not available yet" className="cursor-not-allowed rounded-full border border-[var(--color-button-border)] px-4 py-1.5 text-sm font-medium text-[var(--color-text-disabled)]">
-            Run report
-          </button>
-          <div className="relative" ref={newAccountMenuRef}>
-            <div className="flex overflow-hidden rounded-full">
-              <Button className="rounded-r-none" onClick={startAdd}>
-                New account
-              </Button>
-              <Button className="rounded-l-none border-l border-l-white/20 px-2" aria-label="More new-account options" onClick={() => setNewAccountMenuOpen((v) => !v)}>
-                <ChevronDown className="h-4 w-4" aria-hidden="true" />
-              </Button>
-            </div>
-            {newAccountMenuOpen ? (
-              <div className="absolute right-0 top-full z-20 mt-1 w-40 rounded-lg border border-[var(--color-divider-tertiary)] bg-[var(--color-container-background-primary)] py-1 shadow-lg">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setNewAccountMenuOpen(false);
-                    setBulkOpen(true);
-                  }}
-                  className="block w-full px-3 py-1.5 text-left text-sm text-[var(--color-text-global)] hover:bg-[var(--color-action-passive-subtle-hover)]"
-                >
-                  Import accounts
-                </button>
-              </div>
-            ) : null}
+      <PageHeader
+        section="Accounting"
+        title="Chart of accounts"
+        className="min-h-[35px] [&>nav]:pl-[21px] [&>nav>span:first-child]:text-[#252728] [&>nav>span:last-child]:text-[#555756]"
+        topRight={
+          <div className="flex items-center text-sm text-[#585a5c]">
+            <button type="button" onClick={jumpToLast} className="mr-3 inline-flex h-[35px] items-center rounded-full bg-[var(--color-action-standard)] px-[21px] text-[15px] font-bold text-white hover:opacity-90">
+              Jump to Last
+            </button>
+            <button type="button" onClick={() => toast({ variant: "info", title: "Feedback isn't available yet" })} className="mr-[17px] flex items-center gap-1.5 hover:text-[var(--color-text-global)]">
+              <MessageSquarePlus className="h-4 w-4 text-[#4d5252]" aria-hidden="true" />
+              Feedback
+            </button>
+            <button type="button" aria-label="Open in a new window" title="Open in a new window" onClick={() => window.open(window.location.href, "_blank")} className="mr-[15px] text-[#505252] hover:text-[var(--color-text-global)]">
+              <SquareArrowOutUpRight className="h-4 w-4" aria-hidden="true" />
+            </button>
+            <button type="button" aria-label="Toggle full screen" title="Full screen" onClick={toggleFullscreen} className="text-[#515353] hover:text-[var(--color-text-global)]">
+              <Maximize className="h-4 w-4" aria-hidden="true" />
+            </button>
           </div>
-        </div>
-      </div>
+        }
+        actions={
+          <div className="flex items-center gap-[9px]">
+            <button type="button" onClick={() => setDashboardOpen(true)} className="mr-[10px] inline-flex h-[37px] items-center rounded-md bg-[var(--color-action-standard)] px-4 text-[15px] font-semibold text-white hover:brightness-90">
+              Reconcile Dashboard
+            </button>
+            <button type="button" onClick={() => toast({ variant: "info", title: "Clean up isn't available yet" })} className={`${OUTLINE_BUTTON} !px-3`}>
+              Clean up
+              <ChevronDown className="h-4 w-4" aria-hidden="true" />
+            </button>
+            <button type="button" onClick={() => toast({ variant: "info", title: "Reports for the chart of accounts aren't available yet" })} className={OUTLINE_BUTTON}>
+              Run report
+            </button>
+            <div className="relative inline-flex" ref={newAccountMenuRef}>
+              <button type="button" onClick={startAdd} className="h-[37px] rounded-l-md bg-[var(--color-qbo-green)] px-4 text-base font-medium text-white hover:bg-[var(--color-qbo-green-hover)]">
+                New account
+              </button>
+              <button
+                type="button"
+                aria-label="More new-account options"
+                aria-expanded={newAccountMenuOpen}
+                onClick={() => setNewAccountMenuOpen((v) => !v)}
+                className="flex h-[37px] w-[38px] items-center justify-center rounded-r-md border-l border-white/40 bg-[var(--color-qbo-green)] text-white hover:bg-[var(--color-qbo-green-hover)]"
+              >
+                <ChevronDown className="h-4 w-4" aria-hidden="true" />
+              </button>
+              {newAccountMenuOpen ? (
+                <div className="absolute right-0 top-full z-20 mt-1 w-44 rounded-lg border border-[var(--color-divider-tertiary)] bg-[var(--color-container-background-primary)] py-1 shadow-lg">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setNewAccountMenuOpen(false);
+                      setBulkOpen(true);
+                    }}
+                    className="block w-full px-3 py-1.5 text-left text-sm text-[var(--color-text-global)] hover:bg-[var(--color-action-passive-subtle-hover)]"
+                  >
+                    Import accounts
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          </div>
+        }
+      />
+
+      <ReconciliationDashboardPanel open={dashboardOpen} onClose={() => setDashboardOpen(false)} />
 
       <AddAccountModal
         open={isAccountModalOpen}
@@ -349,56 +509,95 @@ export function ChartOfAccountsPage() {
         </Card>
       ) : null}
 
-      <div className="mb-2 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="w-64">
-            <InputField placeholder="Filter by name or number" value={search} onChange={(e) => setSearch(e.target.value)} />
+      {/* Toolbar + table sit straight on the page, as in QBO (no bordered panel). */}
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="relative w-[246px] max-w-full">
+            <InputField placeholder="Filter by name or number" value={search} onChange={(e) => setSearch(e.target.value)} className="h-9 border-[var(--color-field-border)] pl-10" />
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--color-icon-secondary)]" aria-hidden="true" />
           </div>
-          <div className="w-44">
-            <Select value={typeFilter} onChange={setTypeFilter} options={TYPE_FILTER_OPTIONS} placeholder="All" allowCustomValue={false} optionSize="sm" />
+          <FilterSelect value={typeFilter} onChange={setTypeFilter} label="Filter by account type" className="w-[255px] [&>select]:h-9 [&>select]:border-[#d9ddde]">
+            {TYPE_FILTER_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>{option.label}</option>
+            ))}
+          </FilterSelect>
+          <div className="w-[230px] [&_input]:h-8 [&_input]:border-[var(--color-action-standard)] [&_input]:py-0 [&_input]:text-sm">
+            <Select value={defaultFilter} onChange={setDefaultFilter} options={defaultFilterOptions} placeholder="-- Default Account Filter --" allowCustomValue={false} optionSize="sm" showCheckmark />
           </div>
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-4 text-[var(--color-icon-secondary)]">
           {batchEditOpen ? null : (
-            <button type="button" onClick={startBatchEdit} className="flex items-center gap-1.5 px-2 py-1 text-sm font-medium text-[var(--color-text-primary)] hover:text-[var(--color-text-global)]">
+            <button type="button" onClick={startBatchEdit} className="flex items-center gap-1.5 text-sm font-medium text-[var(--color-text-primary)] hover:text-[var(--color-text-global)]">
               <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
               Batch edit
             </button>
           )}
+          <IconButton icon={Share} label="Export" size="sm" />
           <IconButton icon={Printer} label="Print" size="sm" />
           <IconButton icon={Settings} label="Settings" size="sm" />
         </div>
       </div>
+      <div className="mb-3 flex items-center justify-end gap-5 text-[15px] text-[#535557]">
+        <span className="flex items-center gap-1 text-[#bbbbbb]">
+          <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+          Previous
+        </span>
+        <span className="text-[var(--color-text-global)]">{totalShown === 0 ? "0" : `1 - ${totalShown}`}</span>
+        <span className="flex items-center gap-1 text-[#bbbbbb]">
+          Next
+          <ChevronRight className="h-4 w-4" aria-hidden="true" />
+        </span>
+      </div>
 
-      {/* Table -- same header-table/content-table styling as /register and
-          the rest of the Accounting screens, so the app's tables stay
-          visually consistent. */}
-      <div className="tw-override overflow-auto rounded-lg border border-[var(--color-divider-tertiary)]">
-        <table className="w-full min-w-[1000px] border-collapse text-sm">
-          <thead className="header-table text-left uppercase tracking-wide">
-            <tr>
-              <th className="w-10 px-2 pb-[5px] pt-2 text-left align-middle">
-                <input type="checkbox" disabled />
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[1000px] table-fixed border-collapse text-sm">
+          <colgroup>
+            <col style={{ width: "2.8%" }} />
+            <col style={{ width: "26.2%" }} />
+            <col style={{ width: "24.2%" }} />
+            <col style={{ width: "18.2%" }} />
+            <col style={{ width: "9.9%" }} />
+            <col style={{ width: "8.7%" }} />
+            <col style={{ width: "10%" }} />
+          </colgroup>
+          <thead className="text-left text-[#373737]">
+            <tr className="border-b border-[var(--color-table-divider-strong)] [&>th]:h-12 [&>th]:px-[10px] [&>th]:py-0 [&>th]:text-[15px] [&>th]:font-semibold">
+              <th className="pl-0">
+                <input
+                  type="checkbox"
+                  className="qbo-checkbox ml-[7px]"
+                  aria-label="Select all accounts"
+                  checked={allSelected}
+                  ref={(node) => {
+                    if (node) node.indeterminate = someSelected && !allSelected;
+                  }}
+                  onChange={(event) => setSelectedIds(event.target.checked ? new Set(shownAccountIds) : new Set())}
+                />
               </th>
-              <th className="border-l-custom px-2 pb-[5px] pt-2 text-left align-middle">Name</th>
-              <th className="border-l-custom px-2 pb-[5px] pt-2 text-left align-middle" title="Grouped by account type">
+              <th className="border-l border-[var(--color-table-divider)]">Name</th>
+              <th className="border-l border-[var(--color-table-divider)]" title="Grouped by account type">
                 Account type
+                <ArrowUp className="ml-3 inline h-3.5 w-3.5" aria-hidden="true" />
               </th>
-              <th className="border-l-custom px-2 pb-[5px] pt-2 text-right align-middle">QuickBooks balance</th>
-              <th className="border-l-custom px-2 pb-[5px] pt-2 text-right align-middle">Bank balance</th>
-              <th className="border-l-custom px-2 pb-[5px] pt-2 text-right align-middle">Action</th>
+              <th className="border-l border-[var(--color-table-divider)]">Detail type</th>
+              <th className="truncate border-l border-[var(--color-table-divider)] text-right">QuickBooks balance</th>
+              <th className="truncate border-l border-[var(--color-table-divider)] text-right">Bank balance</th>
+              <th className="border-l border-[var(--color-table-divider)] text-right">
+                <span className="mr-2 inline-flex h-6 items-center rounded-[3px] bg-[var(--color-action-standard)] px-2 align-middle text-[13px] font-bold text-white">New</span>
+                Action
+              </th>
             </tr>
           </thead>
-          <tbody className="content-table">
+          <tbody>
             {loading ? (
               <tr>
-                <td colSpan={6} className="px-3 py-6 text-center text-sm text-[var(--color-text-primary)]">
+                <td colSpan={7} className="px-3 py-6 text-center text-sm text-[var(--color-text-primary)]">
                   Loading…
                 </td>
               </tr>
             ) : loadError ? (
               <tr>
-                <td colSpan={6} className="px-3 py-6 text-center text-sm text-[var(--color-negative)]">
+                <td colSpan={7} className="px-3 py-6 text-center text-sm text-[var(--color-negative)]">
                   {loadError}
                 </td>
               </tr>
@@ -407,7 +606,6 @@ export function ChartOfAccountsPage() {
                 section.rows.length === 0 ? null : (
                   <SectionRows
                     key={section.key}
-                    label={section.label}
                     rows={filterCollapsed(section.rows, collapsedNames)}
                     accountByName={section.accountByName}
                     collapsedNames={collapsedNames}
@@ -419,6 +617,9 @@ export function ChartOfAccountsPage() {
                     batchEditOpen={batchEditOpen}
                     batchDrafts={batchDrafts}
                     onBatchDraftChange={(id, value) => setBatchDrafts((current) => ({ ...current, [id]: value }))}
+                    selectedIds={selectedIds}
+                    onToggleSelected={toggleSelected}
+                    onRemember={rememberLast}
                   />
                 )
               )
@@ -442,7 +643,6 @@ export function ChartOfAccountsPage() {
 }
 
 function SectionRows({
-  label,
   rows,
   accountByName,
   collapsedNames,
@@ -453,9 +653,11 @@ function SectionRows({
   busyAccountId,
   batchEditOpen,
   batchDrafts,
-  onBatchDraftChange
+  onBatchDraftChange,
+  selectedIds,
+  onToggleSelected,
+  onRemember
 }: {
-  label: string;
   rows: HierarchyRow[];
   accountByName: Map<string, Account>;
   collapsedNames: Set<string>;
@@ -467,23 +669,28 @@ function SectionRows({
   batchEditOpen: boolean;
   batchDrafts: Record<string, string>;
   onBatchDraftChange: (accountId: string, value: string) => void;
+  selectedIds: Set<string>;
+  onToggleSelected: (accountId: string) => void;
+  onRemember: (accountId: string) => void;
 }) {
   return (
     <>
-      <tr>
-        <td colSpan={6} className="bg-[var(--color-container-background-accent)] p-2 text-[13px] font-semibold text-[var(--color-text-primary)]">
-          {label}
-        </td>
-      </tr>
       {rows.map((row) => {
         const account = accountByName.get(row.fullName);
         const isCollapsed = row.hasChildren && collapsedNames.has(row.fullName);
         return (
-          <tr key={row.fullName} className="border-t border-[var(--color-divider-tertiary)] hover:bg-[var(--color-table-row-hover)]">
-            <td className="p-2 align-top">
-              <input type="checkbox" disabled />
+          <tr key={row.fullName} data-account-id={account?.id} onClick={() => account && onRemember(account.id)} className="h-12 border-t border-[var(--color-table-divider)] hover:bg-[var(--color-table-row-hover)]">
+            <td className="pl-[17px] py-0 align-middle">
+              <input
+                type="checkbox"
+                className="qbo-checkbox"
+                aria-label={`Select ${row.label}`}
+                disabled={!account}
+                checked={account ? selectedIds.has(account.id) : false}
+                onChange={() => account && onToggleSelected(account.id)}
+              />
             </td>
-            <td className="border-l border-l-dotted border-l-[var(--color-divider-tertiary)] p-2 align-top text-[13px]">
+            <td className="border-l border-[var(--color-table-divider)] px-[10px] py-0 align-middle text-sm leading-[21px]">
               <div className="flex items-center gap-1.5" style={{ paddingLeft: `${row.depth * 1.25}rem` }}>
                 {row.hasChildren ? (
                   <button
@@ -494,28 +701,26 @@ function SectionRows({
                   >
                     {isCollapsed ? <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" /> : <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />}
                   </button>
-                ) : (
-                  <span className="inline-block w-3.5" />
-                )}
+                ) : null}
                 {account && batchEditOpen ? (
                   <InputField size="sm" value={batchDrafts[account.id] ?? row.label} onChange={(e) => onBatchDraftChange(account.id, e.target.value)} />
                 ) : (
-                  <div>
-                    <p className="text-[var(--color-text-global)]">{row.label}</p>
-                    {account ? <p className="text-xs text-[var(--color-icon-secondary)]">{ACCOUNT_CATEGORY_LABELS[account.category]}</p> : null}
-                  </div>
+                  <span className="text-[var(--color-text-global)]">{row.label}</span>
                 )}
               </div>
             </td>
-            <td className="border-l border-l-dotted border-l-[var(--color-divider-tertiary)] p-2 align-top text-[13px] text-[var(--color-text-primary)]">
+            <td className="border-l border-[var(--color-table-divider)] px-[10px] py-0 align-middle text-sm leading-[21px] text-[var(--color-text-primary)]">
               {account ? ACCOUNT_CATEGORY_LABELS[account.category] : ""}
             </td>
-            <td className="border-l border-l-dotted border-l-[var(--color-divider-tertiary)] p-2 align-top text-right text-[13px] text-[var(--color-text-global)]">{formatMoney(row.amount)}</td>
-            <td className="border-l border-l-dotted border-l-[var(--color-divider-tertiary)] p-2 align-top text-right text-[13px] text-[var(--color-text-disabled)]">
+            <td className="border-l border-[var(--color-table-divider)] px-[10px] py-0 align-middle text-sm leading-[21px] text-[var(--color-text-primary)]">
+              {account?.subtype ?? ""}
+            </td>
+            <td className="border-l border-[var(--color-table-divider)] px-[10px] py-0 align-middle text-right text-sm leading-[21px] text-[var(--color-text-global)]">{formatMoney(row.amount)}</td>
+            <td className="border-l border-[var(--color-table-divider)] px-[10px] py-0 align-middle text-right text-sm leading-[21px] text-[var(--color-text-disabled)]">
               {/* No live bank feed yet (Phase 1.5) -- honestly blank rather than a fabricated number. */}
               {account ? "--" : ""}
             </td>
-            <td className="border-l border-l-dotted border-l-[var(--color-divider-tertiary)] p-2 align-top text-right">
+            <td className="border-l border-[var(--color-table-divider)] px-[10px] py-0 align-middle text-right">
               {account ? (
                 <AccountRowActions
                   account={account}
@@ -545,8 +750,8 @@ const PROFIT_AND_LOSS_CATEGORIES = new Set<Account["category"]>(["INCOME", "EXPE
 const BANK_FEED_CATEGORIES = new Set<Account["category"]>(["BANK", "CREDIT_CARD"]);
 
 const MENU_ITEM_CLASS =
-  "block w-full px-3 py-1.5 text-left text-[13px] text-[var(--color-text-global)] hover:bg-[var(--color-action-passive-subtle-hover)]";
-const DISABLED_MENU_ITEM_CLASS = "block w-full cursor-not-allowed px-3 py-1.5 text-left text-[13px] text-[var(--color-text-disabled)]";
+  "block w-full px-3 py-1.5 text-left text-sm text-[var(--color-text-global)] hover:bg-[var(--color-action-passive-subtle-hover)]";
+const DISABLED_MENU_ITEM_CLASS = "block w-full cursor-not-allowed px-3 py-1.5 text-left text-sm text-[var(--color-text-disabled)]";
 
 function AccountRowActions({
   account,
@@ -584,10 +789,10 @@ function AccountRowActions({
   // P&L Detail already filters by account name, which is the closest thing to
   // QBO's single-account "Run report" we have for income/expense accounts.
   const reportHref = PROFIT_AND_LOSS_CATEGORIES.has(account.category) ? `/reports/pl-detail?account=${encodeURIComponent(account.name)}` : null;
-  const primaryLinkClass = `font-medium text-[var(--color-link-action)] hover:underline ${busy ? "pointer-events-none opacity-60" : ""}`;
+  const primaryLinkClass = `font-medium text-[var(--color-qbo-link)] hover:underline ${busy ? "pointer-events-none opacity-60" : ""}`;
 
   return (
-    <div className="relative inline-flex items-center justify-end gap-1 text-[13px]" ref={ref}>
+    <div className="relative inline-flex items-center justify-end gap-1 text-sm" ref={ref}>
       {hasRegister ? (
         <Link href={`/register?accountId=${account.id}`} aria-disabled={busy} className={primaryLinkClass}>
           View register

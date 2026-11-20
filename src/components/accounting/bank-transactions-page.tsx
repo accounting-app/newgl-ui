@@ -2,7 +2,7 @@
 
 import { Fragment, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
-import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, CreditCard, Landmark, MessageSquarePlus, Paperclip, MessageSquare, Pencil, Plus, Printer, RefreshCw, Search, Settings, Share, X } from "lucide-react";
+import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, CreditCard, Landmark, Paperclip, MessageSquare, Pencil, Plus, Printer, RefreshCw, Search, Settings, Share, X } from "lucide-react";
 import { BankTxnDetailForm, PURPOSE_OPTIONS } from "@/components/accounting/bank-txn-detail-form";
 import { CategorySuggestionMarker, PayeeSuggestionMarker } from "@/components/accounting/bank-txn-row-suggestion";
 import { suggestionKey, useStoredSuggestions } from "@/lib/bank-txn-suggestions-store";
@@ -14,6 +14,8 @@ import { useProductsServices } from "@/lib/hooks/use-products-services";
 import { PayeeSideModal } from "@/components/bank-register/payee-side-modal";
 import { AddAccountModal } from "@/components/bank-register/add-account-modal";
 import { QuickAddMenu, SplitButton } from "@/components/bank-register/register-header-actions";
+import { PageHeader } from "@/components/layout/page-header";
+import { FilterSelect } from "@/components/ui/filter-select";
 import { Button } from "@/components/ui/button";
 import { IconButton } from "@/components/ui/icon-button";
 import { InputField } from "@/components/ui/input-field";
@@ -59,32 +61,6 @@ function presetStartDate(preset: DatePreset): string | null {
   if (preset === "month") return iso(new Date(Date.UTC(now.getFullYear(), now.getMonth(), 1)));
   if (preset === "year") return iso(new Date(Date.UTC(now.getFullYear(), 0, 1)));
   return null;
-}
-
-// A bordered native <select> with QBO's chevron (and an optional leading icon).
-function FilterSelect({ value, onChange, children, icon: Icon, label, className = "" }: {
-  value: string;
-  onChange: (value: string) => void;
-  children: React.ReactNode;
-  icon?: typeof CalendarDays;
-  label: string;
-  className?: string;
-}) {
-  return (
-    <div className={`relative ${className}`}>
-      <select
-        aria-label={label}
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        className="h-[38px] w-full appearance-none rounded border border-[var(--color-input-border-primary)] bg-[var(--color-input-background)] pl-3 pr-14 text-sm text-[var(--color-input-text)] focus:outline-none focus-visible:border-[var(--override-focus)]"
-      >
-        {children}
-      </select>
-      <span className="pointer-events-none absolute right-3 top-1/2 flex -translate-y-1/2 items-center gap-2 text-[var(--color-icon-secondary)]">
-        {Icon ? <Icon className="h-4 w-4" aria-hidden="true" /> : <ChevronDown className="h-4 w-4" aria-hidden="true" />}
-      </span>
-    </div>
-  );
 }
 
 // QBO's transaction counts cap at "99+".
@@ -619,31 +595,21 @@ export function BankTransactionsPage() {
 
   return (
     <>
-      {/* QBO's header: breadcrumb with Give feedback on the right, then the
-          title with the quick-add and Link account buttons on the right. */}
-      <div className="mb-2 flex items-center justify-between gap-3 text-sm leading-[21px] text-[var(--color-text-primary)]">
-        <nav aria-label="Breadcrumb" className="flex items-center gap-1.5">
-          <span>Accounting</span>
-          <span aria-hidden="true">/</span>
-          <span aria-current="page">Bank transactions</span>
-        </nav>
-        <button type="button" disabled className="flex cursor-not-allowed items-center gap-1.5 font-medium text-[var(--color-text-disabled)]">
-          <MessageSquarePlus className="h-4 w-4" aria-hidden="true" />
-          Give feedback
-        </button>
-      </div>
-      <div className="mb-[22px] flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-[32px] font-normal leading-10 text-[var(--color-text-global)]">Bank transactions</h1>
-        <div className="flex items-center gap-2">
-          <QuickAddMenu accountId={selectedAccountId} />
-          <SplitButton
-            label="Link account"
-            toggleLabel="More link account options"
-            onMainClick={() => toast({ variant: "info", title: "Linking a bank isn't available yet" })}
-            onToggle={() => toast({ variant: "info", title: "Linking a bank isn't available yet" })}
-          />
-        </div>
-      </div>
+      <PageHeader
+        section="Accounting"
+        title="Bank transactions"
+        actions={
+          <>
+            <QuickAddMenu accountId={selectedAccountId} />
+            <SplitButton
+              label="Link account"
+              toggleLabel="More link account options"
+              onMainClick={() => toast({ variant: "info", title: "Linking a bank isn't available yet" })}
+              onToggle={() => toast({ variant: "info", title: "Linking a bank isn't available yet" })}
+            />
+          </>
+        }
+      />
 
       {/* Account header row */}
       <div className="mb-7 flex flex-wrap items-center gap-x-4 gap-y-2">

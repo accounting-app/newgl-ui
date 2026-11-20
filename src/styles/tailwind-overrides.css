@@ -38,6 +38,15 @@
   --color-negative: #DC2626;
   --color-negative-subtle-hover: rgba(220, 38, 38, 0.1);
   --color-negative-border: rgba(220, 38, 38, 0.3);
+  /* QuickBooks' own greens/reds and table lines, sampled from its Chart of accounts. */
+  --color-qbo-green: #003e30;
+  --color-qbo-green-hover: #002e23;
+  --color-qbo-green-text: #07362a;
+  --color-qbo-green-border: #1f4138;
+  --color-qbo-link: #09392b;
+  --color-table-divider: #dee2e1;
+  --color-table-divider-strong: #d7dee0;
+  --color-field-border: #c7cccd;
   /* Stoplight/status colors (positive, info, warning) -- like
      --bean-accent-2/3 and --color-negative above, these stay the same
      hue across every light-background theme rather than rebranding per
@@ -151,6 +160,14 @@
   --color-negative: #F87171;
   --color-negative-subtle-hover: rgba(248, 113, 113, 0.16);
   --color-negative-border: rgba(248, 113, 113, 0.3);
+  --color-qbo-green: #1f7a5f;
+  --color-qbo-green-hover: #278f70;
+  --color-qbo-green-text: #7fd1b2;
+  --color-qbo-green-border: #3f8f75;
+  --color-qbo-link: #7fd1b2;
+  --color-table-divider: #3c4043;
+  --color-table-divider-strong: #4a4e52;
+  --color-field-border: #5f6368;
   --color-highlight-badge-background: #1a3d1a;
   --color-highlight-badge-text: #5cdb5c;
   --color-link-action: #8ab4f8;

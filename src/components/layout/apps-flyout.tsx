@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { ChevronRight, Gem } from "lucide-react";
 import { MORE_APPS_CATEGORIES } from "@/constants/apps";
+import type { AppCategory } from "@/constants/apps";
 
 type AppsFlyoutProps = {
   onNavigate: () => void;
@@ -72,7 +73,7 @@ export function AppsFlyout({ onNavigate }: AppsFlyoutProps) {
               </Link>
 
               {hasItems && isHovered ? (
-                <div className="absolute left-full top-0 z-50 ml-1 w-64 rounded-lg border border-[var(--color-divider-tertiary)] bg-[var(--color-container-background-primary)] py-2 shadow-lg">
+                <div className="absolute left-[calc(100%-10px)] top-0 z-50 w-64 rounded-lg border border-[var(--color-divider-tertiary)] bg-[var(--color-container-background-primary)] py-2 shadow-lg">
                   {category.items.map((item) => {
                     const ItemIcon = item.icon;
                     if (item.locked) {
@@ -111,6 +112,49 @@ export function AppsFlyout({ onNavigate }: AppsFlyoutProps) {
           );
         })}
       </div>
+    </div>
+  );
+}
+
+type CategoryFlyoutProps = {
+  category: AppCategory;
+  title: string;
+  onNavigate: () => void;
+};
+
+// One-level flyout for a category promoted onto the rail (Accounting,
+// Expenses, Sales): hovering its icon lists every page in that category, as
+// QBO's own rail does.
+export function CategoryFlyout({ category, title, onNavigate }: CategoryFlyoutProps) {
+  return (
+    <div role="menu" aria-label={title} className="w-64 rounded-lg border border-[var(--color-divider-tertiary)] bg-[var(--color-container-background-primary)] py-2 shadow-lg">
+      <p className="px-4 pb-2 pt-1 text-xs font-semibold uppercase tracking-wide text-[var(--color-icon-secondary)]">{title}</p>
+      {category.items.map((item) => {
+        const ItemIcon = item.icon;
+        if (item.locked) {
+          return (
+            <div key={`${item.href}-${item.label}`} title="Not available on this plan" role="menuitem" aria-disabled="true" className="flex cursor-not-allowed items-center justify-between gap-3 px-4 py-2.5 text-sm text-[var(--color-text-disabled)]">
+              <span className="flex items-center gap-3">
+                <ItemIcon className="h-4 w-4" aria-hidden="true" />
+                {item.label}
+              </span>
+              <Gem className="h-4 w-4" aria-hidden="true" />
+            </div>
+          );
+        }
+        return (
+          <Link
+            key={`${item.href}-${item.label}`}
+            href={item.href}
+            onClick={onNavigate}
+            role="menuitem"
+            className="flex items-center gap-3 px-4 py-2.5 text-sm text-[var(--color-text-global)] transition-colors hover:bg-[var(--color-action-passive-subtle-hover)]"
+          >
+            <ItemIcon className="h-4 w-4 text-[var(--color-icon-secondary)]" aria-hidden="true" />
+            {item.label}
+          </Link>
+        );
+      })}
     </div>
   );
 }

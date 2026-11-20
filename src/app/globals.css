@@ -11,3 +11,33 @@ body {
   color: var(--color-text-global);
   font-family: var(--app-font-family);
 }
+
+/* QuickBooks' table checkbox: 20px white box, grey border, green when checked. */
+.qbo-checkbox {
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  border: 1px solid var(--color-field-border);
+  border-radius: 4px;
+  background-color: var(--color-container-background-primary);
+  cursor: pointer;
+}
+.qbo-checkbox:checked,
+.qbo-checkbox:indeterminate {
+  border-color: var(--color-qbo-green);
+  background-color: var(--color-qbo-green);
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: 14px;
+}
+.qbo-checkbox:checked {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='white' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 8.5l3.2 3.2L13 4.8'/%3E%3C/svg%3E");
+}
+.qbo-checkbox:indeterminate {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='white' stroke-width='2.2' stroke-linecap='round'%3E%3Cpath d='M3.5 8h9'/%3E%3C/svg%3E");
+}
+.qbo-checkbox:focus-visible {
+  outline: 2px solid var(--color-qbo-green);
+  outline-offset: 2px;
+}

@@ -20,7 +20,7 @@ const QUICK_ADD_LINKS: { label: string; href: string }[] = [
 export const PILL =
   "inline-flex h-8 items-center justify-center rounded-full px-4 text-sm font-semibold transition-colors";
 // Quick-add is secondary (outlined); Reconcile stays the one filled action.
-const SECONDARY =
+export const SECONDARY =
   "border border-[var(--color-button-border)] bg-transparent text-[var(--color-text-primary)] hover:bg-[var(--color-action-standard-subtle-hover)]";
 
 const SPLIT_BASE = "inline-flex h-8 items-center justify-center text-sm font-semibold transition-colors border border-[var(--color-button-border)] bg-transparent text-[var(--color-text-primary)] hover:bg-[var(--color-action-standard-subtle-hover)]";
