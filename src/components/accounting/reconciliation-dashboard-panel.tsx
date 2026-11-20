@@ -268,7 +268,7 @@ export function ReconciliationDashboardPanel({ open, onClose }: { open: boolean;
       case "inBankFeeds":
         return row.pending > 0 ? <Link href="/all-apps/bank-transactions" className={LINK}>{row.pending}</Link> : "N/A";
       case "unreconciled": return <Link href={`/register?accountId=${row.account.id}`} className={LINK}>{row.unreconciled}</Link>;
-      case "lastTxnDate": return display(row.lastTxnDate);
+      case "lastTxnDate": return row.lastTxnDate ? display(row.lastTxnDate) : "None";
       case "accountNumber": return row.account.code;
       case "detailType": return row.account.subtype ?? "";
       case "lastRecBy": return row.lastRecBy ?? "";
@@ -332,7 +332,7 @@ export function ReconciliationDashboardPanel({ open, onClose }: { open: boolean;
         case "bankFeedsBalance": return ""; // "Not Connected" on screen, blank in the file
         case "inBankFeeds": return row.pending > 0 ? String(row.pending) : "";
         case "unreconciled": return String(row.unreconciled);
-        case "lastTxnDate": return display(row.lastTxnDate);
+        case "lastTxnDate": return row.lastTxnDate ? display(row.lastTxnDate) : "None";
         case "accountNumber": return row.account.code;
         case "detailType": return row.account.subtype ?? "";
         case "lastRecBy": return row.lastRecBy ?? "";
