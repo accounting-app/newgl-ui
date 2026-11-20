@@ -16,7 +16,7 @@ import type { Account } from "@/modules/accounting/domain/models";
 import { accountHasRegister } from "@/modules/accounting/presentation/transaction-type-policy";
 
 type TypeGroup = "Bank" | "CC" | "Assets" | "Liabilities" | "Equity";
-type ColumnKey = "lastRecDate" | "lastRecAmount" | "discrepancy" | "account" | "type" | "registerBalance" | "bankFeedsBalance" | "inBankFeeds" | "unreconciled" | "lastTxnDate";
+type ColumnKey = "lastRecDate" | "lastRecAmount" | "discrepancy" | "account" | "type" | "registerBalance" | "bankFeedsBalance" | "inBankFeeds" | "unreconciled" | "lastTxnDate" | "accountNumber" | "detailType" | "lastRecBy" | "entriesReconciled";
 
 type Row = {
   account: Account;
@@ -29,6 +29,8 @@ type Row = {
   pending: number;
   unreconciled: number;
   lastTxnDate: string | null;
+  lastRecBy: string | null;
+  entriesReconciled: number;
 };
 
 const TYPE_OF: Record<Account["category"], TypeGroup> = {
@@ -47,7 +49,8 @@ const TYPE_OF: Record<Account["category"], TypeGroup> = {
   OTHER_EXPENSE: "Equity"
 };
 
-const COLUMNS: { key: ColumnKey; label: string; locked?: boolean; align?: "right" }[] = [
+// `menu` is the name in the Column Options list when it differs from the table heading.
+const COLUMNS: { key: ColumnKey; label: string; menu?: string; locked?: boolean }[] = [
   { key: "lastRecDate", label: "Last Rec Date" },
   { key: "lastRecAmount", label: "Last Rec Amount" },
   { key: "discrepancy", label: "Discrepancy" },
@@ -56,11 +59,16 @@ const COLUMNS: { key: ColumnKey; label: string; locked?: boolean; align?: "right
   { key: "registerBalance", label: "Register Balance" },
   { key: "bankFeedsBalance", label: "Bank Feeds Balance" },
   { key: "inBankFeeds", label: "In Bank Feeds" },
-  { key: "unreconciled", label: "Unreconciled" },
-  { key: "lastTxnDate", label: "Last Txn Date" }
+  { key: "unreconciled", label: "Unreconciled", menu: "Unreconciled Transactions" },
+  { key: "lastTxnDate", label: "Last Txn Date" },
+  { key: "accountNumber", label: "Account Number" },
+  { key: "detailType", label: "Detail Type" },
+  { key: "lastRecBy", label: "Last Rec By" },
+  { key: "entriesReconciled", label: "Entries Reconciled" }
 ];
-// "Last Txn Date" is the column "Add Last Txn Date" brings in.
-const DEFAULT_VISIBLE: ColumnKey[] = COLUMNS.filter((c) => c.key !== "lastTxnDate").map((c) => c.key);
+// Shown by default: RT's original columns. "Last Txn Date" is what "Add Last Txn Date" brings in; the rest are opt-in from Column Options.
+const OPTIONAL_COLUMNS = new Set<ColumnKey>(["lastTxnDate", "accountNumber", "detailType", "lastRecBy", "entriesReconciled"]);
+const DEFAULT_VISIBLE: ColumnKey[] = COLUMNS.filter((c) => !OPTIONAL_COLUMNS.has(c.key)).map((c) => c.key);
 const COLUMNS_KEY = "newgl:rec-dashboard-columns:v1";
 
 const TYPE_OPTIONS = [
@@ -77,7 +85,7 @@ const display = (iso: string | null) => (iso ? `${Number(iso.slice(5, 7))}/${Num
 // Same table look as Bank transactions: accent header (46px), solid column dividers, 50px rows.
 const TH = "cursor-pointer select-none border-l border-[var(--color-divider-tertiary)]";
 const CELL = "border-l border-[var(--color-divider-tertiary)] px-[10px] py-0 align-middle text-sm leading-[21px]";
-const RIGHT_COLUMNS = new Set<ColumnKey>(["lastRecAmount", "discrepancy", "registerBalance", "unreconciled"]);
+const RIGHT_COLUMNS = new Set<ColumnKey>(["lastRecAmount", "discrepancy", "registerBalance", "unreconciled", "entriesReconciled"]);
 const RT_BUTTON = "rounded-md border border-[var(--color-negative)] px-3 py-1.5 text-sm text-[var(--color-negative)] hover:bg-[var(--color-action-passive-subtle-hover)]";
 const LABEL = "mb-1 block text-sm text-[var(--color-text-primary)]";
 const LINK = "text-[var(--color-link-action)] hover:underline";
@@ -194,7 +202,9 @@ export function ReconciliationDashboardPanel({ open, onClose }: { open: boolean;
           registerBalance: account.currentBalance,
           pending: pendingTxns.filter((t) => t.accountId === account.id && t.status === "PENDING").length,
           unreconciled: stats?.unreconciled ?? 0,
-          lastTxnDate: stats?.lastDate ?? null
+          lastTxnDate: stats?.lastDate ?? null,
+          lastRecBy: lastRec?.reconciledBy ?? null,
+          entriesReconciled: lastRec?.enteredCount ?? 0
         };
       });
   }, [accounts, reconciliations, postingStats, pendingTxns]);
@@ -220,6 +230,10 @@ export function ReconciliationDashboardPanel({ open, onClose }: { open: boolean;
         case "inBankFeeds": return r.pending;
         case "unreconciled": return r.unreconciled;
         case "lastTxnDate": return r.lastTxnDate ?? "";
+        case "accountNumber": return r.account.code;
+        case "detailType": return (r.account.subtype ?? "").toLowerCase();
+        case "lastRecBy": return (r.lastRecBy ?? "").toLowerCase();
+        case "entriesReconciled": return r.entriesReconciled;
       }
     };
     return [...filtered].sort((a, b) => {
@@ -251,6 +265,10 @@ export function ReconciliationDashboardPanel({ open, onClose }: { open: boolean;
         return row.pending > 0 ? <Link href="/all-apps/bank-transactions" className={LINK}>{row.pending}</Link> : "N/A";
       case "unreconciled": return <Link href={`/register?accountId=${row.account.id}`} className={LINK}>{row.unreconciled}</Link>;
       case "lastTxnDate": return display(row.lastTxnDate);
+      case "accountNumber": return row.account.code;
+      case "detailType": return row.account.subtype ?? "";
+      case "lastRecBy": return row.lastRecBy ?? "";
+      case "entriesReconciled": return row.lastRec ? String(row.entriesReconciled) : "";
     }
   }
 
@@ -268,6 +286,10 @@ export function ReconciliationDashboardPanel({ open, onClose }: { open: boolean;
         case "inBankFeeds": return row.pending > 0 ? String(row.pending) : "N/A";
         case "unreconciled": return String(row.unreconciled);
         case "lastTxnDate": return display(row.lastTxnDate);
+        case "accountNumber": return row.account.code;
+        case "detailType": return row.account.subtype ?? "";
+        case "lastRecBy": return row.lastRecBy ?? "";
+        case "entriesReconciled": return row.lastRec ? String(row.entriesReconciled) : "";
       }
     };
     const lines = [columns.map((c) => c.label), ...shown.map((r) => columns.map((c) => text(r, c.key)))];
@@ -312,15 +334,21 @@ export function ReconciliationDashboardPanel({ open, onClose }: { open: boolean;
               <div ref={columnsRef} className="relative">
                 <button type="button" className={RT_BUTTON} onClick={() => setColumnsOpen((v) => !v)} aria-expanded={columnsOpen}>Column Options</button>
                 {columnsOpen ? (
-                  <div role="dialog" aria-label="Column options" className="absolute right-0 top-full z-20 mt-2 w-[250px] rounded-lg border border-[var(--color-divider-tertiary)] bg-[var(--color-container-background-primary)] px-4 pb-4 pt-3 shadow-lg">
+                  <div role="dialog" aria-label="Column options" className="absolute right-0 top-full z-20 mt-2 max-h-[70vh] w-[270px] overflow-y-auto rounded-lg border border-[var(--color-divider-tertiary)] bg-[var(--color-container-background-primary)] px-4 pb-4 pt-3 shadow-lg">
                     <span aria-hidden="true" className="absolute -top-[7px] right-[22px] h-3 w-3 rotate-45 border-l border-t border-[var(--color-divider-tertiary)] bg-[var(--color-container-background-primary)]" />
-                    <p className="text-sm text-[var(--color-text-global)]">Columns</p>
+                    <div className="flex items-center justify-between text-sm">
+                      <p className="text-[var(--color-text-global)]">Columns</p>
+                      <span className="flex items-center gap-3">
+                        <button type="button" onClick={() => saveVisible(COLUMNS.map((c) => c.key))} className="text-[var(--color-link-action)] hover:underline">Show all</button>
+                        <button type="button" onClick={() => saveVisible(DEFAULT_VISIBLE)} className="text-[var(--color-link-action)] hover:underline">Reset</button>
+                      </span>
+                    </div>
                     <ul className="mt-3 space-y-3 text-sm uppercase text-[var(--color-text-global)]">
                       {COLUMNS.map((c) => (
                         <li key={c.key}>
                           <label className={`flex items-center gap-3 ${c.locked ? "opacity-60" : "cursor-pointer"}`}>
                             <input type="checkbox" className="qbo-checkbox" disabled={c.locked} checked={c.locked || visible.includes(c.key)} onChange={(e) => saveVisible(e.target.checked ? [...visible, c.key] : visible.filter((k) => k !== c.key))} />
-                            {c.label}
+                            {c.menu ?? c.label}
                           </label>
                         </li>
                       ))}
