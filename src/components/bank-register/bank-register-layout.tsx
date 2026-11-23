@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { AccountSelector } from "@/components/bank-register/account-selector";
 import { RegisterTable } from "@/components/bank-register/register-table";
 import { getRegisterTitle } from "@/components/bank-register/register-title";
@@ -27,6 +27,8 @@ export function BankRegisterLayout() {
 
 function BankRegisterLayoutInner() {
   const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
   const {
     accounts,
     availableTransactionTypes,
@@ -121,6 +123,30 @@ function BankRegisterLayoutInner() {
     appliedAccountParamRef.current = true;
   }, [searchParams, accounts, setSelectedAccountId]);
 
+  // Keep ?accountId= equal to the account on screen (QBO's register does the
+  // same), so the page can be reloaded, bookmarked or shared. Other params
+  // (e.g. a ?tx= deep link) are preserved. Skipped while a different, valid
+  // ?accountId= is still waiting to be applied above.
+  useEffect(() => {
+    if (!selectedAccountId || !appliedAccountParamRef.current) return;
+    const current = searchParams.get("accountId");
+    if (current === selectedAccountId) return;
+    if (current && accounts.some((a) => a.id === current)) return;
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("account");
+    params.set("accountId", selectedAccountId);
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+  }, [selectedAccountId, searchParams, accounts, pathname, router]);
+
+  function handleAccountChange(accountId: string) {
+    setSelectedAccountId(accountId);
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("account");
+    params.delete("tx");
+    params.set("accountId", accountId);
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+  }
+
   const registerTitle = getRegisterTitle(selectedAccount);
 
   // Top selector: only balance-sheet accounts that actually have a register.
@@ -187,7 +213,7 @@ function BankRegisterLayoutInner() {
               <AccountSelector
                 accounts={registerAccounts}
                 selectedAccountId={selectedAccountId}
-                onChange={setSelectedAccountId}
+                onChange={handleAccountChange}
               />
               <div className="text-sm leading-5 text-[var(--color-text-primary)]">
                 <div>Bank Balance</div>
