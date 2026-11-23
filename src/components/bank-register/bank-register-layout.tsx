@@ -14,6 +14,8 @@ import { ACCOUNT_CATEGORY_LABELS, DEFAULT_TOP_HEADER_USER_NAME } from "@/constan
 import { loadCsvImportSession } from "@/modules/accounting/domain/csv-import-session";
 import { isRegisterAccountCategory } from "@/modules/accounting/presentation/transaction-type-policy";
 import { useBankRegister } from "@hooks/use-bank-register";
+import { Maximize, SquareArrowOutUpRight } from "lucide-react";
+import { getReconciliationSetup } from "@/lib/services/reconciliation-service";
 
 export function BankRegisterLayout() {
   return (
@@ -63,6 +65,36 @@ function BankRegisterLayoutInner() {
   const [isJournalEntryModalOpen, setIsJournalEntryModalOpen] = useState(false);
   const [isSavingJournalEntry, setIsSavingJournalEntry] = useState(false);
   const [savedImportRowCount, setSavedImportRowCount] = useState(0);
+  // "Reconciled through <date>" + "Show Unreconciled Only", as in RT's register header.
+  const [reconciledThrough, setReconciledThrough] = useState<string | null>(null);
+  const [unreconciledOnly, setUnreconciledOnly] = useState(false);
+
+  useEffect(() => {
+    setUnreconciledOnly(false);
+    if (!selectedAccountId) {
+      setReconciledThrough(null);
+      return;
+    }
+    let cancelled = false;
+    getReconciliationSetup(selectedAccountId)
+      .then((setup) => {
+        if (!cancelled) setReconciledThrough(setup.lastStatementEndingDate ?? null);
+      })
+      .catch(() => {
+        if (!cancelled) setReconciledThrough(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedAccountId]);
+
+  const visibleEntries = useMemo(
+    () => (unreconciledOnly ? entries.filter((entry) => entry.reconcileStatus !== "R") : entries),
+    [entries, unreconciledOnly]
+  );
+  const reconciledThroughLabel = reconciledThrough
+    ? `${reconciledThrough.slice(5, 7)}/${reconciledThrough.slice(8, 10)}/${reconciledThrough.slice(0, 4)}`
+    : null;
 
   useEffect(() => {
     if (!selectedAccountId) {
@@ -113,15 +145,13 @@ function BankRegisterLayoutInner() {
 
   return (
     <main className="tw-override main bg-[var(--color-container-background-primary)] text-sm text-[var(--color-text-primary)]">
-      <header className="header mb-4">
-        {/* .header is a flex row, so the breadcrumb and the title block share
-            one column wrapper to stack the breadcrumb above the title. */}
-        <div className="w-full space-y-4">
-          {/* The register has no entry point of its own (QBO has none either):
-              it's reached from Bank transactions' "Go to bank register" or
-              Chart of accounts' "View register", and this path -- plus "Back To
-              Banking" -- is how you retrace that route. */}
-          <nav aria-label="Breadcrumb" className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-sm text-[var(--color-text-primary)]">
+      <header className="px-[30px] pb-3 pt-4">
+        {/* The register has no entry point of its own (QBO has none either):
+            it's reached from Bank transactions' "Go to bank register" or
+            Chart of accounts' "View register", and this path -- plus "Back To
+            Banking" -- is how you retrace that route. */}
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <nav aria-label="Breadcrumb" className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-sm text-[#555756]">
             <Link href="/all-apps/bank-transactions" className="hover:text-[var(--color-link-action)] hover:underline">
               Accounting
             </Link>
@@ -131,31 +161,51 @@ function BankRegisterLayoutInner() {
             </Link>
             <span aria-hidden="true">/</span>
             <span aria-current="page">{registerTitle}</span>
-            <Link href="/all-apps/bank-transactions" className="ml-3 font-medium text-[var(--color-link-action)] hover:underline">
+            <Link href="/all-apps/bank-transactions" className="ml-3 text-[var(--color-link-text)] hover:underline">
               &lt; Back To Banking
             </Link>
           </nav>
-          <div className="w-full flex flex-wrap items-center justify-between gap-4">
-            <div className="">
-              <h1 className="page-title">{registerTitle}</h1>
+          <div className="flex items-center gap-4 text-[#505252]">
+            <button type="button" aria-label="Open in a new window" title="Open in a new window" onClick={() => window.open(window.location.href, "_blank")} className="hover:text-[var(--color-text-global)]">
+              <SquareArrowOutUpRight className="h-4 w-4" aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              aria-label="Toggle full screen"
+              title="Full screen"
+              onClick={() => (document.fullscreenElement ? void document.exitFullscreen() : void document.documentElement.requestFullscreen())}
+              className="hover:text-[var(--color-text-global)]"
+            >
+              <Maximize className="h-4 w-4" aria-hidden="true" />
+            </button>
+          </div>
+        </div>
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <h1 className="text-[32px] font-normal leading-10 text-[var(--color-text-global)]">{registerTitle}</h1>
+            <div className="mt-3 flex items-center gap-4">
               <AccountSelector
                 accounts={registerAccounts}
                 selectedAccountId={selectedAccountId}
                 onChange={setSelectedAccountId}
               />
-            </div>
-
-            <div className="space-y-3 pb-3 text-right">
-              {selectedAccountId ? <RegisterHeaderActions accountId={selectedAccountId} /> : null}
-              <div>
-                <p className="balance-label tracking-wide">Ending Balance</p>
-                <p className="balance-amount">
-                  {generalBalance.toLocaleString("en-US", {
-                    style: "currency",
-                    currency: "USD"
-                  })}
-                </p>
+              <div className="text-sm leading-5 text-[var(--color-text-primary)]">
+                <div>Bank Balance</div>
+                <div>Not Connected</div>
               </div>
+            </div>
+          </div>
+
+          <div className="flex flex-col items-end gap-3">
+            {selectedAccountId ? <RegisterHeaderActions accountId={selectedAccountId} /> : null}
+            <div className="text-right">
+              <p className="text-xs font-normal uppercase leading-5 tracking-wide text-[var(--color-text-primary)]">Ending Balance</p>
+              <p className="text-[32px] font-normal leading-9 tracking-tight text-[var(--color-text-global)]">
+                {generalBalance.toLocaleString("en-US", {
+                  style: "currency",
+                  currency: "USD"
+                })}
+              </p>
             </div>
           </div>
         </div>
@@ -163,9 +213,17 @@ function BankRegisterLayoutInner() {
 
       {error ? <div className="rounded-md bg-red-50 p-3 text-sm text-red-700">{error}</div> : null}
 
-      <section className="page-content ">
+      <section className="px-[30px] pb-[30px]">
         <RegisterTable
-          entries={entries}
+          topLeft={
+            <p className="flex items-center gap-3 text-base text-[var(--color-text-primary)]">
+              {reconciledThroughLabel ? <span>Reconciled through {reconciledThroughLabel}</span> : <span>Never reconciled</span>}
+              <button type="button" onClick={() => setUnreconciledOnly((current) => !current)} className="text-[var(--color-link-text)] hover:underline">
+                {unreconciledOnly ? "Show All" : "Show Unreconciled Only"}
+              </button>
+            </p>
+          }
+          entries={visibleEntries}
           deepLinkTransactionId={searchParams.get("tx")}
           draftTransaction={draftTransaction}
           draftErrors={draftErrors}

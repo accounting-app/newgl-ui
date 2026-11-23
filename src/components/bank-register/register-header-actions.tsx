@@ -25,6 +25,8 @@ export const SECONDARY =
 
 const SPLIT_BASE = "inline-flex h-8 items-center justify-center text-sm font-semibold transition-colors border border-[var(--color-button-border)] bg-transparent text-[var(--color-text-primary)] hover:bg-[var(--color-action-standard-subtle-hover)]";
 
+const SPLIT_PRIMARY = "inline-flex h-[37px] items-center justify-center border border-transparent bg-[var(--color-action-standard)] text-[15px] font-bold text-white transition-colors hover:brightness-90";
+
 /**
  * The outlined pill with a label and a chevron half ("+ Expense ▾",
  * "Link account ▾"). One component so every header action has the same shape;
@@ -36,8 +38,11 @@ export function SplitButton({
   onToggle,
   expanded = false,
   toggleLabel,
+  variant = "outline",
   children
 }: {
+  /** "primary" is the filled QBO pill used on the register header; "outline" is the default. */
+  variant?: "outline" | "primary";
   label: string;
   onMainClick: () => void;
   onToggle: () => void;
@@ -45,12 +50,13 @@ export function SplitButton({
   toggleLabel: string;
   children?: React.ReactNode;
 }) {
+  const base = variant === "primary" ? SPLIT_PRIMARY : SPLIT_BASE;
   return (
     <div className="relative inline-flex">
-      <button type="button" className={`${SPLIT_BASE} rounded-l-full rounded-r-none pl-5 pr-4`} onClick={onMainClick}>
+      <button type="button" className={`${base} rounded-l-full rounded-r-none pl-5 pr-4`} onClick={onMainClick}>
         {label}
       </button>
-      <button type="button" aria-label={toggleLabel} aria-expanded={expanded} className={`${SPLIT_BASE} w-10 rounded-l-none rounded-r-full border-l-0`} onClick={onToggle}>
+      <button type="button" aria-label={toggleLabel} aria-expanded={expanded} className={`${base} w-10 rounded-l-none rounded-r-full ${variant === "primary" ? "border-l border-l-white/40" : "border-l-0"}`} onClick={onToggle}>
         <ChevronDown className="h-4 w-4" aria-hidden="true" />
       </button>
       {children}
@@ -59,7 +65,7 @@ export function SplitButton({
 }
 
 /** "+ Expense ▾" split button with RightTool's quick-add links; shared by the register and Bank transactions headers. */
-export function QuickAddMenu({ accountId }: { accountId?: string }) {
+export function QuickAddMenu({ accountId, variant = "outline" }: { accountId?: string; variant?: "outline" | "primary" }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -76,6 +82,7 @@ export function QuickAddMenu({ accountId }: { accountId?: string }) {
   return (
     <div ref={rootRef} className="relative inline-flex">
       <SplitButton
+        variant={variant}
         label="+ Expense"
         onMainClick={() => {
           setOpen(false);
@@ -107,12 +114,19 @@ export function QuickAddMenu({ accountId }: { accountId?: string }) {
 }
 
 export function RegisterHeaderActions({ accountId }: { accountId: string }) {
+  const pill = "inline-flex h-[37px] items-center justify-center rounded-full px-5 text-[15px] font-semibold transition-colors";
   return (
-    <div className="flex items-center justify-end gap-2">
-      <QuickAddMenu accountId={accountId} />
+    <div className="flex items-center justify-end gap-2.5">
+      <QuickAddMenu accountId={accountId} variant="primary" />
+      <Link
+        href="/all-apps/bank-transactions"
+        className={`${pill} border border-[var(--color-qbo-green-border)] bg-transparent text-[var(--color-qbo-green-text)] hover:bg-[var(--color-action-standard-subtle-hover)]`}
+      >
+        Bank transactions
+      </Link>
       <Link
         href={`/all-apps/reconcile?accountId=${encodeURIComponent(accountId)}`}
-        className={`${PILL} bg-[var(--color-ui-primary)] text-white hover:opacity-90`}
+        className={`${pill} bg-[var(--color-qbo-green)] text-white hover:bg-[var(--color-qbo-green-hover)]`}
       >
         Reconcile
       </Link>

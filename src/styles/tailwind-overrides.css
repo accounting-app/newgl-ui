@@ -595,9 +595,9 @@
   border-bottom: 2px solid var(--color-divider-tertiary);
 }
 .tw-override .header-table th {
-  font-size: 12px;
+  font-size: 14px;
   color: var(--color-text-primary);
-  line-height: 20px;
+  line-height: 22px;
   font-weight: 600;
 }
 .tw-override .header-table th.sorted {
@@ -615,9 +615,9 @@
 .tw-override  .actions-quickadd-button {
   padding-left: 8px;
   color: var(--color-quickadd-button-text);
-  font-size: 13px;
+  font-size: 16px;
   font-weight: var(--font-weight-component-bold);
-  height: 34px;
+  height: 46px;
 }
 .tw-override  .actions-quickadd-button:active {
   text-decoration: underline;

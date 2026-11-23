@@ -61,6 +61,8 @@ import type { BatchEditFields, BatchEditValues } from "@/lib/accounting/register
 
 type RegisterTableProps = {
   entries: RegisterEntry[];
+  /** Shown on the left of the top pagination row ("Reconciled through ..."). */
+  topLeft?: React.ReactNode;
   /** Deep-link from another screen (e.g. a duplicate-transaction warning during CSV import): opens this entry's inline editor and jumps to its page once entries have loaded. */
   deepLinkTransactionId?: string | null;
   draftTransaction: DraftTransactionForm | null;
@@ -104,6 +106,11 @@ type RegisterTableProps = {
 
 const batchSelectedRowClass = "bg-[color-mix(in_srgb,var(--color-negative)_10%,transparent)]";
 
+const MONEY = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
+const money = (value: number) => MONEY.format(value);
+// The register shows dates as MM/DD/YYYY, like QBO (entries carry ISO dates).
+const displayDate = (iso: string) => (/^\d{4}-\d{2}-\d{2}/.test(iso) ? `${iso.slice(5, 7)}/${iso.slice(8, 10)}/${iso.slice(0, 4)}` : iso);
+
 function rowStyle(status: RegisterEntry["status"]): string {
   if (status === "VOIDED" || status === "DELETED") {
     return "line-through text-[var(--color-text-disabled)]";
@@ -124,6 +131,7 @@ function formatTransactionTypeLabel(transactionType: RegisterEntry["transactionT
 
 export function RegisterTable({
   entries,
+  topLeft,
   deepLinkTransactionId,
   draftTransaction,
   draftErrors,
@@ -579,29 +587,29 @@ export function RegisterTable({
             role="button"
             tabIndex={0}
           >
-            <td className="p-2 text-[13px] align-top text-[var(--color-text-primary)]">
-              {entry.date}
+            <td className="px-2 py-[7px] text-[15px] align-top text-[var(--color-text-primary)]">
+              {displayDate(entry.date)}
             </td>
-            <td className="border-l border-l-dotted border-l-[var(--color-divider-tertiary)] p-2 text-[13px] align-top">
+            <td className="border-l border-l-dotted border-l-[var(--color-divider-tertiary)] px-2 py-[7px] text-[15px] align-top">
               {entry.refNumber ?? ""}
             </td>
-            <td className="border-l border-l-dotted border-l-[var(--color-divider-tertiary)] p-2 text-[13px] align-top">
+            <td className="border-l border-l-dotted border-l-[var(--color-divider-tertiary)] px-2 py-[7px] text-[15px] align-top">
               {entry.payee ?? ""}
             </td>
-            <td className="border-l border-l-dotted border-l-[var(--color-divider-tertiary)] p-2 text-[13px] align-top text-[var(--color-text-primary)]">
+            <td className="border-l border-l-dotted border-l-[var(--color-divider-tertiary)] px-2 py-[7px] text-[15px] align-top text-[var(--color-text-primary)]">
               {entry.memo ?? ""}
             </td>
-            <td className="border-l border-l-dotted border-l-[var(--color-divider-tertiary)] p-2 text-[13px] text-right align-top text-[var(--color-text-primary)]">
-              {entry.payment ? entry.payment.toFixed(2) : ""}
+            <td className="border-l border-l-dotted border-l-[var(--color-divider-tertiary)] px-2 py-[7px] text-[15px] text-right align-top text-[var(--color-text-primary)]">
+              {entry.payment ? money(entry.payment) : ""}
             </td>
-            <td className="border-l border-l-dotted border-l-[var(--color-divider-tertiary)] p-2 text-[13px] text-right align-top text-[var(--color-text-primary)]">
-              {entry.deposit ? entry.deposit.toFixed(2) : ""}
+            <td className="border-l border-l-dotted border-l-[var(--color-divider-tertiary)] px-2 py-[7px] text-[15px] text-right align-top text-[var(--color-text-primary)]">
+              {entry.deposit ? money(entry.deposit) : ""}
             </td>
-            <td className="border-l text-center border-l-dotted border-l-[var(--color-divider-tertiary)] p-2 text-[13px] align-top text-[var(--color-text-primary)]">
+            <td className="border-l text-center border-l-dotted border-l-[var(--color-divider-tertiary)] px-2 py-[7px] text-[15px] align-top text-[var(--color-text-primary)]">
               {entry.reconcileStatus}
             </td>
-            <td className="p-2 border-l border-l-dotted border-l-[var(--color-divider-tertiary)] text-[13px] text-right align-top font-medium text-[var(--color-text-global)]">
-              {entry.runningBalance.toFixed(2)}
+            <td className="px-2 py-[7px] border-l border-l-dotted border-l-[var(--color-divider-tertiary)] text-[15px] text-right align-top text-[var(--color-text-global)]">
+              {money(entry.runningBalance)}
             </td>
           </tr>
           <tr
@@ -615,7 +623,7 @@ export function RegisterTable({
             role="button"
             tabIndex={0}
           >
-            <td className="p-2 text-[13px] align-top text-[var(--color-icon-secondary)]">
+            <td className="px-2 py-[7px] text-[15px] align-top text-[var(--color-icon-secondary)]">
               {isBatchMode ? (
                 <input
                   type="checkbox"
@@ -630,25 +638,25 @@ export function RegisterTable({
                 <>&nbsp;</>
               )}
             </td>
-            <td className="border-l border-l-dotted border-l-[var(--color-divider-tertiary)] p-2 text-[13px] align-top text-[var(--color-icon-secondary)]">
+            <td className="border-l border-l-dotted border-l-[var(--color-divider-tertiary)] px-2 py-[7px] text-[15px] align-top text-[var(--color-icon-secondary)]">
               {formatTransactionTypeLabel(entry.transactionType)}
             </td>
-            <td className="border-l border-l-dotted border-l-[var(--color-divider-tertiary)] p-2 text-[13px] align-top text-[var(--color-icon-secondary)]">
+            <td className="border-l border-l-dotted border-l-[var(--color-divider-tertiary)] px-2 py-[7px] text-[15px] align-top text-[var(--color-icon-secondary)]">
               {entry.accountLabel ?? ""}
             </td>
-            <td className="border-l border-l-dotted border-l-[var(--color-divider-tertiary)] p-2 text-[13px] align-top text-[var(--color-icon-secondary)]">
+            <td className="border-l border-l-dotted border-l-[var(--color-divider-tertiary)] px-2 py-[7px] text-[15px] align-top text-[var(--color-icon-secondary)]">
               &nbsp;
             </td>
-            <td className="border-l border-l-dotted border-l-[var(--color-divider-tertiary)] p-2 text-[13px] text-right align-top text-[var(--color-icon-secondary)]">
+            <td className="border-l border-l-dotted border-l-[var(--color-divider-tertiary)] px-2 py-[7px] text-[15px] text-right align-top text-[var(--color-icon-secondary)]">
               &nbsp;
             </td>
-            <td className="border-l border-l-dotted border-l-[var(--color-divider-tertiary)] p-2 text-[13px] text-right align-top text-[var(--color-icon-secondary)]">
+            <td className="border-l border-l-dotted border-l-[var(--color-divider-tertiary)] px-2 py-[7px] text-[15px] text-right align-top text-[var(--color-icon-secondary)]">
               &nbsp;
             </td>
-            <td className="border-l border-l-dotted border-l-[var(--color-divider-tertiary)] p-2 text-[13px] text-center align-top text-[var(--color-icon-secondary)]">
+            <td className="border-l border-l-dotted border-l-[var(--color-divider-tertiary)] px-2 py-[7px] text-[15px] text-center align-top text-[var(--color-icon-secondary)]">
               &nbsp;
             </td>
-            <td className="p-2 border-l border-l-dotted border-l-[var(--color-divider-tertiary)] text-[13px] text-right align-top text-[var(--color-icon-secondary)]">&nbsp;</td>
+            <td className="px-2 py-[7px] border-l border-l-dotted border-l-[var(--color-divider-tertiary)] text-[15px] text-right align-top text-[var(--color-icon-secondary)]">&nbsp;</td>
           </tr>
         </tbody>
       </table>
@@ -658,16 +666,20 @@ export function RegisterTable({
   return (
     <>
       <div ref={topRef} />
-      <TablePagination
-        totalItems={filteredEntries.length}
-        currentPage={filteredEntries.length > 0 ? currentPage : 0}
-        totalPages={totalPages}
-        start={paginationStart}
-        end={paginationEnd}
-        onPageChange={setCurrentPage}
-      />
+      <div className="mb-3 flex items-center justify-between gap-4">
+        <div>{topLeft}</div>
+        <TablePagination
+          inline
+          totalItems={filteredEntries.length}
+          currentPage={filteredEntries.length > 0 ? currentPage : 0}
+          totalPages={totalPages}
+          start={paginationStart}
+          end={paginationEnd}
+          onPageChange={setCurrentPage}
+        />
+      </div>
       <div className="register-table relative overflow-visible bg-[var(--color-container-background-primary)]">
-      <div className="action-bar flex h-[45px] items-center justify-between border-b border-[var(--color-divider-tertiary)] px-4">
+      <div className="action-bar flex h-[59px] items-center justify-between border-b border-[var(--color-divider-tertiary)] px-4">
         <div className="relative flex items-center gap-1">
           <button
             ref={filterButtonRef}
@@ -710,18 +722,10 @@ export function RegisterTable({
           )}
           <button
             type="button"
-            className="ml-3 text-[13px] text-[var(--color-link-text)] hover:underline"
+            className="ml-3 text-sm text-[var(--color-link-text)] hover:underline"
             onClick={resetBatch}
           >
             Reset Batch Buttons
-          </button>
-          <button
-            type="button"
-            className="ml-3 text-[13px] text-[var(--color-link-text)] hover:underline disabled:cursor-not-allowed disabled:text-[var(--color-text-disabled)] disabled:no-underline"
-            onClick={jumpToLast}
-            disabled={!lastTouchedEntryId}
-          >
-            Jump To Last
           </button>
           {isFilterPopoverOpen ? (
             <FilterFormPopover
@@ -750,6 +754,14 @@ export function RegisterTable({
           ) : null}
         </div>
         <div className="flex h-full items-center gap-4 text-[var(--color-icon-muted)]">
+          <button
+            type="button"
+            className="text-sm text-[var(--color-link-text)] hover:underline disabled:cursor-not-allowed disabled:text-[var(--color-text-disabled)] disabled:no-underline"
+            onClick={jumpToLast}
+            disabled={!lastTouchedEntryId}
+          >
+            Jump To Last
+          </button>
           <Tooltip label="Print" side="bottom">
             <IconButton icon={Printer} label="Print" onClick={handlePrintRegister} />
           </Tooltip>

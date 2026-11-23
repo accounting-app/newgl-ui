@@ -11,7 +11,7 @@ export type RegisterBatchControls = {
 };
 
 const BATCH_LINK =
-  "text-[11px] font-semibold uppercase text-[var(--color-link-text)] hover:underline disabled:cursor-not-allowed disabled:text-[var(--color-text-disabled)] disabled:no-underline";
+  "text-left text-[13px] font-bold uppercase leading-6 text-[var(--color-link-text)] hover:underline disabled:cursor-not-allowed disabled:text-[var(--color-text-disabled)] disabled:no-underline";
 
 export function RegisterTableHeader({ batch }: { batch?: RegisterBatchControls }) {
   return (
@@ -20,43 +20,43 @@ export function RegisterTableHeader({ batch }: { batch?: RegisterBatchControls }
         <RegisterTableColumnGroup />
         <thead className="text-left uppercase tracking-wide">
           <tr>
-            <th className="px-2 pb-[5px] pt-2 text-left align-middle">
+            <th className="px-2 pb-[5px] pt-3 text-left align-middle">
               Date
             </th>
-            <th className="border-l-custom px-2 pb-[5px] pt-2 text-left align-middle">
+            <th className="border-l-custom px-2 pb-[5px] pt-3 text-left align-middle">
               Ref No.
             </th>
-            <th className="border-l-custom px-2 pb-[5px] pt-2 text-left align-middle">
+            <th className="border-l-custom px-2 pb-[5px] pt-3 text-left align-middle">
               Payee
             </th>
-            <th className="border-l-custom px-2 pb-[5px] pt-2 text-left align-middle">
+            <th className="border-l-custom px-2 pb-[5px] pt-3 text-left align-middle">
               Memo
             </th>
-            <th className="border-l-custom px-2 pb-[5px] pt-2 text-right align-middle">
+            <th className="border-l-custom px-2 pb-[5px] pt-3 text-right align-middle">
               Payment
             </th>
-            <th className="border-l-custom px-2 pb-[5px] pt-2 text-right align-middle">
+            <th className="border-l-custom px-2 pb-[5px] pt-3 text-right align-middle">
               Deposit
             </th>
-            <th className="border-l-custom px-2 pb-[5px] pt-2 text-center align-middle">
+            <th className="border-l-custom px-2 pb-[5px] pt-3 text-center align-middle">
               ✓
             </th>
-            <th className="border-l-custom px-2 pb-[5px] pt-2 text-right align-middle">
+            <th className="border-l-custom px-2 pb-[5px] pt-3 text-right align-middle">
               Balance
             </th>
           </tr>
           <tr>
-            <th className=" px-2 pb-[6px] pt-0 text-left tracking-normal">
+            <th className=" px-2 pb-2 pt-0 text-left tracking-normal">
               {batch && !batch.active ? (
                 <button
                   type="button"
                   onClick={batch.onStart}
-                  className="rounded border border-[var(--color-button-border)] px-2 text-[11px] font-semibold uppercase text-[var(--color-text-primary)] hover:bg-[var(--color-action-standard-subtle-hover)]"
+                  className="rounded border border-[var(--color-button-border)] px-2 text-[12px] font-semibold uppercase text-[var(--color-text-primary)] hover:bg-[var(--color-action-standard-subtle-hover)]"
                 >
                   Batch
                 </button>
               ) : batch ? (
-                <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                <span className="flex flex-col items-start">
                   <button type="button" className={BATCH_LINK} disabled={batch.selectedCount === 0} onClick={batch.onEdit}>
                     Edit
                   </button>
@@ -71,25 +71,25 @@ export function RegisterTableHeader({ batch }: { batch?: RegisterBatchControls }
                 <>&nbsp;</>
               )}
             </th>
-            <th className="border-l-custom px-2 pb-[6px] pt-0 text-left tracking-normal">
+            <th className="border-l-custom px-2 pb-2 pt-0 text-left tracking-normal">
               Type
             </th>
-            <th className="border-l-custom px-2 pb-[6px] pt-0 text-left tracking-normal">
+            <th className="border-l-custom px-2 pb-2 pt-0 text-left tracking-normal">
               Account
             </th>
-            <th className="border-l-custom px-2 pb-[6px] pt-0 text-left tracking-normal">
+            <th className="border-l-custom px-2 pb-2 pt-0 text-left tracking-normal">
               &nbsp;
             </th>
-            <th className="border-l-custom px-2 pb-[6px] pt-0 text-right tracking-normal">
+            <th className="border-l-custom px-2 pb-2 pt-0 text-right tracking-normal">
               &nbsp;
             </th>
-            <th className="border-l-custom px-2 pb-[6px] pt-0 text-right tracking-normal">
+            <th className="border-l-custom px-2 pb-2 pt-0 text-right tracking-normal">
               &nbsp;
             </th>
-            <th className="border-l-custom px-2 pb-[6px] pt-0 text-center tracking-normal">
+            <th className="border-l-custom px-2 pb-2 pt-0 text-center tracking-normal">
               &nbsp;
             </th>
-            <th className="border-l-custom px-2 pb-[6px] pt-0 text-right tracking-normal">
+            <th className="border-l-custom px-2 pb-2 pt-0 text-right tracking-normal">
               &nbsp;
             </th>
           </tr>
