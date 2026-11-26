@@ -452,6 +452,10 @@ export function RegisterTable({
   }
 
   async function confirmBatchEdit() {
+    if (selectedBatchEntries.length === 0) {
+      setBatchError("Tick at least one transaction to edit.");
+      return;
+    }
     const problem = validateBatchEdit(batchFields, batchValues, registerAccountId);
     if (problem) {
       setBatchError(problem);
@@ -478,17 +482,20 @@ export function RegisterTable({
     }
   }
 
+  // Like RightTool, DELETE always asks -- even with nothing ticked, where OK
+  // simply does nothing.
   async function deleteBatch() {
     const { count, paymentTotal, depositTotal } = summarizeBatchSelection(selectedBatchEntries);
-    if (count === 0) return;
     const confirmed = await requestConfirmation({
-      title: `Delete ${count} transaction${count === 1 ? "" : "s"}?`,
+      title: "Delete transactions",
       message:
-        `Payments ${paymentTotal.toFixed(2)}, deposits ${depositTotal.toFixed(2)} will be removed from the ledger. ` +
-        "All are deleted together or none are, and the batch is one entry in Settings > Ledger > Version history.",
-      confirmLabel: "Delete"
+        `You are about to Delete ${count} transaction${count === 1 ? "" : "s"} totaling ${(paymentTotal + depositTotal).toFixed(2)}\n\n` +
+        "Keep in mind that Reconciled and Cleared transactions will NOT delete. " +
+        "The rest are deleted together or none are, and you can undo it from Settings > Ledger > Version history.\n\n" +
+        "Are you sure?",
+      confirmLabel: "OK"
     });
-    if (!confirmed) return;
+    if (!confirmed || count === 0) return;
     try {
       await onBatchDelete(selectedBatchEntries.map((entry) => entry.id));
       toast({ variant: "success", title: `Deleted ${count} transaction${count === 1 ? "" : "s"}` });

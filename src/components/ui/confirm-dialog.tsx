@@ -47,7 +47,7 @@ export function ConfirmDialogHost() {
 
   return (
     <Modal open={pending !== null} onClose={() => settle(false)} title={pending?.title} size="sm">
-      <p className="mb-6 text-sm text-[var(--color-text-primary)]">{pending?.message}</p>
+      <p className="mb-6 whitespace-pre-line text-sm text-[var(--color-text-primary)]">{pending?.message}</p>
       <div className="flex justify-end gap-3">
         <Button variant="secondary" onClick={() => settle(false)}>
           {pending?.cancelLabel ?? "Cancel"}

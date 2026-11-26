@@ -57,13 +57,13 @@ export function RegisterTableHeader({ batch }: { batch?: RegisterBatchControls }
                 </button>
               ) : batch ? (
                 <span className="flex max-w-[110px] flex-wrap items-center gap-x-2">
-                  <button type="button" className={BATCH_LINK} disabled={batch.selectedCount === 0} onClick={batch.onEdit}>
+                  <button type="button" className={BATCH_LINK} onClick={batch.onEdit}>
                     Edit
                   </button>
-                  <button type="button" className={BATCH_LINK} disabled={batch.selectedCount === 0} onClick={batch.onDelete}>
+                  <button type="button" className={BATCH_LINK} onClick={batch.onDelete}>
                     Delete
                   </button>
-                  <button type="button" className={BATCH_LINK} disabled={batch.selectableCount === 0} onClick={batch.onToggleSelectAll}>
+                  <button type="button" className={BATCH_LINK} onClick={batch.onToggleSelectAll}>
                     {batch.selectedCount > 0 && batch.selectedCount === batch.selectableCount ? "Select none" : "Select all"}
                   </button>
                 </span>
