@@ -8,6 +8,8 @@ import {
   batchLockedReason,
   buildBatchUpdates,
   isBatchSelectable,
+  isBatchTickable,
+  skippedMessage,
   nextSequentialRef,
   summarizeBatchSelection,
   validateBatchEdit,
@@ -35,7 +37,15 @@ function entry(overrides: Partial<RegisterEntry>): RegisterEntry {
 }
 
 describe("selectability", () => {
-  test("only pending live rows can be picked", () => {
+  test("cleared and reconciled rows can be ticked, voided ones cannot", () => {
+    expect(isBatchTickable(entry({ reconcileStatus: "C" }))).toBe(true);
+    expect(isBatchTickable(entry({ reconcileStatus: "R" }))).toBe(true);
+    expect(isBatchTickable(entry({ status: "VOIDED" }))).toBe(false);
+    expect(skippedMessage(0)).toBe("");
+    expect(skippedMessage(1)).toBe("1 Reconciled or Cleared transaction will be skipped.");
+  });
+
+  test("only pending live rows are changed", () => {
     expect(isBatchSelectable(entry({}))).toBe(true);
     expect(isBatchSelectable(entry({ reconcileStatus: "C" }))).toBe(false);
     expect(isBatchSelectable(entry({ reconcileStatus: "R" }))).toBe(false);

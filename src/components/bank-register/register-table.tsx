@@ -54,6 +54,8 @@ import {
   batchLockedReason,
   buildBatchUpdates,
   isBatchSelectable,
+  isBatchTickable,
+  skippedMessage,
   summarizeBatchSelection,
   validateBatchEdit
 } from "@/lib/accounting/register-batch";
@@ -330,11 +332,14 @@ export function RegisterTable({
     });
   }, [entries]);
 
-  const selectableEntries = useMemo(() => filteredEntries.filter(isBatchSelectable), [filteredEntries]);
-  const selectedBatchEntries = useMemo(
-    () => entries.filter((entry) => batchSelectedIds.has(entry.id) && isBatchSelectable(entry)),
+  const selectableEntries = useMemo(() => filteredEntries.filter(isBatchTickable), [filteredEntries]);
+  const tickedEntries = useMemo(
+    () => entries.filter((entry) => batchSelectedIds.has(entry.id) && isBatchTickable(entry)),
     [batchSelectedIds, entries]
   );
+  // What Edit/Delete actually change: Cleared and Reconciled rows are skipped.
+  const selectedBatchEntries = useMemo(() => tickedEntries.filter(isBatchSelectable), [tickedEntries]);
+  const skippedCount = tickedEntries.length - selectedBatchEntries.length;
 
   // Scroll to and flash the Jump To Last target once its page is showing.
   useEffect(() => {
@@ -425,7 +430,7 @@ export function RegisterTable({
   }
 
   function toggleBatchEntry(entry: RegisterEntry) {
-    if (!isBatchSelectable(entry)) return;
+    if (!isBatchTickable(entry)) return;
     setLastTouchedEntryId(entry.id);
     setBatchSelectedIds((current) => {
       const next = new Set(current);
@@ -453,7 +458,7 @@ export function RegisterTable({
 
   async function confirmBatchEdit() {
     if (selectedBatchEntries.length === 0) {
-      setBatchError("Tick at least one transaction to edit.");
+      setBatchError(skippedCount > 0 ? "Reconciled and Cleared transactions can't be changed." : "Tick at least one transaction to edit.");
       return;
     }
     const problem = validateBatchEdit(batchFields, batchValues, registerAccountId);
@@ -466,6 +471,7 @@ export function RegisterTable({
       title: `Apply batch edit to ${count} transaction${count === 1 ? "" : "s"}?`,
       message:
         `Payments ${paymentTotal.toFixed(2)}, deposits ${depositTotal.toFixed(2)} are affected. ` +
+        (skippedCount > 0 ? `${skippedMessage(skippedCount)} ` : "") +
         "All changes are applied together or not at all, and the batch is one entry in Settings > Ledger > Version history if you need to undo it.",
       confirmLabel: "Confirm Batch"
     });
@@ -490,6 +496,7 @@ export function RegisterTable({
       title: "Delete transactions",
       message:
         `You are about to Delete ${count} transaction${count === 1 ? "" : "s"} totaling ${(paymentTotal + depositTotal).toFixed(2)}\n\n` +
+        (skippedCount > 0 ? `${skippedMessage(skippedCount)}\n\n` : "") +
         "Keep in mind that Reconciled and Cleared transactions will NOT delete. " +
         "The rest are deleted together or none are, and you can undo it from Settings > Ledger > Version history.\n\n" +
         "Are you sure?",
@@ -636,7 +643,7 @@ export function RegisterTable({
                   type="checkbox"
                   className="qbo-checkbox align-middle disabled:cursor-not-allowed disabled:opacity-40"
                   checked={batchSelectedIds.has(entry.id)}
-                  disabled={!isBatchSelectable(entry)}
+                  disabled={!isBatchTickable(entry)}
                   title={batchLockedReason(entry) ?? undefined}
                   aria-label={`Select transaction ${entry.refNumber || entry.date}`}
                   onClick={(event) => event.stopPropagation()}
@@ -840,7 +847,7 @@ export function RegisterTable({
       <RegisterTableHeader
         batch={{
           active: isBatchMode,
-          selectedCount: selectedBatchEntries.length,
+          selectedCount: tickedEntries.length,
           selectableCount: selectableEntries.length,
           onStart: startBatch,
           onEdit: () => {

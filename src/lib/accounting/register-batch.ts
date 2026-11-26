@@ -61,6 +61,15 @@ export function hasBatchFieldSelected(fields: BatchEditFields): boolean {
 }
 
 /**
+ * Which rows get a working checkbox. Like RightTool, that includes Cleared and
+ * Reconciled rows -- the batch then skips them (see isBatchSelectable). Voided
+ * and deleted rows are history and stay locked.
+ */
+export function isBatchTickable(entry: Pick<RegisterEntry, "status">): boolean {
+  return entry.status !== "VOIDED" && entry.status !== "DELETED";
+}
+
+/**
  * Only pending, live rows can be batch-edited or batch-deleted: the API
  * locks cleared and reconciled entries (a reversal is the correct fix there),
  * and voided/deleted rows are history.
@@ -69,13 +78,13 @@ export function isBatchSelectable(entry: Pick<RegisterEntry, "reconcileStatus" |
   return entry.reconcileStatus === "" && entry.status !== "VOIDED" && entry.status !== "DELETED";
 }
 
-/** Why a row can't be picked, for its checkbox tooltip. */
+/** Why a batch won't change a row, for its checkbox tooltip. */
 export function batchLockedReason(entry: Pick<RegisterEntry, "reconcileStatus" | "status">): string | null {
   if (isBatchSelectable(entry)) return null;
   if (entry.status === "VOIDED" || entry.status === "DELETED") return "Voided or deleted transactions can't be changed.";
   return entry.reconcileStatus === "R"
-    ? "Reconciled transactions can't be changed in a batch."
-    : "Cleared transactions can't be changed in a batch.";
+    ? "Reconciled transactions are skipped by Edit and Delete."
+    : "Cleared transactions are skipped by Edit and Delete.";
 }
 
 const TRAILING_NUMBER = /(\d+)(?!.*\d)/;
@@ -185,6 +194,12 @@ export function buildBatchUpdates(
     if (fields.reconcileStatus) update.reconcileStatus = values.reconcileStatus;
     return update;
   });
+}
+
+/** "2 Reconciled or Cleared transactions will be skipped." -- empty when none are. */
+export function skippedMessage(skipped: number): string {
+  if (skipped === 0) return "";
+  return `${skipped} Reconciled or Cleared transaction${skipped === 1 ? "" : "s"} will be skipped.`;
 }
 
 export type BatchSelectionSummary = { count: number; paymentTotal: number; depositTotal: number };
