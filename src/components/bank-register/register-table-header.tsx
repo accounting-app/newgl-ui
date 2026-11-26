@@ -51,12 +51,12 @@ export function RegisterTableHeader({ batch }: { batch?: RegisterBatchControls }
                 <button
                   type="button"
                   onClick={batch.onStart}
-                  className="rounded border border-[var(--color-button-border)] px-2 text-[12px] font-semibold uppercase text-[var(--color-text-primary)] hover:bg-[var(--color-action-standard-subtle-hover)]"
+                  className={BATCH_LINK}
                 >
                   Batch
                 </button>
               ) : batch ? (
-                <span className="flex flex-col items-start">
+                <span className="flex max-w-[110px] flex-wrap items-center gap-x-2">
                   <button type="button" className={BATCH_LINK} disabled={batch.selectedCount === 0} onClick={batch.onEdit}>
                     Edit
                   </button>

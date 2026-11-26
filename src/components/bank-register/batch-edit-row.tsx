@@ -7,6 +7,11 @@ import { Button } from "@/components/ui/button";
 import { InputField } from "@/components/ui/input-field";
 import type { BatchEditFields, BatchEditValues } from "@/lib/accounting/register-batch";
 
+// A field the batch will overwrite gets a heavy accent border, so it stands out
+// from the disabled ones that stay untouched.
+const LIVE_INPUT = "!border-2 !border-[var(--color-link-text)]";
+const liveSelect = (live: boolean) => (live ? "[&_input]:!border-2 [&_input]:!border-[var(--color-link-text)]" : "");
+
 type BatchEditRowProps = {
   fields: BatchEditFields;
   values: BatchEditValues;
@@ -60,7 +65,7 @@ export function BatchEditRow({
                 onChange={(event) => onChange({ date: event.target.value })}
                 aria-label="New date"
                 title={dateHint}
-                className="w-full"
+                className={`w-full ${fields.date ? LIVE_INPUT : ""}`}
               />
             </td>
             <td className="form-control">
@@ -72,7 +77,7 @@ export function BatchEditRow({
                 placeholder={fields.refSequential ? "e.g. 1001" : "Ref No"}
                 aria-label="New ref no."
                 title={refHint}
-                className="w-full"
+                className={`w-full ${fields.refNo ? LIVE_INPUT : ""}`}
               />
             </td>
             <td className="form-control">
@@ -80,6 +85,7 @@ export function BatchEditRow({
                 value={values.payee}
                 options={payeeOptions}
                 placeholder="Payee"
+                className={liveSelect(fields.payee)}
                 disabled={!fields.payee}
                 onChange={(value) => onChange({ payee: value })}
               />
@@ -88,6 +94,7 @@ export function BatchEditRow({
                   value={values.accountId}
                   options={accountOptions}
                   placeholder="Account"
+                  className={liveSelect(fields.account)}
                   disabled={!fields.account}
                   allowCustomValue={false}
                   onChange={(value) => onChange({ accountId: value })}
@@ -102,7 +109,7 @@ export function BatchEditRow({
                 onChange={(event) => onChange({ memo: event.target.value })}
                 placeholder={fields.memoMode === "replace" ? "Memo" : fields.memoMode === "append" ? "Text to append" : "Text to prepend"}
                 aria-label="New memo"
-                className="w-full"
+                className={`w-full ${fields.memo ? LIVE_INPUT : ""}`}
               />
             </td>
             <td className="form-control">
@@ -117,7 +124,7 @@ export function BatchEditRow({
                 disabled={!fields.reconcileStatus}
                 onClick={() => onChange({ reconcileStatus: values.reconcileStatus === "C" ? "" : "C" })}
                 aria-label="Toggle cleared"
-                className="h-9 w-full rounded border border-[var(--color-input-border-primary)] bg-[var(--color-input-background)] font-semibold disabled:cursor-not-allowed disabled:bg-[var(--color-input-disabled-background)]"
+                className={`h-9 w-full rounded-full border bg-[var(--color-input-background)] font-semibold disabled:cursor-not-allowed disabled:bg-[var(--color-input-disabled-background)] ${fields.reconcileStatus ? "border-2 border-[var(--color-link-text)]" : "border-[var(--color-input-border-primary)]"}`}
               >
                 {values.reconcileStatus || " "}
               </button>
@@ -132,7 +139,7 @@ export function BatchEditRow({
         </p>
         <div className="flex gap-2">
           <Button variant="secondary" onClick={onChooseFields} disabled={isApplying}>
-            Fields
+            Change Edit Fields
           </Button>
           <Button variant="primary" onClick={onConfirm} disabled={isApplying}>
             {isApplying ? "Applying..." : "Confirm Batch"}

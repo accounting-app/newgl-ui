@@ -627,6 +627,7 @@ export function RegisterTable({
               {isBatchMode ? (
                 <input
                   type="checkbox"
+                  className="qbo-checkbox align-middle disabled:cursor-not-allowed disabled:opacity-40"
                   checked={batchSelectedIds.has(entry.id)}
                   disabled={!isBatchSelectable(entry)}
                   title={batchLockedReason(entry) ?? undefined}
@@ -835,7 +836,12 @@ export function RegisterTable({
           selectedCount: selectedBatchEntries.length,
           selectableCount: selectableEntries.length,
           onStart: startBatch,
-          onEdit: () => setIsChoosingBatchFields(true),
+          onEdit: () => {
+            // The pink row appears right away, with the field chooser on top.
+            setIsBatchEditing(true);
+            setBatchError(null);
+            setIsChoosingBatchFields(true);
+          },
           onDelete: () => void deleteBatch(),
           onToggleSelectAll: toggleSelectAllBatch
         }}
@@ -963,11 +969,6 @@ export function RegisterTable({
         fields={batchFields}
         onChange={setBatchFields}
         onClose={() => setIsChoosingBatchFields(false)}
-        onContinue={() => {
-          setIsChoosingBatchFields(false);
-          setIsBatchEditing(true);
-          setBatchError(null);
-        }}
       />
       <PayeeSideModal
         open={isPayeeModalOpen}
