@@ -47,9 +47,8 @@ function SubOption({ label, checked, onToggle }: { label: string; checked: boole
 // "Edit" in the Batch menu: pick which fields the batch will overwrite. Ticks
 // apply at once -- the matching fields in the pink row behind light up -- so
 // "Close" is all there is to do. The values themselves are typed in that row.
-// Source Account, Class and Location are listed (they exist in RightTool) but
-// disabled: the ledger has no class or location, and moving an entry to another
-// register isn't supported by the API yet.
+// Class and Location are listed (they exist in RightTool) but disabled: the
+// ledger has neither. RightTool's "0. Source Account" is left out on purpose.
 export function BatchFieldsModal({ open, selectedCount, fields, onChange, onClose }: BatchFieldsModalProps) {
   const set = (patch: Partial<BatchEditFields>) => onChange({ ...fields, ...patch });
   const setMemoMode = (mode: BatchMemoMode, on: boolean) => set({ memo: on || fields.memo, memoMode: on ? mode : "replace" });
@@ -63,7 +62,6 @@ export function BatchFieldsModal({ open, selectedCount, fields, onChange, onClos
       size="md"
     >
       <ul>
-        <FieldRow label="0. Source Account (Move To Another Register)" checked={false} disabled hint="not available yet" onToggle={() => undefined} />
         <FieldRow label="1. Date" checked={fields.date} onToggle={(date) => set({ date, dateYearOnly: date && fields.dateYearOnly })}>
           <SubOption label="Change Year Only" checked={fields.dateYearOnly} onToggle={(on) => set({ date: on || fields.date, dateYearOnly: on })} />
         </FieldRow>
