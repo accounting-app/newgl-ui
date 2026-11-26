@@ -25,7 +25,7 @@ import {
 } from "@/constants/ui";
 import type { Account, RegisterEntry } from "@/modules/accounting/domain/models";
 import {
-  nextReconcileStatus
+  nextEditorReconcileStatus
 } from "@hooks/use-bank-register";
 import type {
   DraftSplitLine,
@@ -62,6 +62,8 @@ import {
 import type { BatchEditFields, BatchEditValues } from "@/lib/accounting/register-batch";
 
 type RegisterTableProps = {
+  /** Changes only the reconcile mark -- the one thing allowed on a C or R entry. */
+  onSetReconcileStatus: (entryId: string, status: RegisterEntry["reconcileStatus"]) => Promise<void>;
   entries: RegisterEntry[];
   /** Shown on the left of the top pagination row ("Reconciled through ..."). */
   topLeft?: React.ReactNode;
@@ -132,6 +134,7 @@ function formatTransactionTypeLabel(transactionType: RegisterEntry["transactionT
 }
 
 export function RegisterTable({
+  onSetReconcileStatus,
   entries,
   topLeft,
   deepLinkTransactionId,
@@ -534,7 +537,7 @@ export function RegisterTable({
   }
 
   function cycleEditorReconcileStatus() {
-    setEditor((current) => ({ ...current, reconcileStatus: nextReconcileStatus(current.reconcileStatus) }));
+    setEditor((current) => ({ ...current, reconcileStatus: nextEditorReconcileStatus(current.reconcileStatus) }));
   }
 
   function openPayeeModal(target: "draft" | "row") {
@@ -547,8 +550,37 @@ export function RegisterTable({
     setIsAccountModalOpen(true);
   }
 
+  // Marking R by hand has no statement behind it, so ask first.
+  function confirmHandReconcile() {
+    return requestConfirmation({
+      title: "Mark as reconciled?",
+      message:
+        "This transaction will be marked R without a bank statement. It will count toward the account's reconciled balance, " +
+        "and it will be locked until you change the mark back.\n\nAre you sure?",
+      confirmLabel: "OK"
+    });
+  }
+
   async function handleSaveRow() {
     if (!selectedEntryId) return;
+    const current = entries.find((item) => item.id === selectedEntryId)?.reconcileStatus ?? "";
+    const becomesReconciled = editor.reconcileStatus === "R" && current !== "R";
+    // A Cleared or Reconciled entry is locked: only its mark can be saved.
+    if (current !== "") {
+      if (editor.reconcileStatus === current) return;
+      if (becomesReconciled && !(await confirmHandReconcile())) return;
+      try {
+        setIsSavingRow(true);
+        setRowError(null);
+        await onSetReconcileStatus(selectedEntryId, editor.reconcileStatus);
+        setSelectedEntryId(null);
+      } catch (error) {
+        setRowError(error instanceof Error ? error.message : "Failed to save changes.");
+      } finally {
+        setIsSavingRow(false);
+      }
+      return;
+    }
     const payment = Number(editor.payment || 0);
     const deposit = Number(editor.deposit || 0);
     if (!editor.date) {
@@ -559,6 +591,7 @@ export function RegisterTable({
       setRowError("Use only payment or deposit and provide one amount.");
       return;
     }
+    if (becomesReconciled && !(await confirmHandReconcile())) return;
     try {
       setIsSavingRow(true);
       setRowError(null);

@@ -46,6 +46,7 @@ function BankRegisterLayoutInner() {
     cancelDraftTransaction,
     cycleDraftReconcileStatus,
     cycleReconcileStatus,
+    setEntryReconcileStatus,
     deleteRegisterEntryInline,
     batchUpdateRegisterEntries,
     batchDeleteRegisterEntries,
@@ -264,6 +265,7 @@ function BankRegisterLayoutInner() {
           onBatchDelete={batchDeleteRegisterEntries}
           registerAccountId={selectedAccountId}
           onCycleReconcileStatus={cycleReconcileStatus}
+          onSetReconcileStatus={setEntryReconcileStatus}
           accountOptions={accountOptions}
           accounts={accounts}
           onCreateAccount={createAccount}

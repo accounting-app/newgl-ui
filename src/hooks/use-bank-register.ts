@@ -66,6 +66,12 @@ export type InlineEntryEditorInput = {
   reconcileStatus: ReconcileStatus;
 };
 
+/** The edit row's ✓ cell cycles all three, as in QBO: blank -> C -> R -> blank. */
+export function nextEditorReconcileStatus(current: ReconcileStatus): ReconcileStatus {
+  if (current === "") return "C";
+  return current === "C" ? "R" : "";
+}
+
 export function nextReconcileStatus(current: ReconcileStatus): ReconcileStatus {
   if (current === "") return "C";
   // "R" is only ever set by finishing a reconciliation, never by hand.
@@ -602,6 +608,14 @@ export function useBankRegister() {
     [refreshAccounts, refreshEntries, services.registerService]
   );
 
+  const setEntryReconcileStatus = useCallback(
+    async (entryId: string, status: ReconcileStatus) => {
+      await services.registerService.setReconcileStatus(entryId, status);
+      await refreshEntries();
+    },
+    [refreshEntries, services.registerService]
+  );
+
   const cycleDraftReconcileStatus = useCallback(() => {
     setDraftTransaction((current) =>
       current ? { ...current, reconcileStatus: nextReconcileStatus(current.reconcileStatus) } : current
@@ -671,6 +685,7 @@ export function useBankRegister() {
     cancelDraftTransaction,
     cycleDraftReconcileStatus,
     cycleReconcileStatus,
+    setEntryReconcileStatus,
     deleteRegisterEntryInline,
     updateRegisterEntryInline,
     batchUpdateRegisterEntries,

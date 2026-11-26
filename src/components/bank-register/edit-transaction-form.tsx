@@ -134,8 +134,8 @@ export function EditTransactionForm({
       <div className="form-transaction-row-bottom flex items-center justify-end gap-2">
         {locked ? (
           <p className="mb-1 mr-auto text-xs text-amber-600">
-            This transaction is {lockedLabel} and is locked. Clear the reconcile mark on the row to
-            edit it, or create a reversal.
+            This transaction is {lockedLabel} and is locked: only the ✓ mark can be changed here. Set it to
+            blank and save to edit the rest, or create a reversal.
           </p>
         ) : null}
         {rowError ? <p className="mb-1 text-xs text-[var(--color-negative)]">{rowError}</p> : null}
@@ -154,7 +154,7 @@ export function EditTransactionForm({
         </Button>
         <Button
           variant="primary"
-          disabled={isDeletingRow || isSavingRow || locked}
+          disabled={isDeletingRow || isSavingRow || (locked && editor.reconcileStatus === (entry.reconcileStatus ?? ""))}
           onClick={onSave}
         >
           {isSavingRow ? "Saving..." : "Save"}
