@@ -9,6 +9,8 @@ export type ConfirmOptions = {
   message: string;
   confirmLabel?: string;
   cancelLabel?: string;
+  /** QBO's delete warning: a red "!" beside the message, No on the left and Yes on the right. */
+  warning?: boolean;
 };
 
 type Pending = ConfirmOptions & { resolve: (confirmed: boolean) => void };
@@ -43,6 +45,27 @@ export function ConfirmDialogHost() {
   function settle(confirmed: boolean) {
     pending?.resolve(confirmed);
     setPending(null);
+  }
+
+  if (pending?.warning) {
+    return (
+      <Modal open onClose={() => settle(false)} hideHeader size="sm">
+        <div className="flex items-center gap-4 px-3 pb-6 pt-4">
+          <span aria-hidden="true" className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[#d52b1e] text-3xl font-bold text-white">
+            !
+          </span>
+          <p className="text-base leading-6 text-[var(--color-text-global)]">{pending.message}</p>
+        </div>
+        <div className="flex justify-between gap-3 border-t border-[var(--color-divider-tertiary)] px-3 pt-5">
+          <Button variant="secondary" onClick={() => settle(false)} className="min-w-[80px]">
+            {pending.cancelLabel ?? "No"}
+          </Button>
+          <Button variant="primary" onClick={() => settle(true)} className="min-w-[80px]">
+            {pending.confirmLabel ?? "Yes"}
+          </Button>
+        </div>
+      </Modal>
+    );
   }
 
   return (

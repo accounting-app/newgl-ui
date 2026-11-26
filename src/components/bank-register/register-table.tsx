@@ -606,6 +606,12 @@ export function RegisterTable({
 
   async function handleDeleteRow() {
     if (!selectedEntryId) return;
+    const confirmed = await requestConfirmation({
+      title: "Delete transaction",
+      message: "Are you sure you want to delete this transaction?",
+      warning: true
+    });
+    if (!confirmed) return;
     try {
       setIsDeletingRow(true);
       setRowError(null);
