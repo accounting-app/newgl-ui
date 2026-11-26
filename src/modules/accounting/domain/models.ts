@@ -103,7 +103,9 @@ export const auditLogEntrySchema = z.object({
 export const transactionPostingInputSchema = z.object({
   accountId: z.string().uuid(),
   type: postingEntryTypeSchema,
-  amount: z.number().min(0.01)
+  amount: z.number().min(0.01),
+  /** The form line's Description. */
+  description: z.string().optional()
 });
 
 export const transactionSchema = z.object({
@@ -117,6 +119,7 @@ export const transactionSchema = z.object({
   memo: z.string().optional(),
   payee: z.string().optional(),
   accountLabel: z.string().optional(),
+  paymentMethod: z.string().optional(),
   sourceAccountId: z.string().uuid().optional(),
   reconcileStatus: reconcileStatusSchema.optional(),
   periodId: z.string().optional(),
@@ -213,6 +216,7 @@ export type UpdateAccountInput = Partial<
 
 export type CreateTransactionInput = Pick<
   Transaction,
+  | "paymentMethod"
   | "type"
   | "transactionDate"
   | "dueDate"

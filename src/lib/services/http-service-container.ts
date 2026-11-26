@@ -224,6 +224,10 @@ export class HttpTransactionService implements TransactionService {
     return request(this.baseUrl, `/transactions/${id}`);
   }
 
+  updateTransaction(id: string, input: Omit<CreateTransactionInput, "type" | "reconcileStatus">): Promise<Transaction> {
+    return request(this.baseUrl, `/transactions/${id}`, { method: "PUT", body: JSON.stringify(input) });
+  }
+
   listTransactions(filter?: ListTransactionsFilter): Promise<Transaction[]> {
     const params = new URLSearchParams();
     if (filter?.status) params.set("status", filter.status);

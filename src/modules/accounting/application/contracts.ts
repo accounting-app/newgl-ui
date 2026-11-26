@@ -32,6 +32,8 @@ export interface AccountService {
 export interface TransactionService {
   createTransaction(input: CreateTransactionInput): Promise<Transaction>;
   getTransactionById(id: string): Promise<Transaction>;
+  /** Re-saves a transaction from its full form: header and lines are replaced. */
+  updateTransaction(id: string, input: Omit<CreateTransactionInput, "type" | "reconcileStatus">): Promise<Transaction>;
   listTransactions(filter?: ListTransactionsFilter): Promise<Transaction[]>;
   postTransaction(id: string): Promise<Transaction>;
   voidTransaction(id: string): Promise<Transaction>;

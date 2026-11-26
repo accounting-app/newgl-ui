@@ -15,6 +15,7 @@ import { SelectField } from "@/components/bank-register/select-field";
 import type { SelectFieldOption } from "@/components/bank-register/select-field";
 import { TablePagination } from "@/components/bank-register/table-pagination";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { BookOpenText, Database, Download, FileUp, Funnel, Printer, Settings } from "lucide-react";
 import { IconButton } from "@/components/ui/icon-button";
 import { Tooltip } from "@/components/ui/tooltip";
@@ -115,6 +116,12 @@ const money = (value: number) => MONEY.format(value);
 // The register shows dates as MM/DD/YYYY, like QBO (entries carry ISO dates).
 const displayDate = (iso: string) => (/^\d{4}-\d{2}-\d{2}/.test(iso) ? `${iso.slice(5, 7)}/${iso.slice(8, 10)}/${iso.slice(0, 4)}` : iso);
 
+/** Transaction types whose full form can load and re-save an existing one. */
+const FULL_FORM_PATHS: Partial<Record<RegisterEntry["transactionType"], string>> = {
+  EXPENSE: "/expense",
+  CHECK: "/check"
+};
+
 function rowStyle(status: RegisterEntry["status"]): string {
   if (status === "VOIDED" || status === "DELETED") {
     return "line-through text-[var(--color-text-disabled)]";
@@ -195,6 +202,7 @@ export function RegisterTable({
   const [currentPage, setCurrentPage] = useState<number>(1);
   const appliedDeepLinkRef = useRef(false);
   const { toast } = useToast();
+  const router = useRouter();
   const topRef = useRef<HTMLDivElement>(null);
 
   // Batch mode: BATCH -> tick rows -> EDIT (pick fields, fill the pink row,
@@ -604,6 +612,16 @@ export function RegisterTable({
     }
   }
 
+  // "Edit" opens the full form for the transaction's type, as in QBO.
+  function openFullForm(entry: RegisterEntry) {
+    const path = FULL_FORM_PATHS[entry.transactionType];
+    if (!path) {
+      toast({ variant: "info", title: `Editing a ${formatTransactionTypeLabel(entry.transactionType)} in its full form isn't available yet` });
+      return;
+    }
+    router.push(`${path}?txnId=${encodeURIComponent(entry.transactionId)}&rt=close`);
+  }
+
   async function handleDeleteRow() {
     if (!selectedEntryId) return;
     const confirmed = await requestConfirmation({
@@ -985,6 +1003,7 @@ export function RegisterTable({
                           onOpenPayeeModal={() => openPayeeModal("row")}
                           onOpenAccountModal={() => openAccountModal("row")}
                           onDelete={handleDeleteRow}
+                          onEdit={() => openFullForm(selectedEntry)}
                           onCancel={() => {
                             setSelectedEntryId(null);
                             setRowError(null);

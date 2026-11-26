@@ -23,6 +23,8 @@ type EditTransactionFormProps = {
   onOpenPayeeModal: () => void;
   onOpenAccountModal: () => void;
   onDelete: () => void;
+  /** Opens the transaction in its full form. */
+  onEdit: () => void;
   onCancel: () => void;
   onSave: () => void;
 };
@@ -42,6 +44,7 @@ export function EditTransactionForm({
   onOpenPayeeModal,
   onOpenAccountModal,
   onDelete,
+  onEdit,
   onCancel,
   onSave
 }: EditTransactionFormProps) {
@@ -146,7 +149,7 @@ export function EditTransactionForm({
         >
           Delete
         </Button>
-        <Button variant="secondary" disabled={isDeletingRow || isSavingRow} onClick={() => undefined}>
+        <Button variant="secondary" disabled={isDeletingRow || isSavingRow} onClick={onEdit}>
           Edit
         </Button>
         <Button variant="secondary" disabled={isDeletingRow || isSavingRow} onClick={onCancel}>

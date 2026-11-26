@@ -1,5 +1,6 @@
 "use client";
 
+import { LinkedFiles } from "@/components/accounting/linked-files";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ChevronDown, ChevronUp, ClipboardPaste, Copy, GripVertical, Plus, Settings, SquareArrowOutUpRight, Trash2, X } from "lucide-react";
@@ -23,7 +24,7 @@ import { advanceRecurring, createRecurring, listRecurring, updateRecurring } fro
 import type { RecurringTemplate } from "@/lib/services/recurring-service";
 import { RecurringIntervalRow, RecurringNameRow, useRecurringTemplate } from "@/components/accounting/recurring-template-fields";
 import { getServiceContainer } from "@/lib/services/service-container-v2";
-import type { Account } from "@/modules/accounting/domain/models";
+import type { Account, Transaction } from "@/modules/accounting/domain/models";
 
 type Line = { id: string; categoryAccountId: string; description: string; amount: string };
 
@@ -94,6 +95,10 @@ export function ExpenseFormPage({ kind = "expense" }: { kind?: "expense" | "chec
   const [newMethod, setNewMethod] = useState("");
   const [accountModalOpen, setAccountModalOpen] = useState(false);
   const attachments = useFormAttachments();
+  // ?txnId=<id> opens a saved Expense/Check to edit it (the register's "Edit").
+  const txnId = params.get("txnId");
+  const [loaded, setLoaded] = useState<Transaction | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [saveMenuOpen, setSaveMenuOpen] = useState(false);
   const saveMenuRef = useRef<HTMLDivElement>(null);
   const [panel, setPanel] = useState<"copy" | "settings" | null>(null);
@@ -124,7 +129,7 @@ export function ExpenseFormPage({ kind = "expense" }: { kind?: "expense" | "chec
   }, [templateParam]);
 
   useEffect(() => {
-    if (!isCheck) return;
+    if (!isCheck || params.get("txnId")) return;
     try {
       const stored = Number(window.localStorage.getItem(CHECK_NEXT_KEY));
       if (Number.isInteger(stored) && stored > 0) setCheckNo(String(stored));
@@ -193,8 +198,9 @@ export function ExpenseFormPage({ kind = "expense" }: { kind?: "expense" | "chec
     return () => document.removeEventListener("mousedown", onDown);
   }, [saveMenuOpen]);
 
-  const paymentAccounts = useMemo(() => accounts.filter((a) => (isCheck ? a.category === "BANK" : PAYMENT_CATEGORIES.has(a.category))).sort((a, b) => a.name.localeCompare(b.name)), [accounts, isCheck]);
-  const methodOptions = useMemo(() => [...new Set([...DEFAULT_METHODS, ...customMethods])].sort((a, b) => a.localeCompare(b)).map((m) => ({ value: m, label: m })), [customMethods]);
+  const savedSourceId = loaded?.sourceAccountId;
+  const paymentAccounts = useMemo(() => accounts.filter((a) => a.id === savedSourceId || (isCheck ? a.category === "BANK" : PAYMENT_CATEGORIES.has(a.category))).sort((a, b) => a.name.localeCompare(b.name)), [accounts, isCheck, savedSourceId]);
+  const methodOptions = useMemo(() => [...new Set([...DEFAULT_METHODS, ...customMethods, ...(method ? [method] : [])])].sort((a, b) => a.localeCompare(b)).map((m) => ({ value: m, label: m })), [customMethods, method]);
   const payeeRecord = useMemo(() => vendors.find((v) => v.name === payee) ?? customers.find((c) => c.name === payee), [vendors, customers, payee]);
   const paymentAccount = accounts.find((a) => a.id === paymentAccountId);
   useEffect(() => {
@@ -202,7 +208,8 @@ export function ExpenseFormPage({ kind = "expense" }: { kind?: "expense" | "chec
   }, [isCheck, payeeRecord]);
   // If no (or an unknown) rtAccountId came in, default to the first bank/card account once loaded.
   useEffect(() => {
-    if (accounts.length === 0 || paymentAccount) return;
+    // Never swap in a default while editing: it would silently move the transaction.
+    if (params.get("txnId") || accounts.length === 0 || paymentAccount) return;
     if (paymentAccounts[0]) setPaymentAccountId(paymentAccounts[0].id);
   }, [accounts, paymentAccount, paymentAccounts]);
 
@@ -211,17 +218,52 @@ export function ExpenseFormPage({ kind = "expense" }: { kind?: "expense" | "chec
     () => accounts.filter((a) => a.id !== paymentAccountId).map((a) => ({ value: a.id, label: a.name, rightLabel: ACCOUNT_CATEGORY_LABELS[a.category] })),
     [accounts, paymentAccountId]
   );
-  const payeeOptions = useMemo(
-    () => [
+  const payeeOptions = useMemo(() => {
+    const contacts = [
       ...vendors.map((v) => ({ value: v.name, label: v.name, rightLabel: "Vendor" })),
       ...customers.map((c) => ({ value: c.name, label: c.name, rightLabel: "Customer" }))
-    ],
-    [vendors, customers]
-  );
+    ];
+    return payee && !contacts.some((c) => c.value === payee) ? [{ value: payee, label: payee, rightLabel: "" }, ...contacts] : contacts;
+  }, [vendors, customers, payee]);
   const totalCents = lines.reduce((sum, l) => sum + cents(l.amount), 0);
   const categoryName = (id: string) => accounts.find((a) => a.id === id)?.name ?? "";
 
   const closePage = () => leaveFormPage(router);
+
+  useEffect(() => {
+    if (!txnId) return;
+    let cancelled = false;
+    services.transactionService
+      .getTransactionById(txnId)
+      .then((txn) => {
+        if (cancelled) return;
+        if (txn.type !== (isCheck ? "CHECK" : "EXPENSE")) return setLoadError(`This transaction isn't ${isCheck ? "a check" : "an expense"}.`);
+        // The paying account is the source; every other line must be a debit for this form to show it.
+        const sourceId = txn.sourceAccountId ?? txn.postings.find((p) => p.type === "CREDIT")?.accountId;
+        const categoryLines = txn.postings.filter((p) => !(p.accountId === sourceId && p.type === "CREDIT"));
+        if (!sourceId || categoryLines.length !== txn.postings.length - 1 || categoryLines.some((p) => p.type !== "DEBIT")) {
+          return setLoadError("This transaction has lines this form can't show. Edit it from the register or as a journal entry.");
+        }
+        setLoaded({ ...txn, sourceAccountId: sourceId });
+        setPaymentAccountId(sourceId);
+        setPayee(txn.payee ?? "");
+        setDate(txn.transactionDate);
+        setMethod(txn.paymentMethod ?? "");
+        if (isCheck) setCheckNo(txn.referenceNumber ?? "");
+        else setRefNo(txn.referenceNumber ?? "");
+        setMemo(txn.memo ?? "");
+        const next = categoryLines.map((p) => ({ ...blankLine(), categoryAccountId: p.accountId, description: p.description ?? "", amount: p.amount.toFixed(2) }));
+        while (next.length < 2) next.push(blankLine());
+        setLines(next);
+      })
+      .catch((err) => {
+        if (!cancelled) setLoadError(err instanceof Error ? err.message : "Could not load this transaction.");
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [txnId]);
 
   function resetForm() {
     setPayee("");
@@ -248,8 +290,9 @@ export function ExpenseFormPage({ kind = "expense" }: { kind?: "expense" | "chec
     setError(null);
     try {
       const total = totalCents / 100;
-      const created = await services.transactionService.createTransaction({
-        type: isCheck ? "CHECK" : "EXPENSE",
+      if (txnId && !loaded) throw new Error(loadError ?? "This transaction is still loading.");
+      const body = {
+        paymentMethod: method || undefined,
         transactionDate: date,
         referenceNumber: (isCheck ? checkNo : refNo).trim() || undefined,
         memo: memo.trim() || undefined,
@@ -257,10 +300,19 @@ export function ExpenseFormPage({ kind = "expense" }: { kind?: "expense" | "chec
         accountLabel: used.length > 1 ? "Split" : categoryName(used[0].categoryAccountId),
         sourceAccountId: paymentAccount.id,
         postings: [
-          ...used.map((l) => ({ accountId: l.categoryAccountId, type: "DEBIT" as const, amount: cents(l.amount) / 100 })),
+          ...used.map((l) => ({ accountId: l.categoryAccountId, type: "DEBIT" as const, amount: cents(l.amount) / 100, description: l.description.trim() || undefined })),
           { accountId: paymentAccount.id, type: "CREDIT" as const, amount: total }
         ]
-      });
+      };
+      if (loaded) {
+        const saved = await services.transactionService.updateTransaction(loaded.id, { ...body, dueDate: loaded.dueDate });
+        setLoaded({ ...saved, sourceAccountId: paymentAccount.id });
+        toast({ variant: "success", title: isCheck ? "Check saved" : "Expense saved" });
+        if (after === "close") closePage();
+        else services.accountService.listAccounts().then(setAccounts).catch(() => undefined);
+        return;
+      }
+      const created = await services.transactionService.createTransaction({ ...body, type: isCheck ? "CHECK" : "EXPENSE" });
       await services.transactionService.postTransaction(created.id);
       await attachments.linkTo(created.id).catch(() => toast({ variant: "error", title: "Saved, but the attachments could not be linked" }));
       if (useTplId) await advanceRecurring(useTplId).catch(() => undefined);
@@ -436,7 +488,7 @@ export function ExpenseFormPage({ kind = "expense" }: { kind?: "expense" | "chec
     <>
         <div className="flex items-center gap-3">
           <Button variant="secondary" className="!rounded-md" onClick={closePage}>Cancel</Button>
-          <Button variant="secondary" className="!rounded-md" onClick={resetForm}>Clear</Button>
+          {txnId ? null : <Button variant="secondary" className="!rounded-md" onClick={resetForm}>Clear</Button>}
         </div>
         <div className="flex items-center gap-8 text-base">
           {isCheck ? (
@@ -449,12 +501,14 @@ export function ExpenseFormPage({ kind = "expense" }: { kind?: "expense" | "chec
           {isCheck ? <button type="button" disabled title="More options aren't available yet" className="cursor-not-allowed text-[var(--color-text-disabled)]">More</button> : null}
         </div>
         <div className="flex items-center gap-3">
-          <Button variant="secondary" className="!rounded-md" disabled={saving} onClick={() => void save("stay")}>Save</Button>
+          <Button variant="secondary" className="!rounded-md" disabled={saving || Boolean(txnId && !loaded)} onClick={() => void save("stay")}>Save</Button>
           <div ref={saveMenuRef} className="relative inline-flex">
-            <Button className="!rounded-l-md !rounded-r-none" disabled={saving} onClick={() => void save("close")}>{saving ? "Saving..." : "Save and close"}</Button>
-            <Button className="!rounded-l-none !rounded-r-md border-l border-l-white/30 !min-w-0 px-2" aria-label="More save options" disabled={saving} onClick={() => setSaveMenuOpen((v) => !v)}>
-              <ChevronDown className="h-4 w-4" aria-hidden="true" />
-            </Button>
+            <Button className={txnId ? "!rounded-md" : "!rounded-l-md !rounded-r-none"} disabled={saving || Boolean(txnId && !loaded)} onClick={() => void save("close")}>{saving ? "Saving..." : "Save and close"}</Button>
+            {txnId ? null : (
+              <Button className="!rounded-l-none !rounded-r-md border-l border-l-white/30 !min-w-0 px-2" aria-label="More save options" disabled={saving} onClick={() => setSaveMenuOpen((v) => !v)}>
+                <ChevronDown className="h-4 w-4" aria-hidden="true" />
+              </Button>
+            )}
             {saveMenuOpen ? (
               <div className="absolute bottom-full right-0 mb-1 w-40 rounded-lg border border-[var(--color-divider-tertiary)] bg-[var(--color-container-background-primary)] py-1 shadow-lg">
                 <button type="button" onClick={() => void save("stay")} className="block w-full px-3 py-1.5 text-left text-sm text-[var(--color-text-global)] hover:bg-[var(--color-action-passive-subtle-hover)]">Save and new</button>
@@ -467,7 +521,12 @@ export function ExpenseFormPage({ kind = "expense" }: { kind?: "expense" | "chec
 
   return (
     <FullScreenFormShell
-      title={isCheck ? `Check #${checkNo}` : "Expense"}
+      title={
+        <>
+          {isCheck ? `Check #${checkNo}` : "Expense"}
+          {loaded?.reconcileStatus === "R" ? <span className="text-lg text-[var(--color-negative)]">(Reconciled)</span> : null}
+        </>
+      }
       onClose={closePage}
       toolbar={
         tpl.active ? null : <button type="button" onClick={() => setPanel("copy")} className="flex h-9 items-center gap-1.5 rounded-md px-2 text-sm text-[var(--color-text-global)] hover:bg-[var(--color-action-passive-subtle-hover)]">
@@ -682,11 +741,18 @@ export function ExpenseFormPage({ kind = "expense" }: { kind?: "expense" | "chec
               </div>
             </div>
             <div className="w-[520px] max-w-full">
-              <AttachmentsField attachments={attachments} formLabel="Expense" />
+              {txnId ? (
+                <>
+                  <span className={LABEL}>Attachments</span>
+                  {loaded ? <LinkedFiles zone="forms" linkedId={loaded.id} /> : null}
+                </>
+              ) : (
+                <AttachmentsField attachments={attachments} formLabel="Expense" />
+              )}
             </div>
           </div>
         </section>
-        {error ? <p className="mt-3 text-sm text-[var(--color-negative)]" role="alert">{error}</p> : null}
+        {error ?? loadError ? <p className="mt-3 text-sm text-[var(--color-negative)]" role="alert">{error ?? loadError}</p> : null}
       </div>
 
 

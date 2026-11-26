@@ -8,7 +8,7 @@ const ICON_BUTTON = "flex h-9 items-center gap-1.5 rounded-md px-2 text-sm text-
 export const RT_TOOLBAR_LINK = "px-1 text-sm font-semibold text-[var(--color-negative)] hover:underline";
 
 type Props = {
-  title: string;
+  title: React.ReactNode;
   onClose: () => void;
   /** RightTool links shown between the red icons and Feedback (Export CSV, Paste Excel, Copy...). */
   toolbar?: React.ReactNode;
