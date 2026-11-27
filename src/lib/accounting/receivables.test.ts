@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { Account, Transaction } from "@/modules/accounting/domain/models";
-import { findReceivableAccount, unappliedPayments } from "./receivables";
+import { appliedByTransaction, findReceivableAccount, unappliedPayments } from "./receivables";
 
 const account = (id: string, name: string, category: Account["category"]) => ({ id, name, category, status: "ACTIVE" }) as Account;
 const accounts = [account("bank", "Cash", "BANK"), account("ar2", "Accounts Receivable (A/R)", "ACCOUNTS_RECEIVABLE"), account("ar", "Accounts Receivable", "ACCOUNTS_RECEIVABLE")];
@@ -24,15 +24,23 @@ describe("findReceivableAccount", () => {
 });
 
 describe("unappliedPayments", () => {
-  test("lists only the customer's posted payments that no invoice used", () => {
+  test("lists what the customer's posted payments have left over", () => {
     const transactions = [
       payment("open"),
       payment("applied"),
+      payment("part"),
       payment("voided", { status: "VOIDED" }),
       payment("other", { payee: "Jane" }),
       payment("income", {}, "bank")
     ];
-    expect(unappliedPayments(transactions, accounts, new Set(["applied"]), "John Doe")).toEqual([{ id: "open", date: "2026-11-27", amount: 90 }]);
+    const applied = appliedByTransaction([
+      { payments: [{ transactionId: "applied", amount: 90 }, { transactionId: "part", amount: 30 }] },
+      { payments: [{ transactionId: "part", amount: 20 }] }
+    ]);
+    expect(unappliedPayments(transactions, accounts, applied, "John Doe")).toEqual([
+      { id: "open", date: "2026-11-27", original: 90, amount: 90 },
+      { id: "part", date: "2026-11-27", original: 90, amount: 40 }
+    ]);
   });
 });
 
@@ -47,6 +55,6 @@ describe("unappliedPayments for a vendor", () => {
         { accountId: "bank", type: "CREDIT", amount: 400 }
       ]
     } as Transaction;
-    expect(unappliedPayments([billPayment, payment("received")], [...accounts, payable], new Set(), "John Doe", "vendor")).toEqual([{ id: "bp", date: "2026-11-27", amount: 400 }]);
+    expect(unappliedPayments([billPayment, payment("received")], [...accounts, payable], new Map(), "John Doe", "vendor")).toEqual([{ id: "bp", date: "2026-11-27", original: 400, amount: 400 }]);
   });
 });

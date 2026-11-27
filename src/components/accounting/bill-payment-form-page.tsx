@@ -6,7 +6,7 @@ import { ChevronDown, ChevronUp } from "lucide-react";
 import { AttachmentsField } from "@/components/accounting/attachments-field";
 import { MoreMenu, useTransactionPrint } from "@/components/accounting/transaction-actions";
 import { FullScreenFormShell, leaveFormPage } from "@/components/accounting/full-screen-form-shell";
-import { CHECKBOX, ListCount, ListTools, PAYMENT_BOX, RT_BUTTON, SECTION_TITLE, TD, TH } from "@/components/accounting/payment-form-parts";
+import { CHECKBOX, CreditsTable, ListCount, ListTools, OpenDocumentsTable, RT_BUTTON, SECTION_TITLE } from "@/components/accounting/payment-form-parts";
 import { AddAccountModal } from "@/components/bank-register/add-account-modal";
 import { Button } from "@/components/ui/button";
 import { DateField } from "@/components/ui/date-field";
@@ -15,11 +15,13 @@ import { Select } from "@/components/ui/select";
 import { useToast } from "@/components/ui/toast/toast-context";
 import { nextAccountCode } from "@/lib/accounting/next-account-code";
 import { nextCheckNumber } from "@/lib/accounting/next-check-number";
-import { findPayableAccount, unappliedPayments } from "@/lib/accounting/receivables";
+import { allocationProblem, planApplications } from "@/lib/accounting/payment-allocation";
+import { appliedByTransaction, findPayableAccount, unappliedPayments } from "@/lib/accounting/receivables";
 import { useFormAttachments } from "@/lib/hooks/use-form-attachments";
+import { cents, usePaymentAllocation } from "@/lib/hooks/use-payment-allocation";
 import { CANNOT_SHOW, formDetails, useSavedTransaction } from "@/lib/hooks/use-saved-transaction";
 import { useVendors } from "@/lib/hooks/use-vendors";
-import { listBills, payBill } from "@/lib/services/bills-service";
+import { applyBillPayment, listBills } from "@/lib/services/bills-service";
 import type { Bill } from "@/lib/services/bills-service";
 import { getServiceContainer } from "@/lib/services/service-container-v2";
 import type { Account, Transaction } from "@/modules/accounting/domain/models";
@@ -30,14 +32,14 @@ const OUTLINE_BUTTON = "rounded-md border-2 border-[var(--color-ui-primary)] px-
 const FOOTER_LINK = "text-base font-medium text-[var(--color-text-global)] hover:underline disabled:cursor-not-allowed disabled:opacity-60";
 const FOOTER_RT = "text-base font-bold text-[var(--color-negative)] disabled:cursor-not-allowed disabled:opacity-60";
 
-const cents = (value: number | string) => Math.round((Number(value) || 0) * 100);
 const money = (value: number) => value.toLocaleString("en-US", { style: "currency", currency: "USD" });
 const usDate = (iso: string) => `${iso.slice(5, 7)}/${iso.slice(8, 10)}/${iso.slice(0, 4)}`;
 
 // QBO's full-screen Bill Payment (/billpayment?rtAccountId=...&rt=close). Save
-// pays each ticked open bill in full (the ledger has no partial payments) and
-// keeps anything left over as an unapplied payment: payables debited, the bank
-// or card credited. ?txnId= edits a saved payment; the bills it paid stay paid.
+// posts one payment (payables debited, the bank or card credited) and applies
+// it, with any credits used, to the ticked bills, in whole or in part. Money
+// not applied stays as an unapplied payment. ?txnId= edits a saved payment and
+// can apply what it has left.
 export function BillPaymentFormPage() {
   const router = useRouter();
   const params = useSearchParams();
@@ -57,9 +59,7 @@ export function BillPaymentFormPage() {
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [refNo, setRefNo] = useState("");
   const [printLater, setPrintLater] = useState(false);
-  const [amount, setAmount] = useState("");
   const [amountFocused, setAmountFocused] = useState(false);
-  const [picked, setPicked] = useState<Set<string>>(new Set());
   const [memo, setMemo] = useState("");
   const [billSearch, setBillSearch] = useState("");
   const [creditSearch, setCreditSearch] = useState("");
@@ -103,13 +103,18 @@ export function BillPaymentFormPage() {
     setMailing(txn.details?.mailing ?? "");
     setPrintLater(txn.details?.printLater === "1");
     setMemo(txn.memo ?? "");
-    setAmount(credits[0].amount.toFixed(2));
+    allocation.setAmount(credits[0].amount.toFixed(2));
     void attachments.loadLinked(txn.id).catch(() => toast({ variant: "error", title: "Could not load the attachments" }));
   });
   const savedSourceId = loaded?.postings.find((p) => p.type === "CREDIT")?.accountId;
-  // The bills this saved payment paid. While there are any, its amount and payee are fixed.
-  const paidByThis = useMemo(() => (txnId ? bills.filter((b) => b.paymentTransactionId === txnId) : []), [txnId, bills]);
-  const amountLocked = Boolean(txnId) && (!billsLoaded || paidByThis.length > 0);
+  // The bills this saved payment is applied to. While there are any, its amount and payee are fixed.
+  const appliedHere = useMemo(() => {
+    const map = new Map<string, number>();
+    if (txnId) for (const bill of bills) for (const payment of bill.payments) if (payment.transactionId === txnId) map.set(bill.id, (map.get(bill.id) ?? 0) + cents(payment.amount));
+    return map;
+  }, [txnId, bills]);
+  const appliedHereCents = [...appliedHere.values()].reduce((sum, value) => sum + value, 0);
+  const amountLocked = Boolean(txnId) && (!billsLoaded || appliedHereCents > 0);
 
   const paymentAccounts = useMemo(() => accounts.filter((a) => a.id === savedSourceId || (a.status === "ACTIVE" && PAYMENT_CATEGORIES.has(a.category))).sort((a, b) => a.name.localeCompare(b.name)), [accounts, savedSourceId]);
   const paymentAccount = accounts.find((a) => a.id === accountId);
@@ -146,59 +151,47 @@ export function BillPaymentFormPage() {
   const accountOptions = useMemo(() => paymentAccounts.map((a) => ({ value: a.id, label: a.name })), [paymentAccounts]);
   // Oldest due first: that's the order a typed amount is applied in.
   const open = useMemo(() => bills.filter((b) => b.status === "OPEN" && b.vendorId === vendor?.id).sort((a, b) => a.dueDate.localeCompare(b.dueDate)), [bills, vendor]);
-  const appliedIds = useMemo(() => new Set(bills.flatMap((b) => (b.paymentTransactionId ? [b.paymentTransactionId] : []))), [bills]);
+  const applied = useMemo(() => appliedByTransaction(bills), [bills]);
   const credits = useMemo(
-    () => (billsLoaded ? unappliedPayments(transactions, accounts, appliedIds, payee, "vendor").filter((c) => c.id !== txnId) : []),
-    [billsLoaded, transactions, accounts, appliedIds, payee, txnId]
+    () => (billsLoaded ? unappliedPayments(transactions, accounts, applied, payee, "vendor").filter((c) => c.id !== txnId) : []),
+    [billsLoaded, transactions, accounts, applied, payee, txnId]
   );
+  const allocation = usePaymentAllocation(
+    open.map((b) => ({ id: b.id, open: cents(b.openBalance) })),
+    credits.map((c) => ({ id: c.id, available: cents(c.amount) })),
+    Boolean(txnId)
+  );
+  const { amount } = allocation;
 
   const search = billSearch.trim().toLowerCase();
-  const rows = [...paidByThis, ...open].filter((b) => !search || (b.billNumber ?? "").toLowerCase().includes(search));
+  // Open bills, plus any this payment already paid off.
+  const rows = bills
+    .filter((b) => open.includes(b) || appliedHere.has(b.id))
+    .filter((b) => !search || (b.billNumber ?? "").toLowerCase().includes(search))
+    .sort((a, b) => a.dueDate.localeCompare(b.dueDate));
   const creditRows = credits.filter((c) => !creditSearch.trim() || usDate(c.date).includes(creditSearch.trim()));
-  const selected = txnId ? paidByThis : open.filter((b) => picked.has(b.id));
-  const appliedCents = selected.reduce((sum, b) => sum + cents(b.amount), 0);
-  const creditCents = Math.max(0, cents(amount) - appliedCents);
-  const allPicked = rows.length > 0 && rows.every((b) => (txnId ? paidByThis.includes(b) : picked.has(b.id)));
+  const paying = open.filter((b) => cents(allocation.payments[b.id] ?? 0) > 0).map((b) => ({ bill: b, cents: cents(allocation.payments[b.id]!), open: cents(b.openBalance) }));
+  const creditsUsed = credits.filter((c) => cents(allocation.used[c.id] ?? 0) > 0).map((c) => ({ id: c.id, cents: cents(allocation.used[c.id]!), available: cents(c.amount) }));
+  const creditUsedCents = creditsUsed.reduce((sum, c) => sum + c.cents, 0);
+  const payingCents = paying.reduce((sum, p) => sum + p.cents, 0);
+  // Money from this payment that is still free to apply, and what would be left over after saving.
+  const moneyCents = Math.max(0, cents(amount) - appliedHereCents);
+  const leftoverCents = Math.max(0, moneyCents - Math.max(0, payingCents - creditUsedCents));
+  const selected = rows.filter((b) => appliedHere.has(b.id) || cents(allocation.payments[b.id] ?? 0) > 0);
 
   const closePage = () => leaveFormPage(router);
   const printSaved = useTransactionPrint();
   function choosePayee(name: string) {
     setPayee(name);
     setMailing(addressFor(name));
-    setPicked(new Set());
-    setAmount("");
-  }
-  function pick(next: Set<string>) {
-    setPicked(next);
-    const total = open.filter((b) => next.has(b.id)).reduce((sum, b) => sum + cents(b.amount), 0);
-    setAmount(total > 0 ? (total / 100).toFixed(2) : "");
-  }
-  function toggle(id: string) {
-    const next = new Set(picked);
-    if (next.has(id)) next.delete(id);
-    else next.add(id);
-    pick(next);
-  }
-  function typeAmount(value: string) {
-    setAmount(value);
-    if (txnId) return;
-    let left = cents(value);
-    const next = new Set<string>();
-    for (const b of open) {
-      if (cents(b.amount) <= left) {
-        next.add(b.id);
-        left -= cents(b.amount);
-      }
-    }
-    setPicked(next);
+    allocation.clear();
   }
   const copyBillMemos = () => setMemo(selected.map((b) => b.memo?.trim()).filter(Boolean).join("; "));
   function resetForm(nextRef: string) {
     setPayee("");
     setMailing("");
     setPrintLater(false);
-    setAmount("");
-    setPicked(new Set());
+    allocation.clear();
     setMemo("");
     attachments.reset();
     setError(null);
@@ -209,21 +202,16 @@ export function BillPaymentFormPage() {
   const details = () => formDetails({ mailing, printLater: printLater ? "1" : "" });
   const reference = () => (printLater ? undefined : refNo.trim() || undefined);
 
-  /** The bills API posts a bare payment; this puts the form's own fields on it. */
-  async function addFormFields(transactionId: string): Promise<Transaction> {
-    const txn = await services.transactionService.getTransactionById(transactionId);
-    return services.transactionService.updateTransaction(txn.id, {
-      transactionDate: txn.transactionDate,
-      dueDate: txn.dueDate,
-      referenceNumber: reference(),
-      memo: memo.trim() || txn.memo,
-      payee: txn.payee,
-      accountLabel: txn.accountLabel,
-      sourceAccountId: accountId,
-      details: details(),
-      postings: txn.postings
-    });
+  const problem = () => allocationProblem({ money: moneyCents, payments: paying, credits: creditsUsed, noun: "bill" });
+
+  /** Puts the credits, then this payment's own money, against the ticked bills. */
+  async function applyTo(transactionId: string | undefined) {
+    const sources = [...creditsUsed.map((c) => ({ id: c.id, available: c.cents })), ...(transactionId ? [{ id: transactionId, available: moneyCents }] : [])];
+    for (const step of planApplications(paying.map((p) => ({ id: p.bill.id, cents: p.cents })), sources)) {
+      await applyBillPayment(step.documentId, { paymentTransactionId: step.sourceId, amount: step.cents / 100 });
+    }
   }
+  const notApplied = (err: unknown) => `The payment was saved, but not all of it could be applied: ${err instanceof Error ? err.message : "unknown error"}`;
 
   async function saveExisting(after: "close" | "new") {
     if (!loaded) return setError(loadError ?? "This transaction is still loading.");
@@ -233,6 +221,8 @@ export function BillPaymentFormPage() {
     const credit = loaded.postings.find((p) => p.type === "CREDIT")!;
     const total = amountLocked ? credit.amount : cents(amount) / 100;
     if (total <= 0) return setError("Enter the amount.");
+    const wrong = problem();
+    if (wrong) return setError(wrong);
     setSaving(true);
     setError(null);
     try {
@@ -254,6 +244,13 @@ export function BillPaymentFormPage() {
         })
       );
       await attachments.linkTo(loaded.id).catch(() => toast({ variant: "error", title: "Saved, but the attachments could not be linked" }));
+      try {
+        await applyTo(loaded.id);
+      } catch (err) {
+        allocation.clear();
+        reload();
+        return setError(notApplied(err));
+      }
       toast({ variant: "success", title: "Bill payment saved" });
       if (after === "new") window.location.assign("/billpayment");
       else closePage();
@@ -270,18 +267,16 @@ export function BillPaymentFormPage() {
     if (!paymentAccount) return setError("Choose the bank or credit account.");
     if (!vendor) return setError("Choose a vendor as the payee.");
     if (!date) return setError("Enter the payment date.");
-    if (cents(amount) <= 0) return setError("Enter the amount.");
-    if (cents(amount) < appliedCents) return setError(`The amount must cover whole bills (selected bills total ${money(appliedCents / 100)}). Partial payments aren't supported yet.`);
+    if (moneyCents <= 0 && creditUsedCents <= 0) return setError("Enter the amount, or use a credit.");
+    const wrong = problem();
+    if (wrong) return setError(wrong);
+    const following = /^\d+$/.test(refNo.trim()) && moneyCents > 0 ? String(Number(refNo) + 1).padStart(refNo.trim().length, "0") : refNo;
     setSaving(true);
     setError(null);
     try {
-      let last: Transaction | undefined;
-      for (const bill of selected) {
-        const paid = await payBill(bill.id, { paymentAccountId: paymentAccount.id, paymentDate: date });
-        if (paid.paymentTransactionId) last = await addFormFields(paid.paymentTransactionId);
-      }
-      if (creditCents > 0) {
-        let payableId = last?.postings.find((p) => p.type === "DEBIT")?.accountId ?? findPayableAccount(accounts)?.id;
+      let posted: Transaction | undefined;
+      if (moneyCents > 0) {
+        let payableId = findPayableAccount(accounts)?.id;
         if (!payableId) {
           payableId = (await services.accountService.createAccount({ code: nextAccountCode(accounts), name: "Accounts Payable", category: "ACCOUNTS_PAYABLE", currency: "USD" })).id;
         }
@@ -295,25 +290,29 @@ export function BillPaymentFormPage() {
           sourceAccountId: paymentAccount.id,
           details: details(),
           postings: [
-            { accountId: payableId, type: "DEBIT", amount: creditCents / 100 },
-            { accountId: paymentAccount.id, type: "CREDIT", amount: creditCents / 100 }
+            { accountId: payableId, type: "DEBIT", amount: moneyCents / 100 },
+            { accountId: paymentAccount.id, type: "CREDIT", amount: moneyCents / 100 }
           ]
         });
-        last = await services.transactionService.postTransaction(created.id);
+        posted = await services.transactionService.postTransaction(created.id);
+        await attachments.linkTo(posted.id).catch(() => toast({ variant: "error", title: "Saved, but the attachments could not be linked" }));
       }
-      if (last) await attachments.linkTo(last.id).catch(() => toast({ variant: "error", title: "Saved, but the attachments could not be linked" }));
+      try {
+        await applyTo(posted?.id);
+      } catch (err) {
+        // The money is recorded, so clear the form: saving again would enter it twice.
+        resetForm(following);
+        reload();
+        return setError(notApplied(err));
+      }
       toast({ variant: "success", title: "Bill payment saved" });
       if (after === "close") closePage();
       else {
-        resetForm(/^\d+$/.test(refNo.trim()) ? String(Number(refNo) + 1).padStart(refNo.trim().length, "0") : refNo);
+        resetForm(following);
         reload();
       }
     } catch (err) {
-      // Some bills may already be paid: start the amounts over so a retry can't record them twice.
-      setPicked(new Set());
-      setAmount("");
-      setError(`${err instanceof Error ? err.message : "Could not save this bill payment."} Check which bills are still open before trying again.`);
-      reload();
+      setError(err instanceof Error ? err.message : "Could not save this bill payment.");
     } finally {
       setSaving(false);
     }
@@ -400,14 +399,14 @@ export function BillPaymentFormPage() {
               value={amountFocused || !amount ? amount : money(cents(amount) / 100)}
               onFocus={() => setAmountFocused(true)}
               onBlur={() => setAmountFocused(false)}
-              onChange={(event) => typeAmount(event.target.value.replace(/[^0-9.]/g, ""))}
+              onChange={(event) => allocation.typeAmount(event.target.value.replace(/[^0-9.]/g, ""))}
               disabled={amountLocked}
               placeholder="$0.00"
               className="text-right"
             />
           </div>
         </div>
-        {paidByThis.length > 0 ? <p className="mt-2 text-right text-xs">This payment paid {paidByThis.length === 1 ? "a bill" : "bills"} in full, so its payee and amount can&apos;t change.</p> : null}
+        {appliedHereCents > 0 ? <p className="mt-2 text-right text-xs">This payment is applied to {appliedHere.size === 1 ? "a bill" : "bills"}, so its payee and amount can&apos;t change.</p> : null}
 
         <section>
           <h2 className={SECTION_TITLE}>Outstanding Transactions</h2>
@@ -415,35 +414,16 @@ export function BillPaymentFormPage() {
             <button type="button" onClick={copyBillMemos} disabled={selected.length === 0} className={RT_BUTTON}>Copy Memos from Bills</button>
             <button type="button" disabled title="Copying the reference number to bills isn't available yet" className={RT_BUTTON}>Copy Payment Ref# to Bills</button>
           </ListTools>
-          <table className="mt-4 w-full table-fixed border-collapse border-b-2 border-[var(--color-divider-tertiary)] text-sm">
-            <thead>
-              <tr className="border-b-2 border-[var(--color-divider-tertiary)] text-left text-xs font-semibold uppercase text-[var(--color-text-global)]">
-                <th className="w-14 px-3 py-3 text-center"><input type="checkbox" aria-label="Select all bills" checked={allPicked} disabled={Boolean(txnId) || rows.length === 0} onChange={() => pick(new Set(allPicked ? [] : rows.map((b) => b.id)))} className={CHECKBOX} /></th>
-                <th className={TH}>Description</th>
-                <th className={`${TH} w-[16%]`}>Due date ▲</th>
-                <th className={`${TH} w-[20%] text-right`}>Original amount</th>
-                <th className={`${TH} w-[20%] text-right`}>Open balance</th>
-                <th className={`${TH} w-[16%] text-right`}>Payment</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((b) => {
-                const paidHere = paidByThis.includes(b);
-                const ticked = txnId ? paidHere : picked.has(b.id);
-                return (
-                  <tr key={b.id} className="border-b border-[var(--color-divider-tertiary)]">
-                    <td className="px-3 py-3 text-center"><input type="checkbox" checked={ticked} disabled={Boolean(txnId)} title={txnId && !paidHere ? "Applying a saved payment to bills isn't available yet" : undefined} onChange={() => toggle(b.id)} aria-label={`Pay bill ${b.billNumber ?? ""}`} className={CHECKBOX} /></td>
-                    <td className={TD}>Bill{b.billNumber ? ` # ${b.billNumber}` : ""} ({usDate(b.billDate)})</td>
-                    <td className={TD}>{usDate(b.dueDate)}</td>
-                    <td className={`${TD} text-right`}>{money(b.amount)}</td>
-                    <td className={`${TD} text-right`}>{money(paidHere ? 0 : b.amount)}</td>
-                    <td className={TD}><div className={PAYMENT_BOX}>{ticked ? b.amount.toFixed(2) : ""}</div></td>
-                  </tr>
-                );
-              })}
-              {rows.length === 0 ? <tr><td colSpan={6} className="px-3 py-14 text-center">You don&apos;t have any bills.</td></tr> : null}
-            </tbody>
-          </table>
+          <OpenDocumentsTable
+            noun="bill"
+            dueHeading="Due date ▲"
+            emptyText="You don't have any bills."
+            rows={rows.map((b) => ({ id: b.id, label: `Bill${b.billNumber ? ` # ${b.billNumber}` : ""} (${usDate(b.billDate)})`, dueDate: b.dueDate, original: b.amount, open: b.openBalance, appliedHere: (appliedHere.get(b.id) ?? 0) / 100 }))}
+            payments={allocation.payments}
+            onToggle={allocation.toggle}
+            onToggleAll={allocation.toggleAll}
+            onPayment={allocation.setPayment}
+          />
           <ListCount count={rows.length} />
         </section>
 
@@ -451,24 +431,7 @@ export function BillPaymentFormPage() {
           <section className="mt-8">
             <h2 className={SECTION_TITLE}>Credits</h2>
             <ListTools placeholder="Find Credit No." value={creditSearch} onChange={setCreditSearch} />
-            <table className="mt-4 w-full table-fixed border-collapse border-b-2 border-[var(--color-divider-tertiary)] text-sm">
-              <thead>
-                <tr className="border-b-2 border-[var(--color-divider-tertiary)] text-left text-xs font-semibold uppercase text-[var(--color-text-global)]">
-                  <th className={TH}>Description</th>
-                  <th className={`${TH} w-[24%] text-right`}>Original amount</th>
-                  <th className={`${TH} w-[27%] text-right`}>Open balance</th>
-                </tr>
-              </thead>
-              <tbody>
-                {creditRows.map((c) => (
-                  <tr key={c.id} className="border-b border-[var(--color-divider-tertiary)]">
-                    <td className={TD}><a href={`/billpayment?txnId=${c.id}`} className="text-[var(--color-link-action)] hover:underline">Unapplied payment</a> <span className="text-xs">({usDate(c.date)})</span></td>
-                    <td className={`${TD} text-right`}>{money(c.amount)}</td>
-                    <td className={`${TD} text-right`}>{money(c.amount)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <CreditsTable rows={creditRows} used={allocation.used} href={(id) => `/billpayment?txnId=${id}`} onToggle={allocation.toggleCredit} onAmount={allocation.setCredit} />
             <ListCount count={creditRows.length} />
           </section>
         ) : null}
@@ -482,10 +445,10 @@ export function BillPaymentFormPage() {
             <div className="w-[400px] max-w-full"><AttachmentsField attachments={attachments} formLabel="Bill Payment" /></div>
           </div>
           <div className="flex w-[330px] flex-col items-end gap-2 text-sm">
-            <p className="flex w-full justify-between"><strong className="text-[var(--color-text-global)]">Amount to Apply</strong><span>{money(cents(amount) / 100)}</span></p>
-            <p className="flex w-full justify-between"><strong className="text-[var(--color-text-global)]">Amount to Credit</strong><span>{money(creditCents / 100)}</span></p>
-            <Button variant="secondary" className="mt-2 !rounded-md" disabled={Boolean(txnId)} onClick={() => pick(new Set())}>Clear Payment</Button>
-            {creditCents > 0 ? <p className="mt-2">This transaction will create an additional credit in the amount of {(creditCents / 100).toFixed(2)}</p> : null}
+            <p className="flex w-full justify-between"><strong className="text-[var(--color-text-global)]">Amount to Apply</strong><span>{money((moneyCents + creditUsedCents) / 100)}</span></p>
+            <p className="flex w-full justify-between"><strong className="text-[var(--color-text-global)]">Amount to Credit</strong><span>{money(leftoverCents / 100)}</span></p>
+            <Button variant="secondary" className="mt-2 !rounded-md" onClick={allocation.clear}>Clear Payment</Button>
+            {leftoverCents > 0 ? <p className="mt-2">This transaction will create an additional credit in the amount of {(leftoverCents / 100).toFixed(2)}</p> : null}
           </div>
         </div>
         {error || loadError ? <p className="mt-3 text-sm text-[var(--color-negative)]" role="alert">{error ?? loadError}</p> : null}

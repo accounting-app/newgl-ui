@@ -52,7 +52,7 @@ export function VendorsPage() {
 
   const openBalanceByVendor = useMemo(() => {
     const totals = new Map<string, number>();
-    bills.filter((b) => b.status === "OPEN").forEach((b) => totals.set(b.vendorId, (totals.get(b.vendorId) ?? 0) + b.amount));
+    bills.filter((b) => b.status === "OPEN").forEach((b) => totals.set(b.vendorId, (totals.get(b.vendorId) ?? 0) + b.openBalance));
     return totals;
   }, [bills]);
   const paidLast30Days = useMemo(() => {
@@ -64,8 +64,8 @@ export function VendorsPage() {
     const today = new Date().toISOString().slice(0, 10);
     return bills.filter((b) => b.status === "OPEN" && b.dueDate < today);
   }, [bills]);
-  const overdueTotal = useMemo(() => overdueBills.reduce((sum, b) => sum + b.amount, 0), [overdueBills]);
-  const openTotal = useMemo(() => openBills.reduce((sum, b) => sum + b.amount, 0), [openBills]);
+  const overdueTotal = useMemo(() => overdueBills.reduce((sum, b) => sum + b.openBalance, 0), [overdueBills]);
+  const openTotal = useMemo(() => openBills.reduce((sum, b) => sum + b.openBalance, 0), [openBills]);
   const paidTotal = useMemo(() => paidLast30Days.reduce((sum, b) => sum + b.amount, 0), [paidLast30Days]);
 
   const [summaryOpen, setSummaryOpen] = useState(true);

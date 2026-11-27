@@ -90,7 +90,7 @@ export function CustomersPage() {
 
   const openBalanceByCustomer = useMemo(() => {
     const totals = new Map<string, number>();
-    invoices.filter((i) => i.status === "OPEN").forEach((i) => totals.set(i.customerId, (totals.get(i.customerId) ?? 0) + i.amount));
+    invoices.filter((i) => i.status === "OPEN").forEach((i) => totals.set(i.customerId, (totals.get(i.customerId) ?? 0) + i.openBalance));
     return totals;
   }, [invoices]);
 
@@ -100,9 +100,9 @@ export function CustomersPage() {
     const today = new Date().toISOString().slice(0, 10);
     return invoices.filter((i) => i.status === "OPEN" && i.dueDate < today);
   }, [invoices]);
-  const overdueTotal = useMemo(() => overdueInvoices.reduce((sum, i) => sum + i.amount, 0), [overdueInvoices]);
+  const overdueTotal = useMemo(() => overdueInvoices.reduce((sum, i) => sum + i.openBalance, 0), [overdueInvoices]);
   const openInvoices = useMemo(() => invoices.filter((i) => i.status === "OPEN"), [invoices]);
-  const openTotal = useMemo(() => openInvoices.reduce((sum, i) => sum + i.amount, 0), [openInvoices]);
+  const openTotal = useMemo(() => openInvoices.reduce((sum, i) => sum + i.openBalance, 0), [openInvoices]);
   const recentlyPaid = useMemo(() => {
     const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
     return invoices.filter((i) => i.status === "PAID" && new Date(i.createdAt).getTime() >= cutoff);
@@ -168,7 +168,7 @@ export function CustomersPage() {
     }
   }
 
-  async function handleSaveInvoice(input: Omit<Invoice, "id" | "createdAt" | "status">) {
+  async function handleSaveInvoice(input: Omit<Invoice, "id" | "createdAt" | "status" | "openBalance" | "paidAmount" | "payments">) {
     try {
       await addInvoice(input);
       setInvoiceDrawerFor(null);

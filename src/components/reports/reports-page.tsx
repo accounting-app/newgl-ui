@@ -265,8 +265,8 @@ function signedImpact(account: Account, posting: LedgerPosting): number {
  * entirely (unless/until paid), and if/when it *is* paid, recognize the
  * full amount as of the payment date instead of the entry date.
  *
- * Whole-amount payments only (this domain has no partial payments), so
- * "paid" vs "not yet paid" is the only split needed -- no proration.
+ * Each payment (or applied credit) recognizes its own share, so a part-paid
+ * document shows only what has actually been paid.
  */
 function buildCashBasisPostings(postings: LedgerPosting[], invoices: Invoice[], bills: Bill[]): LedgerPosting[] {
   const deferredTransactionIds = new Set<string>();
@@ -294,17 +294,18 @@ function buildCashBasisPostings(postings: LedgerPosting[], invoices: Invoice[], 
 
   const recognizedOnPayment: LedgerPosting[] = [];
   for (const invoice of invoices) {
-    if (invoice.status !== "PAID" || !invoice.paymentTransactionId) continue;
     const accountId = categoryAccountIdForEntryTransaction(invoice.postedTransactionId, "CREDIT");
-    const paymentDate = postingDateByTransactionId.get(invoice.paymentTransactionId);
-    if (!accountId || !paymentDate) continue;
-    recognizedOnPayment.push(makeSyntheticPosting(invoice.paymentTransactionId, accountId, "CREDIT", invoice.amount, paymentDate));
+    if (!accountId) continue;
+    for (const payment of invoice.payments) {
+      const paymentDate = postingDateByTransactionId.get(payment.transactionId);
+      if (paymentDate) recognizedOnPayment.push(makeSyntheticPosting(payment.transactionId, accountId, "CREDIT", payment.amount, paymentDate));
+    }
   }
   for (const bill of bills) {
-    if (bill.status !== "PAID" || !bill.paymentTransactionId) continue;
-    const paymentDate = postingDateByTransactionId.get(bill.paymentTransactionId);
-    if (!paymentDate) continue;
-    recognizedOnPayment.push(makeSyntheticPosting(bill.paymentTransactionId, bill.categoryAccountId, "DEBIT", bill.amount, paymentDate));
+    for (const payment of bill.payments) {
+      const paymentDate = postingDateByTransactionId.get(payment.transactionId);
+      if (paymentDate) recognizedOnPayment.push(makeSyntheticPosting(payment.transactionId, bill.categoryAccountId, "DEBIT", payment.amount, paymentDate));
+    }
   }
 
   return [...undeferredPostings, ...recognizedOnPayment];

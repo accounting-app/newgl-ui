@@ -253,7 +253,7 @@ export function RegisterTable({
     let cancelled = false;
     Promise.all([listInvoices(), listBills()])
       .then(([invoices, bills]) => {
-        if (!cancelled) setLinkedPaymentIds(new Set([...invoices, ...bills].flatMap((item) => (item.paymentTransactionId ? [item.paymentTransactionId] : []))));
+        if (!cancelled) setLinkedPaymentIds(new Set([...invoices, ...bills].flatMap((item) => item.payments.map((payment) => payment.transactionId))));
       })
       .catch(() => undefined);
     return () => {

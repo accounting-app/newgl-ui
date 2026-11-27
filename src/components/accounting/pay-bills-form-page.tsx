@@ -102,8 +102,8 @@ export function PayBillsFormPage() {
     [bills, from, to, payeeFilter]
   );
   const chosen = rows.filter((b) => picked.has(b.id));
-  const totalCents = chosen.reduce((sum, b) => sum + cents(b.amount), 0);
-  const openTotal = rows.reduce((sum, b) => sum + b.amount, 0);
+  const totalCents = chosen.reduce((sum, b) => sum + cents(b.openBalance), 0);
+  const openTotal = rows.reduce((sum, b) => sum + b.openBalance, 0);
   const allPicked = rows.length > 0 && rows.every((b) => picked.has(b.id));
 
   const closePage = () => leaveFormPage(router);
@@ -244,10 +244,10 @@ export function PayBillsFormPage() {
                 <td className="px-3 py-3">{display(b.dueDate)}</td>
                 <td className={`px-3 py-3 ${b.dueDate < today ? "text-[var(--color-negative)]" : ""}`}>{status(b)}</td>
                 <td className="px-3 py-3 text-right">—</td>
-                <td className="px-3 py-3 text-right">{money(b.amount)}</td>
+                <td className="px-3 py-3 text-right">{money(b.openBalance)}</td>
                 <td className="px-3 py-3 text-right">{money(0)}</td>
-                <td className="px-3 py-3 text-right">{picked.has(b.id) ? money(b.amount) : ""}</td>
-                <td className="px-3 py-3 text-right">{money(b.amount)}</td>
+                <td className="px-3 py-3 text-right">{picked.has(b.id) ? money(b.openBalance) : ""}</td>
+                <td className="px-3 py-3 text-right">{money(b.openBalance)}</td>
                 <td className="px-3 py-3 text-right"><button type="button" onClick={() => toggle(b.id)} className="text-[var(--color-link-action)] hover:underline">{picked.has(b.id) ? "Unselect" : "Select"}</button></td>
               </tr>
             ))}

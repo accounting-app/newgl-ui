@@ -110,20 +110,21 @@ export function ReportBuilderPage() {
 
   const { sections, netIncome } = useMemo(() => {
     const accountById = new Map(accounts.map((a) => [a.id, a]));
-    // Cash basis only recognizes an invoice's income once it is paid.
-    const unpaidInvoiceTxns = new Set(invoices.filter((i) => i.status !== "PAID" && i.postedTransactionId).map((i) => i.postedTransactionId as string));
+    // Cash basis only recognizes the part of an invoice's income that has been paid.
+    const paidShare = new Map(invoices.filter((i) => i.postedTransactionId).map((i) => [i.postedTransactionId as string, i.paidAmount / i.amount]));
     const maps = { income: new Map<string, number>(), otherIncome: new Map<string, number>(), expense: new Map<string, number>(), otherExpense: new Map<string, number>() };
     for (const t of txns) {
       if ((t.payee ?? "").trim().toLowerCase() !== payeeName.trim().toLowerCase()) continue;
       if (from && t.transactionDate < from) continue;
       if (to && t.transactionDate > to) continue;
-      if (method === "cash" && unpaidInvoiceTxns.has(t.id)) continue;
+      const share = method === "cash" ? paidShare.get(t.id) ?? 1 : 1;
+      if (share === 0) continue;
       for (const p of t.postings) {
         const account = accountById.get(p.accountId);
         if (!account) continue;
         const impact = DEBIT_NORMAL_CATEGORIES.has(account.category) ? (p.type === "DEBIT" ? p.amount : -p.amount) : (p.type === "CREDIT" ? p.amount : -p.amount);
         const bucket = INCOME.has(account.category) ? maps.income : OTHER_INCOME.has(account.category) ? maps.otherIncome : EXPENSE.has(account.category) ? maps.expense : OTHER_EXPENSE.has(account.category) ? maps.otherExpense : null;
-        if (bucket) bucket.set(account.name, (bucket.get(account.name) ?? 0) + impact);
+        if (bucket) bucket.set(account.name, (bucket.get(account.name) ?? 0) + impact * share);
       }
     }
     const real = new Set(accounts.map((a) => a.name));

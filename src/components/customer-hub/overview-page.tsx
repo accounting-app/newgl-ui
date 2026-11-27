@@ -54,10 +54,10 @@ export function CustomerHubOverviewPage() {
     const today = new Date().toISOString().slice(0, 10);
     return invoices.filter((i) => i.status === "OPEN" && i.dueDate < today);
   }, [invoices]);
-  const overdueTotal = useMemo(() => overdueInvoices.reduce((sum, i) => sum + i.amount, 0), [overdueInvoices]);
+  const overdueTotal = useMemo(() => overdueInvoices.reduce((sum, i) => sum + i.openBalance, 0), [overdueInvoices]);
   const unpaidInvoices = useMemo(() => invoices.filter((i) => i.status === "OPEN"), [invoices]);
 
-  async function handleSaveInvoice(input: Omit<Invoice, "id" | "createdAt" | "status">) {
+  async function handleSaveInvoice(input: Omit<Invoice, "id" | "createdAt" | "status" | "openBalance" | "paidAmount" | "payments">) {
     try {
       await addInvoice(input);
       setShowInvoiceDrawer(false);

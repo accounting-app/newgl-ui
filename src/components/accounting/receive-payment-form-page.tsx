@@ -6,7 +6,7 @@ import { ChevronDown } from "lucide-react";
 import { AttachmentsField } from "@/components/accounting/attachments-field";
 import { MoreMenu, useTransactionPrint } from "@/components/accounting/transaction-actions";
 import { FullScreenFormShell, leaveFormPage } from "@/components/accounting/full-screen-form-shell";
-import { CHECKBOX, ListCount, ListTools, NO_APPLY, PAYMENT_BOX, RT_BUTTON, SECTION_TITLE, TD, TH } from "@/components/accounting/payment-form-parts";
+import { CreditsTable, ListCount, ListTools, OpenDocumentsTable, RT_BUTTON, SECTION_TITLE } from "@/components/accounting/payment-form-parts";
 import { AddAccountModal } from "@/components/bank-register/add-account-modal";
 import { Button } from "@/components/ui/button";
 import { DateField } from "@/components/ui/date-field";
@@ -15,12 +15,14 @@ import { Modal } from "@/components/ui/modal";
 import { Select } from "@/components/ui/select";
 import { useToast } from "@/components/ui/toast/toast-context";
 import { nextAccountCode } from "@/lib/accounting/next-account-code";
-import { findReceivableAccount, unappliedPayments } from "@/lib/accounting/receivables";
+import { allocationProblem, planApplications } from "@/lib/accounting/payment-allocation";
+import { appliedByTransaction, findReceivableAccount, unappliedPayments } from "@/lib/accounting/receivables";
 import { useCustomers } from "@/lib/hooks/use-customers";
 import { useFormAttachments } from "@/lib/hooks/use-form-attachments";
+import { cents, usePaymentAllocation } from "@/lib/hooks/use-payment-allocation";
 import { usePaymentMethods } from "@/lib/hooks/use-payment-methods";
 import { CANNOT_SHOW, useSavedTransaction } from "@/lib/hooks/use-saved-transaction";
-import { listInvoices, payInvoice } from "@/lib/services/invoices-service";
+import { applyInvoicePayment, listInvoices } from "@/lib/services/invoices-service";
 import type { Invoice } from "@/lib/services/invoices-service";
 import { getServiceContainer } from "@/lib/services/service-container-v2";
 import type { Account, Transaction } from "@/modules/accounting/domain/models";
@@ -30,15 +32,15 @@ const LABEL = "mb-1 block text-sm text-[var(--color-text-primary)]";
 const CARD = "rounded-xl border border-[var(--color-container-border-secondary)] bg-[var(--color-container-background-primary)]";
 const CARD_TITLE = "border-b border-[var(--color-divider-tertiary)] px-5 py-4 text-lg text-[var(--color-text-global)]";
 
-const cents = (value: number | string) => Math.round((Number(value) || 0) * 100);
 const money = (value: number) => value.toLocaleString("en-US", { style: "currency", currency: "USD" });
 const usDate = (iso: string) => `${iso.slice(5, 7)}/${iso.slice(8, 10)}/${iso.slice(0, 4)}`;
 
 // QBO's full-screen Receive Payment (/recvpayment?rtAccountId=...&rt=close).
-// rtAccountId is the account the money lands in. Record pays each ticked open
-// invoice in full (the ledger has no partial payments) and keeps anything left
-// over as an unapplied payment: deposit account debited, receivables credited.
-// ?txnId= edits a saved payment; the invoices it paid stay as they are.
+// rtAccountId is the account the money lands in. Record posts one payment
+// (deposit account debited, receivables credited) and applies it, with any
+// credits used, to the ticked invoices, in whole or in part. Money not applied
+// stays as an unapplied payment. ?txnId= edits a saved payment and can apply
+// what it has left.
 export function ReceivePaymentFormPage() {
   const router = useRouter();
   const params = useSearchParams();
@@ -63,8 +65,7 @@ export function ReceivePaymentFormPage() {
   const [refNo, setRefNo] = useState("");
   const [method, setMethod] = useState("");
   const [depositId, setDepositId] = useState(params.get("rtAccountId") ?? "");
-  const [amount, setAmount] = useState("");
-  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [findId, setFindId] = useState<string | null>(null);
   const [memo, setMemo] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -107,13 +108,18 @@ export function ReceivePaymentFormPage() {
     setRefNo(txn.referenceNumber ?? "");
     setMethod(txn.paymentMethod ?? "");
     setMemo(txn.memo ?? "");
-    setAmount(debits[0].amount.toFixed(2));
+    allocation.setAmount(debits[0].amount.toFixed(2));
     void attachments.loadLinked(txn.id).catch(() => toast({ variant: "error", title: "Could not load the attachments" }));
   });
   const savedSourceId = loaded?.postings.find((p) => p.type === "DEBIT")?.accountId;
-  // The invoices this saved payment paid. While there are any, its amount and customer are fixed.
-  const paidByThis = useMemo(() => (txnId ? invoices.filter((i) => i.paymentTransactionId === txnId) : []), [txnId, invoices]);
-  const amountLocked = Boolean(txnId) && (!invoicesLoaded || paidByThis.length > 0);
+  // The invoices this saved payment is applied to. While there are any, its amount and customer are fixed.
+  const appliedHere = useMemo(() => {
+    const map = new Map<string, number>();
+    if (txnId) for (const invoice of invoices) for (const payment of invoice.payments) if (payment.transactionId === txnId) map.set(invoice.id, (map.get(invoice.id) ?? 0) + cents(payment.amount));
+    return map;
+  }, [txnId, invoices]);
+  const appliedHereCents = [...appliedHere.values()].reduce((sum, value) => sum + value, 0);
+  const amountLocked = Boolean(txnId) && (!invoicesLoaded || appliedHereCents > 0);
 
   const depositAccounts = useMemo(() => accounts.filter((a) => a.id === savedSourceId || (a.status === "ACTIVE" && DEPOSIT_CATEGORIES.has(a.category))).sort((a, b) => a.name.localeCompare(b.name)), [accounts, savedSourceId]);
   const depositAccount = accounts.find((a) => a.id === depositId);
@@ -131,90 +137,79 @@ export function ReceivePaymentFormPage() {
   const methodOptions = useMemo(() => (method && !methods.options.some((o) => o.value === method) ? [{ value: method, label: method }, ...methods.options] : methods.options), [method, methods.options]);
   // Oldest due first: that's the order a typed amount is applied in.
   const open = useMemo(() => invoices.filter((i) => i.status === "OPEN" && i.customerId === customerRecord?.id).sort((a, b) => a.dueDate.localeCompare(b.dueDate)), [invoices, customerRecord]);
-  const appliedIds = useMemo(() => new Set(invoices.flatMap((i) => (i.paymentTransactionId ? [i.paymentTransactionId] : []))), [invoices]);
-  const allCredits = useMemo(() => (invoicesLoaded ? unappliedPayments(transactions, accounts, appliedIds, customer) : []), [invoicesLoaded, transactions, accounts, appliedIds, customer]);
+  const applied = useMemo(() => appliedByTransaction(invoices), [invoices]);
+  const allCredits = useMemo(() => (invoicesLoaded ? unappliedPayments(transactions, accounts, applied, customer) : []), [invoicesLoaded, transactions, accounts, applied, customer]);
   const credits = allCredits.filter((c) => c.id !== txnId);
-  const customerBalance = open.reduce((sum, i) => sum + cents(i.amount), 0) - allCredits.reduce((sum, c) => sum + cents(c.amount), 0);
+  const customerBalance = open.reduce((sum, i) => sum + cents(i.openBalance), 0) - allCredits.reduce((sum, c) => sum + cents(c.amount), 0);
+  const allocation = usePaymentAllocation(
+    open.map((i) => ({ id: i.id, open: cents(i.openBalance) })),
+    credits.map((c) => ({ id: c.id, available: cents(c.amount) })),
+    Boolean(txnId)
+  );
+  const { amount } = allocation;
 
   const search = invoiceSearch.trim().toLowerCase();
-  const rows = [...paidByThis, ...open].filter((i) => !search || (i.invoiceNumber ?? "").toLowerCase().includes(search));
+  // Open invoices, plus any this payment already paid off.
+  const rows = invoices
+    .filter((i) => open.includes(i) || appliedHere.has(i.id))
+    .filter((i) => !search || (i.invoiceNumber ?? "").toLowerCase().includes(search))
+    .sort((a, b) => a.dueDate.localeCompare(b.dueDate));
   const creditRows = credits.filter((c) => !creditSearch.trim() || usDate(c.date).includes(creditSearch.trim()));
-  const selected = txnId ? paidByThis : open.filter((i) => picked.has(i.id));
-  const appliedCents = selected.reduce((sum, i) => sum + cents(i.amount), 0);
-  const creditCents = Math.max(0, cents(amount) - appliedCents);
+  const paying = open.filter((i) => cents(allocation.payments[i.id] ?? 0) > 0).map((i) => ({ invoice: i, cents: cents(allocation.payments[i.id]!), open: cents(i.openBalance) }));
+  const creditsUsed = credits.filter((c) => cents(allocation.used[c.id] ?? 0) > 0).map((c) => ({ id: c.id, cents: cents(allocation.used[c.id]!), available: cents(c.amount) }));
+  const creditUsedCents = creditsUsed.reduce((sum, c) => sum + c.cents, 0);
+  const payingCents = paying.reduce((sum, p) => sum + p.cents, 0);
+  // Money from this payment that is still free to apply, and what would be left over after saving.
+  const moneyCents = Math.max(0, cents(amount) - appliedHereCents);
+  const leftoverCents = Math.max(0, moneyCents - Math.max(0, payingCents - creditUsedCents));
+  const selectedCount = new Set([...appliedHere.keys(), ...paying.map((p) => p.invoice.id)]).size;
+  const selectedCents = appliedHereCents + payingCents;
 
   const closePage = () => leaveFormPage(router);
   const printSaved = useTransactionPrint();
   function chooseCustomer(name: string) {
     setCustomer(name);
-    setPicked(new Set());
-    setAmount("");
+    allocation.clear();
   }
-  function pick(next: Set<string>) {
-    setPicked(next);
-    const total = open.filter((i) => next.has(i.id)).reduce((sum, i) => sum + cents(i.amount), 0);
-    setAmount(total > 0 ? (total / 100).toFixed(2) : "");
-  }
-  function toggle(id: string) {
-    const next = new Set(picked);
-    if (next.has(id)) next.delete(id);
-    else next.add(id);
-    pick(next);
-  }
-  function typeAmount(value: string) {
-    setAmount(value);
-    if (txnId) return;
-    let left = cents(value);
-    const next = new Set<string>();
-    for (const i of open) {
-      if (cents(i.amount) <= left) {
-        next.add(i.id);
-        left -= cents(i.amount);
-      }
-    }
-    setPicked(next);
-  }
+  // "Find by invoice no." ticks the invoice once its customer's list is on screen.
+  useEffect(() => {
+    if (!findId || !open.some((i) => i.id === findId)) return;
+    allocation.toggle(findId);
+    setFindId(null);
+  }, [findId, open]); // eslint-disable-line react-hooks/exhaustive-deps
   function findInvoice() {
     const wanted = findNo.trim().toLowerCase();
     const match = invoices.find((i) => i.status === "OPEN" && (i.invoiceNumber ?? "").toLowerCase() === wanted);
     if (!match) return toast({ variant: "error", title: wanted ? `No open invoice numbered ${findNo.trim()}` : "Enter an invoice number" });
     const owner = customers.find((c) => c.id === match.customerId);
     if (!owner) return toast({ variant: "error", title: "That invoice's customer wasn't found" });
-    setCustomer(owner.name);
-    setPicked(new Set([match.id]));
-    setAmount(match.amount.toFixed(2));
+    chooseCustomer(owner.name);
+    setFindId(match.id);
     setFindOpen(false);
     setFindNo("");
   }
-  const copyDetailsToMemo = () => setMemo(selected.map((i) => `Invoice${i.invoiceNumber ? ` # ${i.invoiceNumber}` : ""} ${money(i.amount)}`).join("; "));
+  const copyDetailsToMemo = () => setMemo(rows.filter((i) => appliedHere.has(i.id) || cents(allocation.payments[i.id] ?? 0) > 0).map((i) => `Invoice${i.invoiceNumber ? ` # ${i.invoiceNumber}` : ""} ${money(((appliedHere.get(i.id) ?? 0) + cents(allocation.payments[i.id] ?? 0)) / 100)}`).join("; "));
   function resetForm() {
     setCustomer("");
     setRefNo("");
     setMethod("");
-    setAmount("");
-    setPicked(new Set());
+    allocation.clear();
     setMemo("");
     attachments.reset();
     setError(null);
   }
 
-  /** The invoices API posts a bare payment; this puts the form's own fields on it. */
-  async function addFormFields(transactionId: string): Promise<Transaction> {
-    const txn = await services.transactionService.getTransactionById(transactionId);
-    if (!refNo.trim() && !memo.trim() && !method) return txn;
-    return services.transactionService.updateTransaction(txn.id, {
-      transactionDate: txn.transactionDate,
-      dueDate: txn.dueDate,
-      referenceNumber: refNo.trim() || txn.referenceNumber,
-      memo: memo.trim() || txn.memo,
-      payee: txn.payee,
-      accountLabel: txn.accountLabel,
-      sourceAccountId: depositId,
-      paymentMethod: method || undefined,
-      details: txn.details,
-      postings: txn.postings
-    });
+  const problem = () =>
+    allocationProblem({ money: moneyCents, payments: paying, credits: creditsUsed, noun: "invoice" });
+
+  /** Puts the credits, then this payment's own money, against the ticked invoices. */
+  async function applyTo(transactionId: string | undefined) {
+    const sources = [...creditsUsed.map((c) => ({ id: c.id, available: c.cents })), ...(transactionId ? [{ id: transactionId, available: moneyCents }] : [])];
+    for (const step of planApplications(paying.map((p) => ({ id: p.invoice.id, cents: p.cents })), sources)) {
+      await applyInvoicePayment(step.documentId, { paymentTransactionId: step.sourceId, amount: step.cents / 100 });
+    }
   }
+  const notApplied = (err: unknown) => `The payment was saved, but not all of it could be applied: ${err instanceof Error ? err.message : "unknown error"}`;
 
   async function saveExisting(after: "stay" | "close" | "new") {
     if (!loaded) return setError(loadError ?? "This transaction is still loading.");
@@ -224,6 +219,8 @@ export function ReceivePaymentFormPage() {
     const credit = loaded.postings.find((p) => p.type === "CREDIT")!;
     const total = amountLocked ? debit.amount : cents(amount) / 100;
     if (total <= 0) return setError("Enter the amount received.");
+    const wrong = problem();
+    if (wrong) return setError(wrong);
     setSaving(true);
     setError(null);
     try {
@@ -246,6 +243,14 @@ export function ReceivePaymentFormPage() {
       );
       await attachments.linkTo(loaded.id).catch(() => toast({ variant: "error", title: "Saved, but the attachments could not be linked" }));
       await attachments.loadLinked(loaded.id).catch(() => undefined);
+      try {
+        await applyTo(loaded.id);
+      } catch (err) {
+        allocation.clear();
+        reload();
+        return setError(notApplied(err));
+      }
+      allocation.clear();
       toast({ variant: "success", title: "Payment saved" });
       if (after === "new") window.location.assign("/recvpayment");
       else if (after === "close") closePage();
@@ -263,18 +268,15 @@ export function ReceivePaymentFormPage() {
     if (!depositAccount) return setError("Choose the account to deposit to.");
     if (!customerRecord) return setError("Choose a customer.");
     if (!date) return setError("Enter the payment date.");
-    if (cents(amount) <= 0) return setError("Enter the amount received.");
-    if (cents(amount) < appliedCents) return setError(`The amount received must cover whole invoices (selected invoices total ${money(appliedCents / 100)}). Partial payments aren't supported yet.`);
+    if (moneyCents <= 0 && creditUsedCents <= 0) return setError("Enter the amount received, or use a credit.");
+    const wrong = problem();
+    if (wrong) return setError(wrong);
     setSaving(true);
     setError(null);
     try {
-      let last: Transaction | undefined;
-      for (const invoice of selected) {
-        const paid = await payInvoice(invoice.id, { depositAccountId: depositAccount.id, paymentDate: date });
-        if (paid.paymentTransactionId) last = await addFormFields(paid.paymentTransactionId);
-      }
-      if (creditCents > 0) {
-        let receivableId = last?.postings.find((p) => p.type === "CREDIT")?.accountId ?? findReceivableAccount(accounts)?.id;
+      let posted: Transaction | undefined;
+      if (moneyCents > 0) {
+        let receivableId = findReceivableAccount(accounts)?.id;
         if (!receivableId) {
           receivableId = (await services.accountService.createAccount({ code: nextAccountCode(accounts), name: "Accounts Receivable", category: "ACCOUNTS_RECEIVABLE", currency: "USD" })).id;
         }
@@ -288,13 +290,21 @@ export function ReceivePaymentFormPage() {
           sourceAccountId: depositAccount.id,
           paymentMethod: method || undefined,
           postings: [
-            { accountId: depositAccount.id, type: "DEBIT", amount: creditCents / 100 },
-            { accountId: receivableId, type: "CREDIT", amount: creditCents / 100 }
+            { accountId: depositAccount.id, type: "DEBIT", amount: moneyCents / 100 },
+            { accountId: receivableId, type: "CREDIT", amount: moneyCents / 100 }
           ]
         });
-        last = await services.transactionService.postTransaction(created.id);
+        posted = await services.transactionService.postTransaction(created.id);
+        await attachments.linkTo(posted.id).catch(() => toast({ variant: "error", title: "Saved, but the attachments could not be linked" }));
       }
-      if (last) await attachments.linkTo(last.id).catch(() => toast({ variant: "error", title: "Saved, but the attachments could not be linked" }));
+      try {
+        await applyTo(posted?.id);
+      } catch (err) {
+        // The money is recorded, so clear the form: recording again would enter it twice.
+        resetForm();
+        reload();
+        return setError(notApplied(err));
+      }
       toast({ variant: "success", title: "Payment recorded" });
       if (after === "close") closePage();
       else {
@@ -302,11 +312,7 @@ export function ReceivePaymentFormPage() {
         reload();
       }
     } catch (err) {
-      // Some invoices may already be paid: start the amounts over so a retry can't record them twice.
-      setPicked(new Set());
-      setAmount("");
-      setError(`${err instanceof Error ? err.message : "Could not record this payment."} Check which invoices are still open before trying again.`);
-      reload();
+      setError(err instanceof Error ? err.message : "Could not record this payment.");
     } finally {
       setSaving(false);
     }
@@ -346,11 +352,10 @@ export function ReceivePaymentFormPage() {
   const title = (
     <>
       <span className="font-bold">Receive Payment</span>
-      <span className="text-sm font-bold text-[var(--color-negative)]">{selected.length} {selected.length === 1 ? "invoice" : "invoices"} selected · {money(appliedCents / 100)}</span>
+      <span className="text-sm font-bold text-[var(--color-negative)]">{selectedCount} {selectedCount === 1 ? "invoice" : "invoices"} selected · {money(selectedCents / 100)}</span>
       <button type="button" onClick={() => setHeaderHidden((v) => !v)} className={RT_BUTTON}>{headerHidden ? "Show Header" : "Hide Header"}</button>
     </>
   );
-  const allPicked = rows.length > 0 && rows.every((i) => (txnId ? paidByThis.includes(i) : picked.has(i.id)));
 
   return (
     <FullScreenFormShell title={title} onClose={closePage} footer={footer} hideSettings hideTools>
@@ -427,12 +432,12 @@ export function ReceivePaymentFormPage() {
                 value={amountFocused || !amount ? amount : money(cents(amount) / 100)}
                 onFocus={() => setAmountFocused(true)}
                 onBlur={() => setAmountFocused(false)}
-                onChange={(event) => typeAmount(event.target.value.replace(/[^0-9.]/g, ""))}
+                onChange={(event) => allocation.typeAmount(event.target.value.replace(/[^0-9.]/g, ""))}
                 disabled={amountLocked}
                 placeholder="$0.00"
                 className="w-[350px] max-w-full"
               />
-              {paidByThis.length > 0 ? <p className="mt-2 text-xs">This payment paid {paidByThis.length === 1 ? "an invoice" : "invoices"} in full, so its customer and amount can't change.</p> : null}
+              {appliedHereCents > 0 ? <p className="mt-2 text-xs">This payment is applied to {appliedHere.size === 1 ? "an invoice" : "invoices"}, so its customer and amount can't change.</p> : null}
             </div>
           </section>
         </div>
@@ -445,35 +450,16 @@ export function ReceivePaymentFormPage() {
             <button type="button" disabled title="More Fields isn't available yet" className={RT_BUTTON}>More Fields</button>
             <button type="button" disabled title="Copying the reference number to invoices isn't available yet" className={RT_BUTTON}>Copy Payment Ref# to Invoices</button>
           </ListTools>
-          <table className="mt-4 w-full table-fixed border-collapse border-b-2 border-[var(--color-divider-tertiary)] text-sm">
-            <thead>
-              <tr className="border-b-2 border-[var(--color-divider-tertiary)] text-left text-xs font-semibold uppercase text-[var(--color-text-global)]">
-                <th className="w-14 px-3 py-3 text-center"><input type="checkbox" aria-label="Select all invoices" checked={allPicked} disabled={Boolean(txnId) || rows.length === 0} onChange={() => pick(new Set(allPicked ? [] : rows.map((i) => i.id)))} className={CHECKBOX} /></th>
-                <th className={TH}>Description</th>
-                <th className={`${TH} w-[16%]`}>Due date</th>
-                <th className={`${TH} w-[20%] text-right`}>Original amount</th>
-                <th className={`${TH} w-[22%] text-right`}>Open balance</th>
-                <th className={`${TH} w-[13%] text-right`}>Payment</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((i) => {
-                const paidHere = paidByThis.includes(i);
-                const ticked = txnId ? paidHere : picked.has(i.id);
-                return (
-                  <tr key={i.id} className="border-b border-[var(--color-divider-tertiary)]">
-                    <td className="px-3 py-3 text-center"><input type="checkbox" checked={ticked} disabled={Boolean(txnId)} title={txnId && !paidHere ? NO_APPLY : undefined} onChange={() => toggle(i.id)} aria-label={`Pay invoice ${i.invoiceNumber ?? ""}`} className={CHECKBOX} /></td>
-                    <td className={TD}>Invoice{i.invoiceNumber ? ` # ${i.invoiceNumber}` : ""} ({usDate(i.invoiceDate)})</td>
-                    <td className={TD}>{usDate(i.dueDate)}</td>
-                    <td className={`${TD} text-right`}>{money(i.amount)}</td>
-                    <td className={`${TD} text-right`}>{money(paidHere ? 0 : i.amount)}</td>
-                    <td className={TD}><div className={PAYMENT_BOX}>{ticked ? i.amount.toFixed(2) : ""}</div></td>
-                  </tr>
-                );
-              })}
-              {rows.length === 0 ? <tr><td colSpan={6} className="px-3 py-14 text-center">There are no transactions matching the criteria.</td></tr> : null}
-            </tbody>
-          </table>
+          <OpenDocumentsTable
+            noun="invoice"
+            dueHeading="Due date"
+            emptyText="There are no transactions matching the criteria."
+            rows={rows.map((i) => ({ id: i.id, label: `Invoice${i.invoiceNumber ? ` # ${i.invoiceNumber}` : ""} (${usDate(i.invoiceDate)})`, dueDate: i.dueDate, original: i.amount, open: i.openBalance, appliedHere: (appliedHere.get(i.id) ?? 0) / 100 }))}
+            payments={allocation.payments}
+            onToggle={allocation.toggle}
+            onToggleAll={allocation.toggleAll}
+            onPayment={allocation.setPayment}
+          />
           <ListCount count={rows.length} />
         </section>
 
@@ -481,43 +467,22 @@ export function ReceivePaymentFormPage() {
           <section className="mt-8">
             <h2 className={SECTION_TITLE}>Credits</h2>
             <ListTools placeholder="Find Credit Memo No." value={creditSearch} onChange={setCreditSearch} />
-            <table className="mt-4 w-full table-fixed border-collapse border-b-2 border-[var(--color-divider-tertiary)] text-sm">
-              <thead>
-                <tr className="border-b-2 border-[var(--color-divider-tertiary)] text-left text-xs font-semibold uppercase text-[var(--color-text-global)]">
-                  <th className="w-14 px-3 py-3 text-center"><input type="checkbox" aria-label="Select all credits" disabled checked={false} readOnly className={CHECKBOX} /></th>
-                  <th className={TH}>Description</th>
-                  <th className={`${TH} w-[24%] text-right`}>Original amount</th>
-                  <th className={`${TH} w-[27%] text-right`}>Open balance</th>
-                  <th className={`${TH} w-[16%] text-right`}>Payment</th>
-                </tr>
-              </thead>
-              <tbody>
-                {creditRows.map((c) => (
-                  <tr key={c.id} className="border-b border-[var(--color-divider-tertiary)]">
-                    <td className="px-3 py-3 text-center"><input type="checkbox" disabled checked={false} readOnly title="Applying credits isn't available yet" aria-label={`Apply credit from ${usDate(c.date)}`} className={CHECKBOX} /></td>
-                    <td className={TD}><a href={`/recvpayment?txnId=${c.id}`} className="text-[var(--color-link-action)] hover:underline">Unapplied payment</a> <span className="text-xs">({usDate(c.date)})</span></td>
-                    <td className={`${TD} text-right`}>{money(c.amount)}</td>
-                    <td className={`${TD} text-right`}>{money(c.amount)}</td>
-                    <td className={TD}><div className={`${PAYMENT_BOX} opacity-60`} title="Applying credits isn't available yet" /></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <CreditsTable rows={creditRows} used={allocation.used} href={(id) => `/recvpayment?txnId=${id}`} onToggle={allocation.toggleCredit} onAmount={allocation.setCredit} />
             <ListCount count={creditRows.length} />
           </section>
         ) : null}
 
         <div className="mt-4 flex flex-col items-end gap-2 text-sm">
-          <p className="flex w-[330px] justify-between"><strong className="text-[var(--color-text-global)]">Amount to Apply</strong><span>{money(cents(amount) / 100)}</span></p>
-          <p className="flex w-[330px] justify-between"><strong className="text-[var(--color-text-global)]">Amount to Credit</strong><span>{money(creditCents / 100)}</span></p>
-          <Button variant="secondary" className="!rounded-md mt-2" disabled={Boolean(txnId)} onClick={() => pick(new Set())}>Clear Payment</Button>
-          {creditCents > 0 ? <p className="mt-2">This transaction will create an additional credit in the amount of {money(creditCents / 100)}</p> : null}
+          <p className="flex w-[330px] justify-between"><strong className="text-[var(--color-text-global)]">Amount to Apply</strong><span>{money((moneyCents + creditUsedCents) / 100)}</span></p>
+          <p className="flex w-[330px] justify-between"><strong className="text-[var(--color-text-global)]">Amount to Credit</strong><span>{money(leftoverCents / 100)}</span></p>
+          <Button variant="secondary" className="!rounded-md mt-2" onClick={allocation.clear}>Clear Payment</Button>
+          {leftoverCents > 0 ? <p className="mt-2">This transaction will create an additional credit in the amount of {money(leftoverCents / 100)}</p> : null}
         </div>
 
         <div className="mt-4 w-[460px] max-w-full">
           <div className="mb-1 flex items-center gap-3">
             <label className="text-sm" htmlFor="rp-memo">Memo</label>
-            <button type="button" onClick={copyDetailsToMemo} disabled={selected.length === 0} className={RT_BUTTON}>Copy Invoice Details to Memo</button>
+            <button type="button" onClick={copyDetailsToMemo} disabled={selectedCount === 0} className={RT_BUTTON}>Copy Invoice Details to Memo</button>
           </div>
           <textarea id="rp-memo" value={memo} onChange={(event) => setMemo(event.target.value)} placeholder="Note" className={`${INPUT_BASE_CLASSES} h-[122px] resize-none rounded px-3 py-2 text-sm`} />
         </div>
