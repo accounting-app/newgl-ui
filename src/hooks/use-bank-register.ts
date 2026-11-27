@@ -21,6 +21,7 @@ import {
   toDomainTransactionType
 } from "@/modules/accounting/presentation/transaction-type-policy";
 import { generateNextRefNumber } from "@/modules/accounting/domain/accounting-reports";
+import { nextCheckNumber } from "@/lib/accounting/next-check-number";
 import type { BatchRegisterEntryUpdate } from "@/modules/accounting/application/contracts";
 import { nextAccountCode } from "@/lib/accounting/next-account-code";
 import type {
@@ -218,7 +219,8 @@ export function useBankRegister() {
         transactionTypeId,
         transactionTypeLabel: selectedTypeLabel,
         date: new Date().toISOString().slice(0, 10),
-        refNo: generateNextRefNumber(existingRefNumbers),
+        // A check gets the account's next check number; either way the field stays editable.
+        refNo: transactionTypeId === "CHECK" ? nextCheckNumber(entries) : generateNextRefNumber(existingRefNumbers),
         payee: "",
         accountTypeId: "",
         memo: "",
@@ -231,7 +233,7 @@ export function useBankRegister() {
       setDraftErrors({});
       setError(null);
     },
-    [availableTransactionTypes, existingRefNumbers, refreshRefNumbers, selectedAccountId]
+    [availableTransactionTypes, entries, existingRefNumbers, refreshRefNumbers, selectedAccountId]
   );
 
   const toggleSplitMode = useCallback(() => {
@@ -343,8 +345,10 @@ export function useBankRegister() {
       return;
     }
 
+    // A check number the user cleared stays blank rather than becoming a TX- ref.
     const referenceNumber =
-      draftTransaction.refNo.trim() || generateNextRefNumber(existingRefNumbers);
+      draftTransaction.refNo.trim() ||
+      (draftTransaction.transactionTypeId === "CHECK" ? undefined : generateNextRefNumber(existingRefNumbers));
     const domainTransactionType = toDomainTransactionType(draftTransaction.transactionTypeId);
 
     const selectedCounterparty = accounts.find(

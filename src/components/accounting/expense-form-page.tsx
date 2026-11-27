@@ -1,5 +1,6 @@
 "use client";
 
+import { nextCheckNumber } from "@/lib/accounting/next-check-number";
 import { formDetails } from "@/lib/hooks/use-saved-transaction";
 import { DateField } from "@/components/ui/date-field";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -46,7 +47,6 @@ const RT_BUTTON = "rounded-md border border-[var(--color-negative)] px-3 py-1.5 
 const PLAIN_BUTTON = "rounded-md border border-[var(--color-button-border)] px-3 py-1.5 text-sm text-[var(--color-text-global)] hover:bg-[var(--color-action-passive-subtle-hover)]";
 // Transaction types the "Copy options" panel can copy this expense into (QBO's list).
 const COPY_TARGETS = ["Bill", "Check", "Credit Card Credit", "Credit Memo", "Delayed Charge", "Delayed Credit", "Estimate", "Expense", "Invoice", "Journal Entry", "Purchase Order", "Refund Receipt", "Sales Order", "Sales Receipt", "Vendor Credit"];
-const CHECK_NEXT_KEY = "newgl:check-next:v1";
 const COPY_KEY = "newgl:expense-copy:v1";
 const COLUMNS_KEY = "newgl:expense-columns:v1";
 const TAGS_KEY = "newgl:expense-use-tags:v1";
@@ -134,15 +134,6 @@ export function ExpenseFormPage({ kind = "expense" }: { kind?: "expense" | "chec
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [templateParam]);
 
-  useEffect(() => {
-    if (!isCheck || params.get("txnId")) return;
-    try {
-      const stored = Number(window.localStorage.getItem(CHECK_NEXT_KEY));
-      if (Number.isInteger(stored) && stored > 0) setCheckNo(String(stored));
-    } catch {
-      // storage unavailable: start at 1
-    }
-  }, [isCheck]);
 
   useEffect(() => {
     try {
@@ -215,6 +206,21 @@ export function ExpenseFormPage({ kind = "expense" }: { kind?: "expense" | "chec
     setMailing([payeeRecord?.name, payeeRecord?.address].filter(Boolean).join("\n"));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isCheck, payeeRecord]);
+  const checkNoTyped = useRef(false);
+  useEffect(() => {
+    if (!isCheck || params.get("txnId") || !paymentAccountId) return;
+    let cancelled = false;
+    services.registerService
+      .listRegisterEntries(paymentAccountId)
+      .then((entries) => {
+        if (!cancelled && !checkNoTyped.current) setCheckNo(nextCheckNumber(entries));
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isCheck, paymentAccountId]);
   // If no (or an unknown) rtAccountId came in, default to the first bank/card account once loaded.
   useEffect(() => {
     // Never swap in a default while editing: it would silently move the transaction.
@@ -333,14 +339,9 @@ export function ExpenseFormPage({ kind = "expense" }: { kind?: "expense" | "chec
       await attachments.linkTo(created.id).catch(() => toast({ variant: "error", title: "Saved, but the attachments could not be linked" }));
       if (useTplId) await advanceRecurring(useTplId).catch(() => undefined);
       toast({ variant: "success", title: isCheck ? "Check saved" : "Expense saved" });
-      if (isCheck) {
-        const following = String((Number(checkNo) || 0) + 1);
-        setCheckNo(following);
-        try {
-          window.localStorage.setItem(CHECK_NEXT_KEY, following);
-        } catch {
-          // not persisted
-        }
+      if (isCheck && /^\d+$/.test(checkNo.trim())) {
+        checkNoTyped.current = false;
+        setCheckNo(String(Number(checkNo) + 1).padStart(checkNo.trim().length, "0"));
       }
       if (after === "close") closePage();
       else {
@@ -619,7 +620,7 @@ export function ExpenseFormPage({ kind = "expense" }: { kind?: "expense" | "chec
             </div>
             <div>
               <label className={LABEL} htmlFor="check-no">Check no.</label>
-              <InputField id="check-no" value={checkNo} disabled={printLater} onChange={(event) => setCheckNo(event.target.value)} className="w-[214px]" />
+              <InputField id="check-no" value={checkNo} disabled={printLater} onChange={(event) => { checkNoTyped.current = true; setCheckNo(event.target.value); }} className="w-[214px]" />
               <label className="mt-3 flex cursor-pointer items-center gap-3 text-sm"><input type="checkbox" checked={printLater} onChange={(event) => setPrintLater(event.target.checked)} className={CHECKBOX} />Print later</label>
             </div>
           </div>
