@@ -21,7 +21,7 @@ import {
   toDomainTransactionType
 } from "@/modules/accounting/presentation/transaction-type-policy";
 import { generateNextRefNumber } from "@/modules/accounting/domain/accounting-reports";
-import { nextCheckNumber } from "@/lib/accounting/next-check-number";
+import { nextCheckNumber, nextSalesReceiptNumber } from "@/lib/accounting/next-check-number";
 import type { BatchRegisterEntryUpdate } from "@/modules/accounting/application/contracts";
 import { nextAccountCode } from "@/lib/accounting/next-account-code";
 import type {
@@ -220,7 +220,14 @@ export function useBankRegister() {
         transactionTypeLabel: selectedTypeLabel,
         date: new Date().toISOString().slice(0, 10),
         // A check gets the account's next check number; either way the field stays editable.
-        refNo: transactionTypeId === "CHECK" ? nextCheckNumber(entries) : transactionTypeId === "DEPOSIT" ? "" : generateNextRefNumber(existingRefNumbers),
+        refNo:
+          transactionTypeId === "CHECK"
+            ? nextCheckNumber(entries)
+            : transactionTypeId === "SALES_RECEIPT"
+              ? nextSalesReceiptNumber(entries)
+              : transactionTypeId === "DEPOSIT"
+                ? ""
+                : generateNextRefNumber(existingRefNumbers),
         payee: "",
         accountTypeId: "",
         memo: "",
@@ -348,7 +355,7 @@ export function useBankRegister() {
     // A check number the user cleared stays blank rather than becoming a TX- ref.
     const referenceNumber =
       draftTransaction.refNo.trim() ||
-      (["CHECK", "DEPOSIT"].includes(draftTransaction.transactionTypeId) ? undefined : generateNextRefNumber(existingRefNumbers));
+      (["CHECK", "DEPOSIT", "SALES_RECEIPT"].includes(draftTransaction.transactionTypeId) ? undefined : generateNextRefNumber(existingRefNumbers));
     const domainTransactionType = toDomainTransactionType(draftTransaction.transactionTypeId);
 
     const selectedCounterparty = accounts.find(
@@ -388,6 +395,10 @@ export function useBankRegister() {
         const incomeAccount = useSplits
           ? undefined
           : selectedCounterparty ??
+            (domainTransactionType === "SALES_RECEIPT"
+              ? accounts.find((account) => account.category === "INCOME" && ["Services", "Sales"].includes(account.name)) ??
+                accounts.find((account) => account.category === "INCOME")
+              : undefined) ??
             findCounterpartyAccount(accounts, selectedAccountId, [
               "Personal income",
               "Owners investment",

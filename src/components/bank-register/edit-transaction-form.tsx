@@ -86,8 +86,9 @@ export function EditTransactionForm({
                   placeholder="Account"
                   onChange={(value) => onEditorChange("accountTypeId", value)}
                   allowCustomValue={false}
-                  disabled={locked}
-                  onAddNew={locked ? undefined : onOpenAccountModal}
+                  // A sales receipt's account comes from its products; change it in the full form.
+                  disabled={locked || entry.transactionType === "SALES_RECEIPT"}
+                  onAddNew={locked || entry.transactionType === "SALES_RECEIPT" ? undefined : onOpenAccountModal}
                 />
               </td>
               <td className="form-control">

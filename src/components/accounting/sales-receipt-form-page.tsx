@@ -1,7 +1,8 @@
 "use client";
 
 import { CANNOT_SHOW, formDetails, useSavedTransaction } from "@/lib/hooks/use-saved-transaction";
-import { LinkedFiles } from "@/components/accounting/linked-files";
+import { DateField } from "@/components/ui/date-field";
+import { nextSalesReceiptNumber } from "@/lib/accounting/next-check-number";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ChevronDown, CircleHelp, Copy, GripVertical, Lock, LockOpen, Plus, Trash2 } from "lucide-react";
@@ -32,7 +33,6 @@ const blankLine = (): Line => {
 };
 const startingLines = () => [blankLine(), blankLine()];
 
-const NEXT_NUMBER_KEY = "newgl:salesreceipt-next:v1";
 const DEPOSIT_CATEGORIES = new Set<Account["category"]>(["BANK", "OTHER_CURRENT_ASSET"]);
 const LABEL = "mb-1 block text-sm text-[var(--color-text-primary)]";
 const PLAIN_BUTTON = "rounded-md border border-[var(--color-button-border)] px-3 py-1.5 text-sm text-[var(--color-text-global)] hover:bg-[var(--color-action-passive-subtle-hover)]";
@@ -40,6 +40,9 @@ const RT_BUTTON = "rounded-md border border-[var(--color-negative)] px-3 py-1.5 
 const CARD = "rounded-xl border border-[var(--color-container-border-secondary)] bg-[var(--color-container-background-primary)]";
 const CARD_TITLE = "border-b border-[var(--color-divider-tertiary)] px-5 py-4 text-lg font-semibold text-[var(--color-text-global)]";
 const CELL_INPUT = `${INPUT_BASE_CLASSES} h-9 rounded px-3 text-sm`;
+
+const OUTLINE_BUTTON = "rounded-md border-2 border-[var(--color-ui-primary)] px-4 py-1.5 font-medium text-[var(--color-ui-primary)] hover:bg-[var(--color-action-passive-subtle-hover)]";
+const FOOTER_LINK = "font-medium text-[var(--color-ui-primary)] hover:underline";
 
 const cents = (value: string) => Math.round((Number(value) || 0) * 100);
 const money = (value: number) => value.toLocaleString("en-US", { style: "currency", currency: "USD" });
@@ -69,7 +72,9 @@ export function SalesReceiptFormPage() {
   const [sendLater, setSendLater] = useState(false);
   const [number, setNumber] = useState("1001");
   const [charge, setCharge] = useState(false);
-  const [detailsHidden, setDetailsHidden] = useState(false);
+  // QBO shows lines as plain text; only the one being edited has input boxes.
+  const [activeLineId, setActiveLineId] = useState<string | null>(null);
+  const [detailsHidden, setDetailsHidden] = useState(true);
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [refNo, setRefNo] = useState("");
   const [method, setMethod] = useState("");
@@ -92,15 +97,6 @@ export function SalesReceiptFormPage() {
     services.accountService.listAccounts().then(setAccounts).catch(() => setAccounts([]));
   }, [services]);
 
-  useEffect(() => {
-    try {
-      if (new URLSearchParams(window.location.search).get("txnId")) return;
-      const stored = Number(window.localStorage.getItem(NEXT_NUMBER_KEY));
-      if (Number.isInteger(stored) && stored > 0) setNumber(String(stored));
-    } catch {
-      // storage unavailable: start at 1001
-    }
-  }, []);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -128,8 +124,9 @@ export function SalesReceiptFormPage() {
     setNumber(d.number ?? txn.referenceNumber ?? "");
     setRefNo(d.refNo ?? "");
     setMethod(txn.paymentMethod ?? "");
-    setMessage(txn.memo ?? "");
-    setStatement(d.statement ?? "");
+    // The register memo is the statement message. (Receipts saved earlier kept it the other way round.)
+    setStatement(d.statement ?? txn.memo ?? "");
+    setMessage(d.statement !== undefined ? txn.memo ?? "" : d.message ?? "");
     const next: Line[] = credits.map((p) => {
       // Qty x rate is only shown while it still agrees with the posted amount.
       const keepRate = cents(String(Number(p.details?.qty) * Number(p.details?.rate))) === cents(String(p.amount));
@@ -145,6 +142,7 @@ export function SalesReceiptFormPage() {
     });
     while (next.length < 2) next.push(blankLine());
     setLines(next);
+    void attachments.loadLinked(txn.id).catch(() => toast({ variant: "error", title: "Could not load the attachments" }));
   });
   const savedSourceId = txnId ? loaded?.postings.find((p) => p.type === "DEBIT")?.accountId : undefined;
 
@@ -154,6 +152,21 @@ export function SalesReceiptFormPage() {
     if (txnId || accounts.length === 0 || depositAccount) return;
     if (depositAccounts[0]) setDepositId(depositAccounts[0].id);
   }, [txnId, accounts, depositAccount, depositAccounts]);
+
+  const numberTyped = useRef(false);
+  useEffect(() => {
+    if (txnId || !depositId) return;
+    let cancelled = false;
+    services.registerService
+      .listRegisterEntries(depositId)
+      .then((entries) => {
+        if (!cancelled && !numberTyped.current) setNumber(nextSalesReceiptNumber(entries));
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [txnId, depositId, services]);
 
   const incomeAccounts = useMemo(() => accounts.filter((a) => a.category === "INCOME" || a.category === "OTHER_INCOME"), [accounts]);
   const customerRecord = customers.find((c) => c.name === customer);
@@ -206,7 +219,7 @@ export function SalesReceiptFormPage() {
     if (record?.email) setEmail(record.email);
   }
 
-  async function save(after: "stay" | "close") {
+  async function save(after: "stay" | "close" | "new") {
     setMenuOpen(false);
     if (!depositAccount) return setError("Choose the account to deposit to.");
     if (!date) return setError("Enter the sales receipt date.");
@@ -228,10 +241,10 @@ export function SalesReceiptFormPage() {
       if (txnId && !loaded) throw new Error(loadError ?? "This transaction is still loading.");
       const body = {
         paymentMethod: method || undefined,
-        details: formDetails({ email, cc, bcc, billing, statement, number, refNo, sendLater: sendLater ? "1" : "" }),
+        details: formDetails({ email, cc, bcc, billing, message, number, refNo, sendLater: sendLater ? "1" : "" }),
         transactionDate: date,
         referenceNumber: refNo.trim() || number,
-        memo: message.trim() || undefined,
+        memo: statement.trim() || undefined,
         payee: customer.trim() || undefined,
         accountLabel: creditAccounts.length > 1 ? "Split" : accounts.find((a) => a.id === creditAccounts[0])?.name ?? "",
         sourceAccountId: depositAccount.id,
@@ -248,20 +261,19 @@ export function SalesReceiptFormPage() {
       };
       if (loaded) {
         setLoaded(await services.transactionService.updateTransaction(loaded.id, body));
+        await attachments.linkTo(loaded.id).catch(() => toast({ variant: "error", title: "Saved, but the attachments could not be linked" }));
+        await attachments.loadLinked(loaded.id).catch(() => undefined);
         toast({ variant: "success", title: "Sales receipt saved" });
-        if (after === "close") closePage();
+        if (after === "new") window.location.assign("/salesreceipt");
+        else if (after === "close") closePage();
         else services.accountService.listAccounts().then(setAccounts).catch(() => undefined);
         return;
       }
       const created = await services.transactionService.createTransaction({ ...body, type: "SALES_RECEIPT" });
       await services.transactionService.postTransaction(created.id);
       await attachments.linkTo(created.id).catch(() => toast({ variant: "error", title: "Saved, but the attachments could not be linked" }));
-      const following = String((Number(number) || 1000) + 1);
-      try {
-        window.localStorage.setItem(NEXT_NUMBER_KEY, following);
-      } catch {
-        // not persisted
-      }
+      const following = /^\d+$/.test(number.trim()) ? String(Number(number) + 1) : number;
+      numberTyped.current = false;
       toast({ variant: "success", title: "Sales receipt recorded" });
       if (after === "close") closePage();
       else {
@@ -321,46 +333,33 @@ export function SalesReceiptFormPage() {
     </>
   );
 
-  const editFooter = (
-    <>
-      <button type="button" onClick={closePage} className="text-base font-medium text-[var(--color-text-global)] hover:underline">Cancel</button>
-      <div className="flex items-center gap-3">
-        <Button variant="secondary" className="!rounded-md" disabled={saving || !loaded} onClick={() => void save("stay")}>Save</Button>
-        <Button variant="primary" className="!rounded-md" disabled={saving || !loaded} onClick={() => void save("close")}>{saving ? "Saving..." : "Save and close"}</Button>
-      </div>
-    </>
-  );
-
+  const divider = <span className="h-8 w-px bg-[var(--color-divider-tertiary)]" aria-hidden="true" />;
   const footer = (
-    <>
-      <div className="flex items-center gap-6">
-        <button type="button" onClick={closePage} className="text-base font-medium text-[var(--color-text-global)] hover:underline">Cancel</button>
-        <button type="button" onClick={() => resetForm()} className="text-base font-medium text-[var(--color-text-global)] hover:underline">Clear</button>
+    <div className="ml-auto flex flex-wrap items-center justify-end gap-6 text-base">
+      <button type="button" onClick={closePage} className={FOOTER_LINK}>Cancel</button>
+      {txnId ? null : <button type="button" onClick={() => resetForm()} className={FOOTER_LINK}>Clear</button>}
+      <button type="button" onClick={() => window.print()} className={FOOTER_LINK}>Print or Preview</button>
+      {divider}
+      <button type="button" disabled title="Customizing the form isn't available yet" className={`${FOOTER_LINK} cursor-not-allowed opacity-60`}>Customize</button>
+      {divider}
+      <button type="button" disabled title="More options aren't available yet" className={`${FOOTER_LINK} cursor-not-allowed opacity-60`}>More</button>
+      <button type="button" disabled={saving || Boolean(txnId && !loaded)} onClick={() => void save("stay")} className={`${OUTLINE_BUTTON} disabled:opacity-50`}>Record</button>
+      <div ref={menuRef} className="relative inline-flex">
+        <Button variant="primary" className="!rounded-l-md !rounded-r-none" disabled={saving || Boolean(txnId && !loaded)} onClick={() => void save("close")}>{saving ? "Recording..." : "Record and close"}</Button>
+        <Button variant="primary" className="!rounded-l-none !rounded-r-md border-l border-l-white/30 !min-w-0 px-2" aria-label="More record options" disabled={saving || Boolean(txnId && !loaded)} onClick={() => setMenuOpen((v) => !v)}>
+          <ChevronDown className="h-4 w-4" aria-hidden="true" />
+        </Button>
+        {menuOpen ? (
+          <div className="absolute bottom-full right-0 mb-1 w-44 rounded-lg border border-[var(--color-divider-tertiary)] bg-[var(--color-container-background-primary)] py-1 shadow-lg">
+            <button type="button" onClick={() => void save(txnId ? "new" : "stay")} className="block w-full px-3 py-1.5 text-left text-sm text-[var(--color-text-global)] hover:bg-[var(--color-action-passive-subtle-hover)]">Record and new</button>
+          </div>
+        ) : null}
       </div>
-      <div className="flex items-center gap-4 text-base font-medium text-[var(--color-text-global)]">
-        <button type="button" onClick={() => window.print()} className="hover:underline">Print or Preview</button>
-        <span className="h-8 w-px bg-[var(--color-divider-tertiary)]" aria-hidden="true" />
-        <button type="button" disabled title="Customizing the form isn't available yet" className="cursor-not-allowed opacity-60">Customize</button>
-      </div>
-      <div className="flex items-center gap-3">
-        <Button variant="secondary" className="!rounded-md" disabled={saving} onClick={() => void save("stay")}>Record</Button>
-        <div ref={menuRef} className="relative inline-flex">
-          <Button className="!rounded-l-md !rounded-r-none" disabled={saving} onClick={() => void save("close")}>{saving ? "Recording..." : "Record and close"}</Button>
-          <Button className="!rounded-l-none !rounded-r-md border-l border-l-white/30 !min-w-0 px-2" aria-label="More record options" disabled={saving} onClick={() => setMenuOpen((v) => !v)}>
-            <ChevronDown className="h-4 w-4" aria-hidden="true" />
-          </Button>
-          {menuOpen ? (
-            <div className="absolute bottom-full right-0 mb-1 w-44 rounded-lg border border-[var(--color-divider-tertiary)] bg-[var(--color-container-background-primary)] py-1 shadow-lg">
-              <button type="button" onClick={() => void save("stay")} className="block w-full px-3 py-1.5 text-left text-sm text-[var(--color-text-global)] hover:bg-[var(--color-action-passive-subtle-hover)]">Record and new</button>
-            </div>
-          ) : null}
-        </div>
-      </div>
-    </>
+    </div>
   );
 
   return (
-    <FullScreenFormShell title={<>{`Sales Receipt # ${number}`} {loaded?.reconcileStatus === "R" ? <span className="text-lg text-[var(--color-negative)]">(Reconciled)</span> : null}</>} onClose={closePage} toolbar={toolbar} footer={txnId ? editFooter : footer}>
+    <FullScreenFormShell title={<><span className="font-semibold">{`Sales Receipt # ${number}`}</span> {loaded?.reconcileStatus === "R" ? <span className="text-lg text-[var(--color-negative)]">(Reconciled)</span> : null}</>} onClose={closePage} toolbar={toolbar} footer={footer}>
       <div className="px-6 pb-8 pt-5">
         <div className="flex flex-wrap items-start gap-6">
           <div className="w-[340px]">
@@ -389,7 +388,7 @@ export function SalesReceiptFormPage() {
           </div>
           <div className="w-[140px]">
             <label htmlFor="receipt-number" className={LABEL}>Sales Receipt no.</label>
-            <InputField id="receipt-number" value={number} onChange={(event) => setNumber(event.target.value)} />
+            <InputField id="receipt-number" value={number} onChange={(event) => { numberTyped.current = true; setNumber(event.target.value); }} />
           </div>
           <label className="flex cursor-pointer items-center gap-2 self-center pt-4 text-base font-semibold text-[var(--color-negative)]">
             {detailsHidden ? "Show Details" : "Hide Details"}
@@ -402,9 +401,9 @@ export function SalesReceiptFormPage() {
         </div>
 
         <div className="mt-6 flex flex-wrap items-start gap-6">
-          <section className={`${CARD} w-[min(100%,1215px)] flex-1`}>
+          <section className={`${CARD} w-[870px] max-w-full`}>
             <h2 className={CARD_TITLE}>
-              Record or charge <span className="ml-1 rounded bg-[#c43d8c] px-1.5 py-0.5 align-middle text-xs font-medium text-white">NEW</span>
+              Record or charge
             </h2>
             <div className="flex flex-wrap gap-8 px-5 py-6">
               <div className="w-[300px] space-y-5">
@@ -433,7 +432,7 @@ export function SalesReceiptFormPage() {
               <div className="grid flex-1 grid-cols-2 gap-x-4 gap-y-3" style={{ minWidth: 520 }}>
                   <div>
                     <label htmlFor="receipt-date" className={LABEL}>Sales Receipt Date</label>
-                    <InputField id="receipt-date" type="date" value={date} onChange={(event) => setDate(event.target.value)} />
+                    <DateField id="receipt-date" value={date} onChange={setDate} />
                   </div>
                   <div>
                     <label htmlFor="receipt-ref" className={LABEL}>Reference no.</label>
@@ -489,7 +488,7 @@ export function SalesReceiptFormPage() {
           </thead>
           <tbody>
             {lines.map((line, index) => (
-              <tr key={line.id} className="group border-b border-[var(--color-divider-tertiary)] hover:bg-[var(--color-table-row-hover)]">
+              <tr key={line.id} onClick={() => setActiveLineId(line.id)} onFocus={() => setActiveLineId(line.id)} className="group h-[53px] border-b border-[var(--color-divider-tertiary)] hover:bg-[var(--color-table-row-hover)]">
                 <td className="relative text-[var(--color-icon-muted)]">
                   <GripVertical className="h-4 w-4" aria-hidden="true" />
                   <button type="button" aria-label="Insert line below" onClick={() => setLines((current) => { const i = current.findIndex((l) => l.id === line.id); return [...current.slice(0, i + 1), blankLine(), ...current.slice(i + 1)]; })} className="absolute left-0 top-1/2 hidden h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full bg-[#1b3a2f] text-white group-hover:flex"><Plus className="h-4 w-4" aria-hidden="true" /></button>
@@ -502,19 +501,19 @@ export function SalesReceiptFormPage() {
                   </span>
                 </td>
                 <td className="px-2 py-2">
-                  <Select value={line.productId} onChange={(v) => pickProduct(line, v)} options={productOptions} placeholder="" allowCustomValue={false} disabled={line.locked} onAddNew={() => setAddProductForLine(line.id)} addNewLabel="+ Add new" />
+                  {activeLineId === line.id ? <Select value={line.productId} onChange={(v) => pickProduct(line, v)} options={productOptions} placeholder="" allowCustomValue={false} disabled={line.locked} onAddNew={() => setAddProductForLine(line.id)} addNewLabel="+ Add new" /> : <button type="button" aria-label={`Line ${index + 1} product`} onClick={() => setActiveLineId(line.id)} className="block min-h-9 w-full truncate px-3 text-left">{products.find((p) => p.id === line.productId)?.name ?? accounts.find((a) => a.id === line.accountId)?.name}</button>}
                 </td>
                 <td className="border-l border-dotted border-[var(--color-divider-tertiary)] px-2 py-2">
-                  <input value={line.description} readOnly={line.locked} onChange={(event) => updateLine(line.id, { description: event.target.value })} aria-label={`Line ${index + 1} description`} className={CELL_INPUT} />
+                  {activeLineId === line.id ? <input value={line.description} readOnly={line.locked} onChange={(event) => updateLine(line.id, { description: event.target.value })} aria-label={`Line ${index + 1} description`} className={CELL_INPUT} /> : <button type="button" aria-label={`Line ${index + 1} description`} onClick={() => setActiveLineId(line.id)} className="block min-h-9 w-full truncate px-3 text-left">{line.description}</button>}
                 </td>
                 <td className="border-l border-dotted border-[var(--color-divider-tertiary)] px-2 py-2">
-                  <input type="number" min="0" step="any" value={line.qty} readOnly={line.locked} onChange={(event) => editQtyRate(line, { qty: event.target.value })} aria-label={`Line ${index + 1} quantity`} className={`${CELL_INPUT} text-right`} />
+                  {activeLineId === line.id ? <input type="number" min="0" step="any" value={line.qty} readOnly={line.locked} onChange={(event) => editQtyRate(line, { qty: event.target.value })} aria-label={`Line ${index + 1} quantity`} className={`${CELL_INPUT} text-right`} /> : <button type="button" aria-label={`Line ${index + 1} quantity`} onClick={() => setActiveLineId(line.id)} className="block min-h-9 w-full truncate px-3 text-right">{line.qty}</button>}
                 </td>
                 <td className="border-l border-dotted border-[var(--color-divider-tertiary)] px-2 py-2">
-                  <input type="number" min="0" step="0.01" value={line.rate} readOnly={line.locked} onChange={(event) => editQtyRate(line, { rate: event.target.value })} aria-label={`Line ${index + 1} rate`} className={`${CELL_INPUT} text-right`} />
+                  {activeLineId === line.id ? <input type="number" min="0" step="0.01" value={line.rate} readOnly={line.locked} onChange={(event) => editQtyRate(line, { rate: event.target.value })} aria-label={`Line ${index + 1} rate`} className={`${CELL_INPUT} text-right`} /> : <button type="button" aria-label={`Line ${index + 1} rate`} onClick={() => setActiveLineId(line.id)} className="block min-h-9 w-full truncate px-3 text-right">{line.rate}</button>}
                 </td>
                 <td className="border-l border-dotted border-[var(--color-divider-tertiary)] px-2 py-2">
-                  <input type="number" min="0" step="0.01" value={line.amount} readOnly={line.locked} onChange={(event) => updateLine(line.id, { amount: event.target.value })} aria-label={`Line ${index + 1} amount`} className={`${CELL_INPUT} text-right`} />
+                  {activeLineId === line.id ? <input type="number" min="0" step="0.01" value={line.amount} readOnly={line.locked} onChange={(event) => updateLine(line.id, { amount: event.target.value })} aria-label={`Line ${index + 1} amount`} className={`${CELL_INPUT} text-right`} /> : <button type="button" aria-label={`Line ${index + 1} amount`} onClick={() => setActiveLineId(line.id)} className="block min-h-9 w-full truncate px-3 text-right">{line.amount === "" ? "" : money(cents(line.amount) / 100)}</button>}
                 </td>
                 <td className="px-1 text-center">
                   <button type="button" aria-label="Delete line" onClick={() => setLines((current) => (current.length > 1 ? current.filter((l) => l.id !== line.id) : [blankLine()]))} className="text-[var(--color-text-global)] hover:text-[var(--color-negative)]">
@@ -552,14 +551,7 @@ export function SalesReceiptFormPage() {
         </div>
 
         <div className="mt-8 w-[660px] max-w-full">
-          {txnId ? (
-              <div>
-                <span className={LABEL}>Attachments</span>
-                {loaded ? <LinkedFiles zone="forms" linkedId={loaded.id} /> : null}
-              </div>
-            ) : (
-              <AttachmentsField attachments={attachments} formLabel="Sales Receipt" />
-            )}
+          <AttachmentsField attachments={attachments} formLabel="Sales Receipt" />
         </div>
         <p className="mt-6 text-center"><a href="https://www.intuit.com/privacy/" target="_blank" rel="noreferrer" className="text-[var(--color-link-action)] hover:underline">Privacy</a></p>
         {error ?? loadError ? <p className="mt-3 text-sm text-[var(--color-negative)]" role="alert">{error ?? loadError}</p> : null}

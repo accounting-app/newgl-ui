@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
 
-import { nextCheckNumber } from "./next-check-number";
+import { nextCheckNumber, nextSalesReceiptNumber } from "./next-check-number";
 
-const entry = (refNumber: string | undefined, createdAt: string, transactionType: "CHECK" | "DEPOSIT" = "CHECK") => ({ refNumber, createdAt, transactionType });
+const entry = (refNumber: string | undefined, createdAt: string, transactionType: "CHECK" | "DEPOSIT" | "SALES_RECEIPT" = "CHECK") => ({ refNumber, createdAt, transactionType });
 
 describe("nextCheckNumber", () => {
   test("starts at 1 without earlier numbered checks", () => {
@@ -16,5 +16,12 @@ describe("nextCheckNumber", () => {
 
   test("keeps leading zeros", () => {
     expect(nextCheckNumber([entry("0042", "2026-01-01")])).toBe("0043");
+  });
+});
+
+describe("nextSalesReceiptNumber", () => {
+  test("starts at 1001 and counts only sales receipts", () => {
+    expect(nextSalesReceiptNumber([entry("50", "2026-01-01")])).toBe("1001");
+    expect(nextSalesReceiptNumber([entry("1001", "2026-01-01", "SALES_RECEIPT"), entry("9", "2026-02-01")])).toBe("1002");
   });
 });
