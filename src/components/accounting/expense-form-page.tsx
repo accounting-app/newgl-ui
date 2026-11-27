@@ -89,7 +89,8 @@ export function ExpenseFormPage({ kind = "expense" }: { kind?: "expense" | "chec
   const [refNo, setRefNo] = useState("");
   const [lines, setLines] = useState<Line[]>(startingLines);
   const [memo, setMemo] = useState("");
-  const [linesOpen, setLinesOpen] = useState(true);
+  // The chevron under the header folds it away to give the lines more room.
+  const [headerOpen, setHeaderOpen] = useState(true);
   // QBO shows lines as plain text; only the one being edited has input boxes.
   const [activeLineId, setActiveLineId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -550,7 +551,7 @@ export function ExpenseFormPage({ kind = "expense" }: { kind?: "expense" | "chec
       settingsLabel="Choose what you use"
       footer={footer}
     >
-      <div className="flex-1 overflow-y-auto px-6 pb-6">
+      <div className="flex-1 overflow-y-auto px-6 pb-6 pt-5">
         {tpl.active ? (
           <div className="pb-6">
             <p className="mb-3 text-sm font-semibold text-[var(--color-text-global)]">{isCheck ? "Recurring Check" : "Recurring Expense"}</p>
@@ -560,7 +561,7 @@ export function ExpenseFormPage({ kind = "expense" }: { kind?: "expense" | "chec
               <span className={LABEL}>Payee</span>
               <Select value={payee} onChange={setPayee} options={payeeOptions} placeholder="Who did you pay?" allowCustomValue={false} onAddNew={() => setPayeeModalOpen(true)} addNewLabel="+ Add new" />
               {payeeRecord ? (
-                <button type="button" onClick={() => window.open(`/${"is1099Contractor" in payeeRecord ? "vendor" : "customer"}detail?nameId=${encodeURIComponent(payeeRecord.id)}`, "_blank")} className="mt-1 block text-sm font-medium text-[var(--color-negative)] underline hover:no-underline">
+                <button type="button" onClick={() => window.open(`/${"is1099Contractor" in payeeRecord ? "vendor" : "customer"}detail?nameId=${encodeURIComponent(payeeRecord.id)}`, "_blank")} className="mt-1 block text-sm font-medium text-[var(--color-negative)] hover:underline">
                   Payee Details
                 </button>
               ) : null}
@@ -580,14 +581,14 @@ export function ExpenseFormPage({ kind = "expense" }: { kind?: "expense" | "chec
             ) : null}
           </div>
         ) : (
-        <>
+        <div className={headerOpen ? "" : "hidden"}>
         <div className="flex flex-wrap items-start justify-between gap-6 pb-6">
           <div className="flex flex-wrap gap-6">
             <div className="w-[320px]">
               <span className={LABEL}>Payee</span>
               <Select value={payee} onChange={setPayee} options={payeeOptions} placeholder="Who did you pay?" allowCustomValue={false} onAddNew={() => setPayeeModalOpen(true)} addNewLabel="+ Add new" />
               {payeeRecord ? (
-                <button type="button" onClick={() => window.open(`/${"is1099Contractor" in payeeRecord ? "vendor" : "customer"}detail?nameId=${encodeURIComponent(payeeRecord.id)}`, "_blank")} className="mt-1 block text-sm font-medium text-[var(--color-negative)] underline hover:no-underline">
+                <button type="button" onClick={() => window.open(`/${"is1099Contractor" in payeeRecord ? "vendor" : "customer"}detail?nameId=${encodeURIComponent(payeeRecord.id)}`, "_blank")} className="mt-1 block text-sm font-medium text-[var(--color-negative)] hover:underline">
                   Payee Details
                 </button>
               ) : null}
@@ -604,7 +605,7 @@ export function ExpenseFormPage({ kind = "expense" }: { kind?: "expense" | "chec
           </div>
           <div className="text-right">
             <p className="text-xs font-semibold uppercase text-[var(--color-text-global)]">Amount</p>
-            <p className="text-5xl text-[var(--color-text-global)]">{money(totalCents / 100)}</p>
+            <p className="text-5xl font-bold text-[var(--color-text-global)]">{money(totalCents / 100)}</p>
           </div>
         </div>
 
@@ -641,15 +642,15 @@ export function ExpenseFormPage({ kind = "expense" }: { kind?: "expense" | "chec
         </div>
         )}
 
-        </>
+        </div>
         )}
 
         <section className="rounded-lg bg-[var(--color-container-background-primary)] px-6 pb-6 pt-2">
-          <button type="button" onClick={() => setLinesOpen((v) => !v)} aria-expanded={linesOpen} aria-label="Toggle category details" className="mx-auto mb-2 flex text-[var(--color-icon-secondary)]">
-            {linesOpen ? <ChevronUp className="h-5 w-5" aria-hidden="true" /> : <ChevronDown className="h-5 w-5" aria-hidden="true" />}
-          </button>
-          {linesOpen ? (
-            <>
+          {tpl.active ? null : (
+            <button type="button" onClick={() => setHeaderOpen((v) => !v)} aria-expanded={headerOpen} aria-label={headerOpen ? "Hide header" : "Show header"} className="relative -top-6 mx-auto -mb-3 flex h-9 w-9 items-center justify-center rounded-md border border-[var(--color-divider-tertiary)] bg-[var(--color-container-background-primary)] text-[var(--color-icon-secondary)]">
+              {headerOpen ? <ChevronUp className="h-5 w-5" aria-hidden="true" /> : <ChevronDown className="h-5 w-5" aria-hidden="true" />}
+            </button>
+          )}
               <div className="mb-2 flex justify-end gap-3 text-[var(--color-text-global)]">
                 <button type="button" onClick={exportCsv} aria-label="Export lines" title="Export lines" className="hover:text-[var(--color-link-action)]"><SquareArrowOutUpRight className="h-5 w-5" aria-hidden="true" /></button>
                 <button type="button" onClick={() => setPasteOpen(true)} aria-label="Paste from Excel" title="Paste from Excel" className="hover:text-[var(--color-link-action)]"><ClipboardPaste className="h-5 w-5" aria-hidden="true" /></button>
@@ -743,14 +744,13 @@ export function ExpenseFormPage({ kind = "expense" }: { kind?: "expense" | "chec
                   <button type="button" className={RT_BUTTON} onClick={clearZeroLines}>Clear 0 Value Lines</button>
                   <button type="button" className={RT_BUTTON} onClick={exportCsv}>Export CSV</button>
                   <button type="button" className={RT_BUTTON} onClick={() => setPasteOpen(true)}>Paste From Excel</button>
+                  <button type="button" disabled title="Location journal entries aren't available yet" className={`${RT_BUTTON} cursor-not-allowed opacity-60`}>Location JE</button>
                 </div>
                 <p className="flex gap-16 pr-14 text-base font-semibold text-[var(--color-text-global)]">
                   <span>Total</span>
                   <span>{money(totalCents / 100)}</span>
                 </p>
               </div>
-            </>
-          ) : null}
 
           <div className="mt-6 flex flex-wrap gap-8">
             <div className="w-[520px] max-w-full">
@@ -768,6 +768,7 @@ export function ExpenseFormPage({ kind = "expense" }: { kind?: "expense" | "chec
               <AttachmentsField attachments={attachments} formLabel={isCheck ? "Check" : "Expense"} />
             </div>
           </div>
+          <p className="mt-6 text-center"><a href="https://www.intuit.com/privacy/" target="_blank" rel="noreferrer" className="text-[var(--color-link-action)] hover:underline">Privacy</a></p>
         </section>
         {error ?? loadError ? <p className="mt-3 text-sm text-[var(--color-negative)]" role="alert">{error ?? loadError}</p> : null}
       </div>

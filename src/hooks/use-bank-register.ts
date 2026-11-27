@@ -226,7 +226,7 @@ export function useBankRegister() {
             ? nextCheckNumber(entries)
             : transactionTypeId === "SALES_RECEIPT"
               ? nextSalesReceiptNumber(entries)
-              : transactionTypeId === "DEPOSIT" || transactionTypeId === "RECEIVE_PAYMENT"
+              : transactionTypeId === "DEPOSIT" || transactionTypeId === "RECEIVE_PAYMENT" || transactionTypeId === "EXPENSE"
                 ? ""
                 : generateNextRefNumber(existingRefNumbers),
         payee: "",
@@ -353,10 +353,10 @@ export function useBankRegister() {
       return;
     }
 
-    // A check number the user cleared stays blank rather than becoming a TX- ref.
+    // These types stay blank when the field is empty rather than getting a TX- ref.
     const referenceNumber =
       draftTransaction.refNo.trim() ||
-      (["CHECK", "DEPOSIT", "SALES_RECEIPT", "RECEIVE_PAYMENT"].includes(draftTransaction.transactionTypeId) ? undefined : generateNextRefNumber(existingRefNumbers));
+      (["CHECK", "DEPOSIT", "SALES_RECEIPT", "RECEIVE_PAYMENT", "EXPENSE"].includes(draftTransaction.transactionTypeId) ? undefined : generateNextRefNumber(existingRefNumbers));
     const domainTransactionType = toDomainTransactionType(draftTransaction.transactionTypeId);
 
     const selectedCounterparty = accounts.find(
