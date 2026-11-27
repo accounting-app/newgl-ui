@@ -20,6 +20,7 @@ import {
   isRegisterAccountCategory,
   toDomainTransactionType
 } from "@/modules/accounting/presentation/transaction-type-policy";
+import { findReceivableAccount } from "@/lib/accounting/receivables";
 import { generateNextRefNumber } from "@/modules/accounting/domain/accounting-reports";
 import { nextCheckNumber, nextSalesReceiptNumber } from "@/lib/accounting/next-check-number";
 import type { BatchRegisterEntryUpdate } from "@/modules/accounting/application/contracts";
@@ -225,7 +226,7 @@ export function useBankRegister() {
             ? nextCheckNumber(entries)
             : transactionTypeId === "SALES_RECEIPT"
               ? nextSalesReceiptNumber(entries)
-              : transactionTypeId === "DEPOSIT"
+              : transactionTypeId === "DEPOSIT" || transactionTypeId === "RECEIVE_PAYMENT"
                 ? ""
                 : generateNextRefNumber(existingRefNumbers),
         payee: "",
@@ -355,7 +356,7 @@ export function useBankRegister() {
     // A check number the user cleared stays blank rather than becoming a TX- ref.
     const referenceNumber =
       draftTransaction.refNo.trim() ||
-      (["CHECK", "DEPOSIT", "SALES_RECEIPT"].includes(draftTransaction.transactionTypeId) ? undefined : generateNextRefNumber(existingRefNumbers));
+      (["CHECK", "DEPOSIT", "SALES_RECEIPT", "RECEIVE_PAYMENT"].includes(draftTransaction.transactionTypeId) ? undefined : generateNextRefNumber(existingRefNumbers));
     const domainTransactionType = toDomainTransactionType(draftTransaction.transactionTypeId);
 
     const selectedCounterparty = accounts.find(
@@ -392,9 +393,15 @@ export function useBankRegister() {
               ]
         });
       } else if (isInflowTransactionType(draftTransaction.transactionTypeId)) {
+        // A received payment always comes out of Accounts Receivable (the row's Account is locked).
+        let receivable = !useSplits && domainTransactionType === "RECEIVE_PAYMENT" ? findReceivableAccount(accounts) : undefined;
+        if (!useSplits && domainTransactionType === "RECEIVE_PAYMENT" && !receivable) {
+          receivable = await services.accountService.createAccount({ code: nextAccountCode(accounts), name: "Accounts Receivable", category: "ACCOUNTS_RECEIVABLE", currency: "USD" });
+        }
         const incomeAccount = useSplits
           ? undefined
-          : selectedCounterparty ??
+          : receivable ??
+            selectedCounterparty ??
             (domainTransactionType === "SALES_RECEIPT"
               ? accounts.find((account) => account.category === "INCOME" && ["Services", "Sales"].includes(account.name)) ??
                 accounts.find((account) => account.category === "INCOME")
@@ -503,6 +510,7 @@ export function useBankRegister() {
     refreshEntries,
     refreshRefNumbers,
     selectedAccountId,
+    services.accountService,
     services.transactionService
   ]);
 

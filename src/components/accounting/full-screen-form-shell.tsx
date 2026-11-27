@@ -21,13 +21,15 @@ type Props = {
   footer: React.ReactNode;
   /** QBO's Expense and Check headers: the pin and arrow sit in the middle. */
   centerTools?: boolean;
+  /** QBO's Receive Payment header has no pin or arrow. */
+  hideTools?: boolean;
   children: React.ReactNode;
 };
 
 // The one look shared by QBO's full-screen forms opened by URL (/expense,
 // /salesreceipt, ...?rtAccountId=...&rt=close): title with the history icon,
 // RightTool's toolbar, a scrolling body, and a pinned footer bar.
-export function FullScreenFormShell({ title, onClose, toolbar, onSettings, settingsLabel = "Settings", footer, centerTools = false, hideSettings = false, toolbarFirst = false, children }: Props) {
+export function FullScreenFormShell({ title, onClose, toolbar, onSettings, settingsLabel = "Settings", footer, centerTools = false, hideSettings = false, toolbarFirst = false, hideTools = false, children }: Props) {
   const { toast } = useToast();
   const bodyRef = useRef<HTMLDivElement>(null);
   const tools = (
@@ -45,7 +47,7 @@ export function FullScreenFormShell({ title, onClose, toolbar, onSettings, setti
         </h1>
         {centerTools ? <div className="absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center gap-4">{tools}</div> : null}
         <div className="flex items-center gap-1">
-          {centerTools || toolbarFirst ? null : tools}
+          {centerTools || toolbarFirst || hideTools ? null : tools}
           {toolbar}
           {toolbarFirst && !centerTools ? tools : null}
           <button type="button" onClick={() => toast({ variant: "info", title: "Feedback isn't available yet" })} className={ICON_BUTTON}>

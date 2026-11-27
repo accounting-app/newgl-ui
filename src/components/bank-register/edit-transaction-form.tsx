@@ -51,6 +51,9 @@ export function EditTransactionForm({
 }: EditTransactionFormProps) {
   const locked = isEntryLocked(entry.reconcileStatus ?? "");
   const lockedLabel = entry.reconcileStatus === "R" ? "reconciled" : "cleared";
+  // A sales receipt's account comes from its products and a received payment's is
+  // always Accounts Receivable, so neither can be changed from the row.
+  const accountLocked = locked || entry.transactionType === "SALES_RECEIPT" || entry.transactionType === "RECEIVE_PAYMENT";
   return (
     <div className="form-transaction-row">
       <div className="form-transaction-row-top">
@@ -86,9 +89,8 @@ export function EditTransactionForm({
                   placeholder="Account"
                   onChange={(value) => onEditorChange("accountTypeId", value)}
                   allowCustomValue={false}
-                  // A sales receipt's account comes from its products; change it in the full form.
-                  disabled={locked || entry.transactionType === "SALES_RECEIPT"}
-                  onAddNew={locked || entry.transactionType === "SALES_RECEIPT" ? undefined : onOpenAccountModal}
+                  disabled={accountLocked}
+                  onAddNew={accountLocked ? undefined : onOpenAccountModal}
                 />
               </td>
               <td className="form-control">
