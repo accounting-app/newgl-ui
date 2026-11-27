@@ -48,6 +48,10 @@ import { BatchEditRow } from "@/components/bank-register/batch-edit-row";
 import { BatchFieldsModal } from "@/components/bank-register/batch-fields-modal";
 import { requestConfirmation } from "@/components/ui/confirm-dialog";
 import { useToast } from "@/components/ui/toast/toast-context";
+import { useCustomers } from "@/lib/hooks/use-customers";
+import { useVendors } from "@/lib/hooks/use-vendors";
+import { listBills } from "@/lib/services/bills-service";
+import { listInvoices } from "@/lib/services/invoices-service";
 import type { BatchRegisterEntryUpdate } from "@/modules/accounting/application/contracts";
 import {
   EMPTY_BATCH_FIELDS,
@@ -227,15 +231,34 @@ export function RegisterTable({
   const [lastTouchedEntryId, setLastTouchedEntryId] = useState<string | null>(null);
   const [jumpTargetId, setJumpTargetId] = useState<string | null>(null);
 
-  const payeeOptions = useMemo(
-    () =>
-      payees.map((payee) => ({
-        value: payee.name,
-        label: payee.name,
-        rightLabel: payee.kind.toLowerCase()
-      })),
-    [payees]
-  );
+  const { items: customers, add: addCustomer } = useCustomers();
+  const { items: vendors, add: addVendor } = useVendors();
+  // The company's customers and vendors, then any other name already used in this register.
+  const payeeOptions = useMemo(() => {
+    const options = new Map<string, { value: string; label: string; rightLabel: string }>();
+    const include = (name: string, kind: string) => {
+      if (!options.has(name.toLowerCase())) options.set(name.toLowerCase(), { value: name, label: name, rightLabel: kind });
+    };
+    customers.filter((c) => c.status !== "ARCHIVED").forEach((c) => include(c.name, "customer"));
+    vendors.filter((v) => v.status !== "ARCHIVED").forEach((v) => include(v.name, "vendor"));
+    // Names read off the entries carry no real kind, so only an employee added here is labelled.
+    payees.forEach((payee) => include(payee.name, payee.kind === "EMPLOYEE" ? "employee" : ""));
+    return [...options.values()].sort((a, b) => a.label.localeCompare(b.label));
+  }, [customers, vendors, payees]);
+
+  // Payments that paid an invoice or bill keep their amount (the API refuses a change too).
+  const [linkedPaymentIds, setLinkedPaymentIds] = useState<ReadonlySet<string>>(new Set());
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([listInvoices(), listBills()])
+      .then(([invoices, bills]) => {
+        if (!cancelled) setLinkedPaymentIds(new Set([...invoices, ...bills].flatMap((item) => (item.paymentTransactionId ? [item.paymentTransactionId] : []))));
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [entries]);
   const {
     filterPopoverRef,
     filterButtonRef,
@@ -997,8 +1020,8 @@ export function RegisterTable({
                           rowError={rowError}
                           isSavingRow={isSavingRow}
                           isDeletingRow={isDeletingRow}
-                          isPaymentDisabled={REGISTER_INFLOW_ROW_TYPES.has(selectedEntry.transactionType)}
-                          isDepositDisabled={REGISTER_OUTFLOW_ROW_TYPES.has(selectedEntry.transactionType)}
+                          isPaymentDisabled={REGISTER_INFLOW_ROW_TYPES.has(selectedEntry.transactionType) || linkedPaymentIds.has(selectedEntry.transactionId)}
+                          isDepositDisabled={REGISTER_OUTFLOW_ROW_TYPES.has(selectedEntry.transactionType) || linkedPaymentIds.has(selectedEntry.transactionId)}
                           onEditorChange={(field, value) => setEditor((current) => ({ ...current, [field]: value }))}
                           onReconcileCycle={cycleEditorReconcileStatus}
                           onOpenPayeeModal={() => openPayeeModal("row")}
@@ -1047,6 +1070,12 @@ export function RegisterTable({
         open={isPayeeModalOpen}
         onClose={() => setIsPayeeModalOpen(false)}
         onSave={(payee) => {
+          // A new customer or vendor is saved to the company, not just this screen.
+          const known = [...customers, ...vendors].some((c) => c.name.toLowerCase() === payee.name.toLowerCase());
+          if (!known && (payee.kind === "CUSTOMER" || payee.kind === "VENDOR")) {
+            const save = payee.kind === "CUSTOMER" ? addCustomer({ name: payee.name }) : addVendor({ name: payee.name });
+            save.catch((err) => toast({ variant: "error", title: "Could not add contact", description: err instanceof Error ? err.message : undefined }));
+          }
           setPayees((previous) => {
             const exists = previous.some((item) => item.name.toLowerCase() === payee.name.toLowerCase());
             return exists ? previous : [...previous, payee];
