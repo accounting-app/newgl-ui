@@ -105,7 +105,9 @@ export const transactionPostingInputSchema = z.object({
   type: postingEntryTypeSchema,
   amount: z.number().min(0.01),
   /** The form line's Description. */
-  description: z.string().optional()
+  description: z.string().optional(),
+  /** Other per-line form fields the ledger doesn't interpret (name, qty, rate...). */
+  details: z.record(z.string(), z.string()).optional()
 });
 
 export const transactionSchema = z.object({
@@ -120,6 +122,7 @@ export const transactionSchema = z.object({
   payee: z.string().optional(),
   accountLabel: z.string().optional(),
   paymentMethod: z.string().optional(),
+  details: z.record(z.string(), z.string()).optional(),
   sourceAccountId: z.string().uuid().optional(),
   reconcileStatus: reconcileStatusSchema.optional(),
   periodId: z.string().optional(),
@@ -217,6 +220,7 @@ export type UpdateAccountInput = Partial<
 export type CreateTransactionInput = Pick<
   Transaction,
   | "paymentMethod"
+  | "details"
   | "type"
   | "transactionDate"
   | "dueDate"

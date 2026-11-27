@@ -1,5 +1,7 @@
 "use client";
 
+import { CANNOT_SHOW, formDetails, useSavedTransaction } from "@/lib/hooks/use-saved-transaction";
+import { LinkedFiles } from "@/components/accounting/linked-files";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ChevronDown, ChevronUp, GripVertical, Trash2 } from "lucide-react";
@@ -60,6 +62,7 @@ export function DepositFormPage() {
   const tpl = useRecurringTemplate();
   const [useTplId, setUseTplId] = useState<string | null>(null); // template this form was filled from
 
+  const txnId = params.get("txnId");
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [depositId, setDepositId] = useState(params.get("rtAccountId") ?? "");
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
@@ -103,21 +106,55 @@ export function DepositFormPage() {
     return () => document.removeEventListener("mousedown", onDown);
   }, [menuOpen]);
 
+  // ?txnId= opens a saved deposit to edit it (the register's "Edit").
+  const { loaded, setLoaded, loadError } = useSavedTransaction(txnId, "DEPOSIT", "a deposit", (txn) => {
+    const sourceId = txn.sourceAccountId ?? txn.postings.find((p) => p.type === "DEBIT")?.accountId;
+    const credits = txn.postings.filter((p) => p.type === "CREDIT");
+    const cashBack = txn.postings.filter((p) => p.type === "DEBIT" && p.accountId !== sourceId);
+    if (!sourceId || credits.some((p) => p.accountId === sourceId) || cashBack.length > 1) return CANNOT_SHOW;
+    setDepositId(sourceId);
+    setDate(txn.transactionDate);
+    setMemo(txn.memo ?? "");
+    setCashBackId(cashBack[0]?.accountId ?? "");
+    setCashBackAmount(cashBack[0] ? cashBack[0].amount.toFixed(2) : "");
+    setCashBackMemo(cashBack[0]?.description ?? "");
+    const next = credits.map((p, index) => ({
+      ...blankLine(),
+      receivedFrom: p.details?.name ?? (credits.length === 1 ? txn.payee ?? "" : ""),
+      accountId: p.accountId,
+      description: p.description ?? "",
+      method: p.details?.method ?? "",
+      refNo: p.details?.refNo ?? (index === 0 ? txn.referenceNumber ?? "" : ""),
+      amount: p.amount.toFixed(2)
+    }));
+    while (next.length < 2) next.push(blankLine());
+    setLines(next);
+  });
+  const savedSourceId = txnId ? loaded?.sourceAccountId ?? loaded?.postings.find((p) => p.type === "DEBIT")?.accountId : undefined;
+
   const active = useMemo(() => accounts.filter((a) => a.status === "ACTIVE").sort((a, b) => a.name.localeCompare(b.name)), [accounts]);
-  const depositAccounts = useMemo(() => active.filter((a) => DEPOSIT_CATEGORIES.has(a.category)), [active]);
+  const depositAccounts = useMemo(() => active.filter((a) => a.id === savedSourceId || DEPOSIT_CATEGORIES.has(a.category)), [active, savedSourceId]);
   const depositAccount = accounts.find((a) => a.id === depositId);
   useEffect(() => {
-    if (accounts.length === 0 || depositAccount) return;
+    if (txnId || accounts.length === 0 || depositAccount) return;
     if (depositAccounts[0]) setDepositId(depositAccounts[0].id);
-  }, [accounts, depositAccount, depositAccounts]);
+  }, [txnId, accounts, depositAccount, depositAccounts]);
 
   const depositOptions = useMemo(() => depositAccounts.map((a) => ({ value: a.id, label: a.name })), [depositAccounts]);
   const lineAccountOptions = useMemo(() => active.filter((a) => a.id !== depositId).map((a) => ({ value: a.id, label: a.name, rightLabel: ACCOUNT_CATEGORY_LABELS[a.category] })), [active, depositId]);
   const cashBackOptions = useMemo(() => active.filter((a) => a.id !== depositId).map((a) => ({ value: a.id, label: a.name })), [active, depositId]);
-  const nameOptions = useMemo(
+  const contactOptions = useMemo(
     () => [...customers.map((c) => ({ value: c.name, label: c.name, rightLabel: "Customer" })), ...vendors.map((v) => ({ value: v.name, label: v.name, rightLabel: "Vendor" }))].sort((a, b) => a.label.localeCompare(b.label)),
     [customers, vendors]
   );
+  const nameOptions = [
+    ...[...new Set(lines.map((l) => l.receivedFrom).filter((n) => n && !contactOptions.some((o) => o.value === n)))].map((n) => ({ value: n, label: n, rightLabel: "" })),
+    ...contactOptions
+  ];
+  const methodOptions = [
+    ...methods.options,
+    ...[...new Set(lines.map((l) => l.method).filter((m) => m && !methods.options.some((o) => o.value === m)))].map((m) => ({ value: m, label: m }))
+  ];
 
   const otherFundsCents = lines.reduce((sum, l) => sum + (l.amount === "" ? 0 : cents(l.amount)), 0);
   const cashBackCents = cents(cashBackAmount);
@@ -144,20 +181,26 @@ export function DepositFormPage() {
     if (used.some((l) => cents(l.amount) <= 0)) return { ok: false as const, error: "Every line needs an amount above zero." };
     if (cashBackCents < 0 || cashBackCents > otherFundsCents) return { ok: false as const, error: "Cash back can't be more than the funds being deposited." };
     if (cashBackCents > 0 && !cashBackId) return { ok: false as const, error: "Choose where the cash back goes." };
-    const credits = new Map<string, number>();
-    for (const l of used) credits.set(l.accountId, (credits.get(l.accountId) ?? 0) + cents(l.amount));
+    const creditAccounts = [...new Set(used.map((l) => l.accountId))];
     const names = [...new Set(used.map((l) => l.receivedFrom).filter(Boolean))];
     return {
       ok: true as const,
       used,
       account: depositAccount,
-      payee: names.length === 1 ? names[0] : undefined,
+      payee: names.length === 1 ? names[0] : names.length === 0 ? loaded?.payee : undefined,
       referenceNumber: used.find((l) => l.refNo.trim())?.refNo.trim() || undefined,
-      accountLabel: credits.size > 1 ? "Split" : accounts.find((a) => a.id === [...credits.keys()][0])?.name ?? "",
+      accountLabel: creditAccounts.length > 1 ? "Split" : accounts.find((a) => a.id === creditAccounts[0])?.name ?? "",
       postings: [
         ...(totalCents > 0 ? [{ accountId: depositAccount.id, type: "DEBIT" as const, amount: totalCents / 100 }] : []),
-        ...(cashBackCents > 0 ? [{ accountId: cashBackId, type: "DEBIT" as const, amount: cashBackCents / 100 }] : []),
-        ...[...credits].map(([accountId, c]) => ({ accountId, type: "CREDIT" as const, amount: c / 100 }))
+        ...(cashBackCents > 0 ? [{ accountId: cashBackId, type: "DEBIT" as const, amount: cashBackCents / 100, description: cashBackMemo.trim() || undefined }] : []),
+        // One line each, so every line keeps its own description, name and method.
+        ...used.map((l) => ({
+          accountId: l.accountId,
+          type: "CREDIT" as const,
+          amount: cents(l.amount) / 100,
+          description: l.description.trim() || undefined,
+          details: formDetails({ name: l.receivedFrom, method: l.method, refNo: l.refNo })
+        }))
       ]
     };
   }
@@ -210,8 +253,8 @@ export function DepositFormPage() {
     setSaving(true);
     setError(null);
     try {
-      const created = await services.transactionService.createTransaction({
-        type: "DEPOSIT",
+      if (txnId && !loaded) throw new Error(loadError ?? "This transaction is still loading.");
+      const body = {
         transactionDate: date,
         referenceNumber: built.referenceNumber,
         memo: memo.trim() || undefined,
@@ -219,7 +262,15 @@ export function DepositFormPage() {
         accountLabel: built.accountLabel,
         sourceAccountId: built.account.id,
         postings: built.postings
-      });
+      };
+      if (loaded) {
+        setLoaded(await services.transactionService.updateTransaction(loaded.id, body));
+        toast({ variant: "success", title: "Deposit saved" });
+        if (after === "close") closePage();
+        else services.accountService.listAccounts().then(setAccounts).catch(() => undefined);
+        return;
+      }
+      const created = await services.transactionService.createTransaction({ ...body, type: "DEPOSIT" });
       await services.transactionService.postTransaction(created.id);
       await attachments.linkTo(created.id).catch(() => toast({ variant: "error", title: "Saved, but the attachments could not be linked" }));
       if (useTplId) await advanceRecurring(useTplId).catch(() => undefined);
@@ -282,6 +333,16 @@ export function DepositFormPage() {
     <button type="button" onClick={exportCsv} className={`${RT_TOOLBAR_LINK} mr-2`}>Export To CSV</button>
   );
 
+  const editFooter = (
+    <>
+      <button type="button" onClick={closePage} className="text-base font-medium text-[var(--color-text-global)] hover:underline">Cancel</button>
+      <div className="flex items-center gap-3">
+        <Button variant="secondary" className="!rounded-md" disabled={saving || !loaded} onClick={() => void save("stay")}>Save</Button>
+        <Button className="!rounded-md" disabled={saving || !loaded} onClick={() => void save("close")}>{saving ? "Saving..." : "Save and close"}</Button>
+      </div>
+    </>
+  );
+
   const footer = tpl.active ? (
     <>
       <div className="flex items-center gap-6">
@@ -316,7 +377,7 @@ export function DepositFormPage() {
   );
 
   return (
-    <FullScreenFormShell title="Bank Deposit" onClose={closePage} toolbar={toolbar} footer={footer}>
+    <FullScreenFormShell title={<>Bank Deposit {loaded?.reconcileStatus === "R" ? <span className="text-lg text-[var(--color-negative)]">(Reconciled)</span> : null}</>} onClose={closePage} toolbar={toolbar} footer={txnId && !tpl.active ? editFooter : footer}>
       <div className="px-6 pb-8 pt-5">
         {tpl.active ? (
           <div className="pb-6">
@@ -391,7 +452,7 @@ export function DepositFormPage() {
                     <td className="px-2 py-2"><Select value={line.receivedFrom} onChange={(v) => updateLine(line.id, { receivedFrom: v })} options={nameOptions} placeholder="" allowCustomValue={false} /></td>
                     <td className={CELL}><Select value={line.accountId} onChange={(v) => updateLine(line.id, { accountId: v })} options={lineAccountOptions} placeholder="" allowCustomValue={false} /></td>
                     <td className={CELL}><input value={line.description} onChange={(event) => updateLine(line.id, { description: event.target.value })} aria-label={`Line ${index + 1} description`} className={CELL_INPUT} /></td>
-                    <td className={CELL}><Select value={line.method} onChange={(v) => updateLine(line.id, { method: v })} options={methods.options} placeholder="" allowCustomValue={false} onAddNew={() => setMethodModalFor(line.id)} addNewLabel="+ Add new" /></td>
+                    <td className={CELL}><Select value={line.method} onChange={(v) => updateLine(line.id, { method: v })} options={methodOptions} placeholder="" allowCustomValue={false} onAddNew={() => setMethodModalFor(line.id)} addNewLabel="+ Add new" /></td>
                     <td className={CELL}><input value={line.refNo} onChange={(event) => updateLine(line.id, { refNo: event.target.value })} aria-label={`Line ${index + 1} ref no.`} className={CELL_INPUT} /></td>
                     <td className={CELL}><input type="number" min="0" step="0.01" value={line.amount} onChange={(event) => updateLine(line.id, { amount: event.target.value })} aria-label={`Line ${index + 1} amount`} className={`${CELL_INPUT} text-right`} /></td>
                     <td className="px-1 text-center">
@@ -427,7 +488,14 @@ export function DepositFormPage() {
                 <button type="button" className={RT_LINK} onClick={() => setLines((current) => current.map((l) => ({ ...l, description: memo })))}>Copy Memo to Descriptions</button>
               </div>
             </div>
-            <AttachmentsField attachments={attachments} formLabel="Bank Deposit" />
+            {txnId ? (
+              <div>
+                <span className={LABEL}>Attachments</span>
+                {loaded ? <LinkedFiles zone="forms" linkedId={loaded.id} /> : null}
+              </div>
+            ) : (
+              <AttachmentsField attachments={attachments} formLabel="Bank Deposit" />
+            )}
           </div>
           <div className="w-[720px] max-w-full">
             <div className="flex flex-wrap items-end gap-4">
@@ -447,7 +515,7 @@ export function DepositFormPage() {
             <p className="mt-8 flex justify-end gap-24 text-lg"><strong className="text-[var(--color-text-global)]">Total</strong><span className="text-[var(--color-text-global)]">{money(totalCents / 100)}</span></p>
           </div>
         </div>
-        {error ? <p className="mt-3 text-sm text-[var(--color-negative)]" role="alert">{error}</p> : null}
+        {error ?? loadError ? <p className="mt-3 text-sm text-[var(--color-negative)]" role="alert">{error ?? loadError}</p> : null}
         <p className="mt-6 text-center"><a href="https://www.intuit.com/privacy/" target="_blank" rel="noreferrer" className="text-[var(--color-link-action)] hover:underline">Privacy</a></p>
       </div>
 

@@ -1,5 +1,6 @@
 "use client";
 
+import { formDetails } from "@/lib/hooks/use-saved-transaction";
 import { LinkedFiles } from "@/components/accounting/linked-files";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -204,7 +205,10 @@ export function ExpenseFormPage({ kind = "expense" }: { kind?: "expense" | "chec
   const payeeRecord = useMemo(() => vendors.find((v) => v.name === payee) ?? customers.find((c) => c.name === payee), [vendors, customers, payee]);
   const paymentAccount = accounts.find((a) => a.id === paymentAccountId);
   useEffect(() => {
-    if (isCheck) setMailing([payeeRecord?.name, payeeRecord?.address].filter(Boolean).join("\n"));
+    // A saved check keeps its own address until the payee is changed.
+    if (!isCheck || (params.get("txnId") && (!loaded || payee === (loaded.payee ?? "")))) return;
+    setMailing([payeeRecord?.name, payeeRecord?.address].filter(Boolean).join("\n"));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isCheck, payeeRecord]);
   // If no (or an unknown) rtAccountId came in, default to the first bank/card account once loaded.
   useEffect(() => {
@@ -252,6 +256,8 @@ export function ExpenseFormPage({ kind = "expense" }: { kind?: "expense" | "chec
         if (isCheck) setCheckNo(txn.referenceNumber ?? "");
         else setRefNo(txn.referenceNumber ?? "");
         setMemo(txn.memo ?? "");
+        setMailing(txn.details?.mailing ?? "");
+        setPrintLater(txn.details?.printLater === "1");
         const next = categoryLines.map((p) => ({ ...blankLine(), categoryAccountId: p.accountId, description: p.description ?? "", amount: p.amount.toFixed(2) }));
         while (next.length < 2) next.push(blankLine());
         setLines(next);
@@ -293,6 +299,7 @@ export function ExpenseFormPage({ kind = "expense" }: { kind?: "expense" | "chec
       if (txnId && !loaded) throw new Error(loadError ?? "This transaction is still loading.");
       const body = {
         paymentMethod: method || undefined,
+        details: isCheck ? formDetails({ mailing, printLater: printLater ? "1" : "" }) : undefined,
         transactionDate: date,
         referenceNumber: (isCheck ? checkNo : refNo).trim() || undefined,
         memo: memo.trim() || undefined,

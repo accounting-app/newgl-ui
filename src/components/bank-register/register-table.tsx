@@ -119,7 +119,10 @@ const displayDate = (iso: string) => (/^\d{4}-\d{2}-\d{2}/.test(iso) ? `${iso.sl
 /** Transaction types whose full form can load and re-save an existing one. */
 const FULL_FORM_PATHS: Partial<Record<RegisterEntry["transactionType"], string>> = {
   EXPENSE: "/expense",
-  CHECK: "/check"
+  CHECK: "/check",
+  DEPOSIT: "/deposit",
+  SALES_RECEIPT: "/salesreceipt",
+  JOURNAL_ENTRY: "/journal"
 };
 
 function rowStyle(status: RegisterEntry["status"]): string {

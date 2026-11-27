@@ -1,5 +1,7 @@
 "use client";
 
+import { CANNOT_SHOW, formDetails, useSavedTransaction } from "@/lib/hooks/use-saved-transaction";
+import { LinkedFiles } from "@/components/accounting/linked-files";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ChevronDown, CircleHelp, Copy, GripVertical, Lock, LockOpen, Plus, Trash2 } from "lucide-react";
@@ -21,7 +23,7 @@ import { useProductsServices } from "@/lib/hooks/use-products-services";
 import { getServiceContainer } from "@/lib/services/service-container-v2";
 import type { Account } from "@/modules/accounting/domain/models";
 
-type Line = { id: string; productId: string; description: string; qty: string; rate: string; amount: string; locked: boolean };
+type Line = { id: string; productId: string; description: string; qty: string; rate: string; amount: string; locked: boolean; accountId?: string };
 
 let lineCounter = 0;
 const blankLine = (): Line => {
@@ -57,6 +59,7 @@ export function SalesReceiptFormPage() {
   const methods = usePaymentMethods();
   const attachments = useFormAttachments();
 
+  const txnId = params.get("txnId");
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [customer, setCustomer] = useState("");
   const [email, setEmail] = useState("");
@@ -91,6 +94,7 @@ export function SalesReceiptFormPage() {
 
   useEffect(() => {
     try {
+      if (new URLSearchParams(window.location.search).get("txnId")) return;
       const stored = Number(window.localStorage.getItem(NEXT_NUMBER_KEY));
       if (Number.isInteger(stored) && stored > 0) setNumber(String(stored));
     } catch {
@@ -107,16 +111,56 @@ export function SalesReceiptFormPage() {
     return () => document.removeEventListener("mousedown", onDown);
   }, [menuOpen]);
 
-  const depositAccounts = useMemo(() => accounts.filter((a) => DEPOSIT_CATEGORIES.has(a.category)).sort((a, b) => a.name.localeCompare(b.name)), [accounts]);
+  // ?txnId= opens a saved sales receipt to edit it (the register's "Edit").
+  const { loaded, setLoaded, loadError } = useSavedTransaction(txnId, "SALES_RECEIPT", "a sales receipt", (txn) => {
+    const debits = txn.postings.filter((p) => p.type === "DEBIT");
+    const credits = txn.postings.filter((p) => p.type === "CREDIT");
+    if (debits.length !== 1 || credits.length === 0) return CANNOT_SHOW;
+    const d = txn.details ?? {};
+    setDepositId(debits[0].accountId);
+    setDate(txn.transactionDate);
+    setCustomer(txn.payee ?? "");
+    setEmail(d.email ?? "");
+    setCc(d.cc ?? "");
+    setBcc(d.bcc ?? "");
+    setBilling(d.billing ?? "");
+    setSendLater(d.sendLater === "1");
+    setNumber(d.number ?? txn.referenceNumber ?? "");
+    setRefNo(d.refNo ?? "");
+    setMethod(txn.paymentMethod ?? "");
+    setMessage(txn.memo ?? "");
+    setStatement(d.statement ?? "");
+    const next: Line[] = credits.map((p) => {
+      // Qty x rate is only shown while it still agrees with the posted amount.
+      const keepRate = cents(String(Number(p.details?.qty) * Number(p.details?.rate))) === cents(String(p.amount));
+      return {
+        ...blankLine(),
+        accountId: p.accountId,
+        productId: p.details?.productId ?? "",
+        description: p.description ?? "",
+        qty: keepRate ? p.details?.qty ?? "" : "",
+        rate: keepRate ? p.details?.rate ?? "" : "",
+        amount: p.amount.toFixed(2)
+      };
+    });
+    while (next.length < 2) next.push(blankLine());
+    setLines(next);
+  });
+  const savedSourceId = txnId ? loaded?.postings.find((p) => p.type === "DEBIT")?.accountId : undefined;
+
+  const depositAccounts = useMemo(() => accounts.filter((a) => a.id === savedSourceId || DEPOSIT_CATEGORIES.has(a.category)).sort((a, b) => a.name.localeCompare(b.name)), [accounts, savedSourceId]);
   const depositAccount = accounts.find((a) => a.id === depositId);
   useEffect(() => {
-    if (accounts.length === 0 || depositAccount) return;
+    if (txnId || accounts.length === 0 || depositAccount) return;
     if (depositAccounts[0]) setDepositId(depositAccounts[0].id);
-  }, [accounts, depositAccount, depositAccounts]);
+  }, [txnId, accounts, depositAccount, depositAccounts]);
 
   const incomeAccounts = useMemo(() => accounts.filter((a) => a.category === "INCOME" || a.category === "OTHER_INCOME"), [accounts]);
   const customerRecord = customers.find((c) => c.name === customer);
-  const customerOptions = useMemo(() => customers.map((c) => ({ value: c.name, label: c.name, rightLabel: "Customer" })), [customers]);
+  const customerOptions = useMemo(() => {
+    const contacts = customers.map((c) => ({ value: c.name, label: c.name, rightLabel: "Customer" }));
+    return customer && !contacts.some((c) => c.value === customer) ? [{ value: customer, label: customer, rightLabel: "" }, ...contacts] : contacts;
+  }, [customers, customer]);
   const depositOptions = useMemo(() => depositAccounts.map((a) => ({ value: a.id, label: a.name })), [depositAccounts]);
   const activeProducts = useMemo(() => products.filter((p) => p.status === "ACTIVE"), [products]);
   const productOptions = useMemo(() => activeProducts.map((p) => ({ value: p.id, label: p.name, rightLabel: p.type === "SERVICE" ? "Service" : "Product" })), [activeProducts]);
@@ -150,6 +194,8 @@ export function SalesReceiptFormPage() {
   function pickProduct(line: Line, productId: string) {
     const product = activeProducts.find((p) => p.id === productId);
     if (!product) return updateLine(line.id, { productId: "" });
+    // A new product brings its own income account.
+    updateLine(line.id, { accountId: undefined });
     const rate = product.salesPrice !== undefined ? String(product.salesPrice) : line.rate;
     const qty = line.qty || (product.salesPrice !== undefined ? "1" : "");
     updateLine(line.id, { productId, description: line.description || product.description || product.name, qty, rate, amount: qty !== "" && rate !== "" ? ((Number(qty) || 0) * (Number(rate) || 0)).toFixed(2) : line.amount });
@@ -169,29 +215,45 @@ export function SalesReceiptFormPage() {
     if (used.some((l) => lineAmount(l) <= 0)) return setError("Every line needs an amount above zero.");
     // Each line credits its product's income account; lines without a product use the first income account.
     const fallbackIncome = incomeAccounts[0];
-    const credits = new Map<string, number>();
-    for (const l of used) {
-      const accountId = activeProducts.find((p) => p.id === l.productId)?.incomeAccountId ?? fallbackIncome?.id;
-      if (!accountId) return setError("Add an income account to the chart of accounts first.");
-      credits.set(accountId, (credits.get(accountId) ?? 0) + lineAmount(l));
-    }
+    const postedLines = used.map((l) => ({
+      line: l,
+      accountId: l.accountId ?? activeProducts.find((p) => p.id === l.productId)?.incomeAccountId ?? fallbackIncome?.id ?? ""
+    }));
+    if (postedLines.some((l) => !l.accountId)) return setError("Add an income account to the chart of accounts first.");
+    const creditAccounts = [...new Set(postedLines.map((l) => l.accountId))];
     setSaving(true);
     setError(null);
     try {
       const total = used.reduce((sum, l) => sum + lineAmount(l), 0) / 100;
-      const created = await services.transactionService.createTransaction({
-        type: "SALES_RECEIPT",
+      if (txnId && !loaded) throw new Error(loadError ?? "This transaction is still loading.");
+      const body = {
+        paymentMethod: method || undefined,
+        details: formDetails({ email, cc, bcc, billing, statement, number, refNo, sendLater: sendLater ? "1" : "" }),
         transactionDate: date,
         referenceNumber: refNo.trim() || number,
         memo: message.trim() || undefined,
         payee: customer.trim() || undefined,
-        accountLabel: credits.size > 1 ? "Split" : accounts.find((a) => a.id === [...credits.keys()][0])?.name ?? "",
+        accountLabel: creditAccounts.length > 1 ? "Split" : accounts.find((a) => a.id === creditAccounts[0])?.name ?? "",
         sourceAccountId: depositAccount.id,
         postings: [
           { accountId: depositAccount.id, type: "DEBIT" as const, amount: total },
-          ...[...credits].map(([accountId, c]) => ({ accountId, type: "CREDIT" as const, amount: c / 100 }))
+          ...postedLines.map(({ line, accountId }) => ({
+            accountId,
+            type: "CREDIT" as const,
+            amount: lineAmount(line) / 100,
+            description: line.description.trim() || undefined,
+            details: formDetails({ productId: line.productId, qty: line.qty, rate: line.rate })
+          }))
         ]
-      });
+      };
+      if (loaded) {
+        setLoaded(await services.transactionService.updateTransaction(loaded.id, body));
+        toast({ variant: "success", title: "Sales receipt saved" });
+        if (after === "close") closePage();
+        else services.accountService.listAccounts().then(setAccounts).catch(() => undefined);
+        return;
+      }
+      const created = await services.transactionService.createTransaction({ ...body, type: "SALES_RECEIPT" });
       await services.transactionService.postTransaction(created.id);
       await attachments.linkTo(created.id).catch(() => toast({ variant: "error", title: "Saved, but the attachments could not be linked" }));
       const following = String((Number(number) || 1000) + 1);
@@ -259,6 +321,16 @@ export function SalesReceiptFormPage() {
     </>
   );
 
+  const editFooter = (
+    <>
+      <button type="button" onClick={closePage} className="text-base font-medium text-[var(--color-text-global)] hover:underline">Cancel</button>
+      <div className="flex items-center gap-3">
+        <Button variant="secondary" className="!rounded-md" disabled={saving || !loaded} onClick={() => void save("stay")}>Save</Button>
+        <Button className="!rounded-md" disabled={saving || !loaded} onClick={() => void save("close")}>{saving ? "Saving..." : "Save and close"}</Button>
+      </div>
+    </>
+  );
+
   const footer = (
     <>
       <div className="flex items-center gap-6">
@@ -288,7 +360,7 @@ export function SalesReceiptFormPage() {
   );
 
   return (
-    <FullScreenFormShell title={`Sales Receipt # ${number}`} onClose={closePage} toolbar={toolbar} footer={footer}>
+    <FullScreenFormShell title={<>{`Sales Receipt # ${number}`} {loaded?.reconcileStatus === "R" ? <span className="text-lg text-[var(--color-negative)]">(Reconciled)</span> : null}</>} onClose={closePage} toolbar={toolbar} footer={txnId ? editFooter : footer}>
       <div className="px-6 pb-8 pt-5">
         <div className="flex flex-wrap items-start gap-6">
           <div className="w-[340px]">
@@ -480,10 +552,17 @@ export function SalesReceiptFormPage() {
         </div>
 
         <div className="mt-8 w-[660px] max-w-full">
-          <AttachmentsField attachments={attachments} formLabel="Sales Receipt" />
+          {txnId ? (
+              <div>
+                <span className={LABEL}>Attachments</span>
+                {loaded ? <LinkedFiles zone="forms" linkedId={loaded.id} /> : null}
+              </div>
+            ) : (
+              <AttachmentsField attachments={attachments} formLabel="Sales Receipt" />
+            )}
         </div>
         <p className="mt-6 text-center"><a href="https://www.intuit.com/privacy/" target="_blank" rel="noreferrer" className="text-[var(--color-link-action)] hover:underline">Privacy</a></p>
-        {error ? <p className="mt-3 text-sm text-[var(--color-negative)]" role="alert">{error}</p> : null}
+        {error ?? loadError ? <p className="mt-3 text-sm text-[var(--color-negative)]" role="alert">{error ?? loadError}</p> : null}
       </section>
 
       <PayeeSideModal

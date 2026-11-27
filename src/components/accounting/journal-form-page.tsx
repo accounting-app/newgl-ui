@@ -1,5 +1,7 @@
 "use client";
 
+import { CANNOT_SHOW, formDetails, useSavedTransaction } from "@/lib/hooks/use-saved-transaction";
+import { LinkedFiles } from "@/components/accounting/linked-files";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ChevronDown, Copy, GripVertical, Trash2 } from "lucide-react";
@@ -56,6 +58,7 @@ export function JournalFormPage() {
   const tpl = useRecurringTemplate();
   const [useTplId, setUseTplId] = useState<string | null>(null); // template this form was filled from
 
+  const txnId = params.get("txnId");
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [number, setNumber] = useState("1");
@@ -73,6 +76,7 @@ export function JournalFormPage() {
   }, [services]);
   useEffect(() => {
     try {
+      if (new URLSearchParams(window.location.search).get("txnId")) return;
       const stored = Number(window.localStorage.getItem(NEXT_KEY));
       if (Number.isInteger(stored) && stored > 0) setNumber(String(stored));
       // "Copy" in another tab leaves its lines here; take them once.
@@ -113,8 +117,29 @@ export function JournalFormPage() {
     return () => document.removeEventListener("mousedown", onDown);
   }, [menuOpen]);
 
+  // ?txnId= opens a saved journal entry to edit it (the register's "Edit").
+  const { loaded, setLoaded, loadError } = useSavedTransaction(txnId, "JOURNAL_ENTRY", "a journal entry", (txn) => {
+    setDate(txn.transactionDate);
+    setNumber(txn.referenceNumber ?? "");
+    setMemo(txn.memo ?? "");
+    const next = txn.postings.map((p) => ({
+      ...blankLine(),
+      accountId: p.accountId,
+      debit: p.type === "DEBIT" ? p.amount.toFixed(2) : "",
+      credit: p.type === "CREDIT" ? p.amount.toFixed(2) : "",
+      description: p.description ?? "",
+      name: p.details?.name ?? (txn.postings.length === 2 ? txn.payee ?? "" : "")
+    }));
+    while (next.length < 8) next.push(blankLine());
+    setLines(next);
+  });
+
   const accountOptions = useMemo(() => accounts.filter((a) => a.status === "ACTIVE").sort((a, b) => a.name.localeCompare(b.name)).map((a) => ({ value: a.id, label: a.name, rightLabel: ACCOUNT_CATEGORY_LABELS[a.category] })), [accounts]);
-  const nameOptions = useMemo(() => [...customers.map((c) => ({ value: c.name, label: c.name, rightLabel: "Customer" })), ...vendors.map((v) => ({ value: v.name, label: v.name, rightLabel: "Vendor" }))].sort((a, b) => a.label.localeCompare(b.label)), [customers, vendors]);
+  const contactOptions = useMemo(() => [...customers.map((c) => ({ value: c.name, label: c.name, rightLabel: "Customer" })), ...vendors.map((v) => ({ value: v.name, label: v.name, rightLabel: "Vendor" }))].sort((a, b) => a.label.localeCompare(b.label)), [customers, vendors]);
+  const nameOptions = [
+    ...[...new Set(lines.map((l) => l.name).filter((n) => n && !contactOptions.some((o) => o.value === n)))].map((n) => ({ value: n, label: n, rightLabel: "" })),
+    ...contactOptions
+  ];
   const debitCents = lines.reduce((sum, l) => sum + cents(l.debit), 0);
   const creditCents = lines.reduce((sum, l) => sum + cents(l.credit), 0);
 
@@ -140,9 +165,15 @@ export function JournalFormPage() {
     return {
       ok: true as const,
       used,
-      payee: names.length === 1 ? names[0] : undefined,
+      payee: names.length === 1 ? names[0] : names.length === 0 ? loaded?.payee : undefined,
       label: used.length > 2 ? "Split" : accounts.find((a) => a.id === used[0].accountId)?.name ?? "",
-      postings: used.map((l) => (cents(l.debit) > 0 ? { accountId: l.accountId, type: "DEBIT" as const, amount: cents(l.debit) / 100 } : { accountId: l.accountId, type: "CREDIT" as const, amount: cents(l.credit) / 100 }))
+      postings: used.map((l) => ({
+        accountId: l.accountId,
+        type: cents(l.debit) > 0 ? ("DEBIT" as const) : ("CREDIT" as const),
+        amount: (cents(l.debit) > 0 ? cents(l.debit) : cents(l.credit)) / 100,
+        description: l.description.trim() || undefined,
+        details: formDetails({ name: l.name })
+      }))
     };
   }
 
@@ -189,6 +220,23 @@ export function JournalFormPage() {
     if (!built.ok) return setError(built.error);
     const { used, postings, label } = built;
     const names = built.payee ? [built.payee] : [];
+    if (txnId) {
+      if (!loaded) return setError(loadError ?? "This transaction is still loading.");
+      setSaving(true);
+      setError(null);
+      try {
+        // The reconcile mark belongs to the source account, so keep it while that account is still on the entry.
+        const sourceAccountId = used.some((l) => l.accountId === loaded.sourceAccountId) ? loaded.sourceAccountId : used[0].accountId;
+        setLoaded(await services.transactionService.updateTransaction(loaded.id, { transactionDate: date, referenceNumber: number || undefined, memo: memo.trim() || undefined, payee: built.payee, accountLabel: label, sourceAccountId, postings }));
+        toast({ variant: "success", title: "Journal entry saved" });
+        if (after === "close") closePage();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Could not save this journal entry.");
+      } finally {
+        setSaving(false);
+      }
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
@@ -293,6 +341,16 @@ export function JournalFormPage() {
     </>
   );
 
+  const editFooter = (
+    <>
+      <button type="button" onClick={closePage} className="text-base font-medium text-[var(--color-text-global)] hover:underline">Cancel</button>
+      <div className="flex items-center gap-3">
+        <Button variant="secondary" className="!rounded-md" disabled={saving || !loaded} onClick={() => void save("stay")}>Save</Button>
+        <Button className="!rounded-md" disabled={saving || !loaded} onClick={() => void save("close")}>{saving ? "Saving..." : "Save and close"}</Button>
+      </div>
+    </>
+  );
+
   const footer = tpl.active ? (
     <>
       <div className="flex items-center gap-3">
@@ -330,7 +388,7 @@ export function JournalFormPage() {
   );
 
   return (
-    <FullScreenFormShell title={`Journal Entry #${number}`} onClose={closePage} toolbar={toolbar} onSettings={() => toast({ variant: "info", title: "Choose what you use isn't available yet" })} settingsLabel="Choose what you use" footer={footer}>
+    <FullScreenFormShell title={<>{`Journal Entry #${number}`} {loaded?.reconcileStatus === "R" ? <span className="text-lg text-[var(--color-negative)]">(Reconciled)</span> : null}</>} onClose={closePage} toolbar={toolbar} onSettings={() => toast({ variant: "info", title: "Choose what you use isn't available yet" })} settingsLabel="Choose what you use" footer={txnId && !tpl.active ? editFooter : footer}>
       <div className="px-6 pb-8 pt-5">
         {tpl.active ? (
           <div className="pb-6">
@@ -401,7 +459,7 @@ export function JournalFormPage() {
           <button type="button" className={PLAIN_BUTTON} onClick={() => setLines((current) => [...current, blankLine(), blankLine()])}>Add lines</button>
           <button type="button" className={PLAIN_BUTTON} onClick={() => setLines(startingLines())}>Clear all lines</button>
           <button type="button" className={RT_BUTTON} onClick={clearZeroLines}>Clear 0 Value Lines</button>
-          {tpl.active ? null : <button type="button" className={`${RT_LINK} ml-2 !text-sm font-semibold`} disabled={saving} onClick={openReverse}>Save and Reverse</button>}
+          {tpl.active || txnId ? null : <button type="button" className={`${RT_LINK} ml-2 !text-sm font-semibold`} disabled={saving} onClick={openReverse}>Save and Reverse</button>}
         </div>
 
         <div className="mt-10 flex flex-wrap gap-8">
@@ -417,10 +475,17 @@ export function JournalFormPage() {
             </div>
           </div>
           <div className="w-[520px] max-w-full">
-            <AttachmentsField attachments={attachments} formLabel="Journal Entry" />
+            {txnId ? (
+              <div>
+                <span className={LABEL}>Attachments</span>
+                {loaded ? <LinkedFiles zone="forms" linkedId={loaded.id} /> : null}
+              </div>
+            ) : (
+              <AttachmentsField attachments={attachments} formLabel="Journal Entry" />
+            )}
           </div>
         </div>
-        {error ? <p className="mt-3 text-sm text-[var(--color-negative)]" role="alert">{error}</p> : null}
+        {error ?? loadError ? <p className="mt-3 text-sm text-[var(--color-negative)]" role="alert">{error ?? loadError}</p> : null}
         <p className="mt-6 text-center"><a href="https://www.intuit.com/privacy/" target="_blank" rel="noreferrer" className="text-[var(--color-link-action)] hover:underline">Privacy</a></p>
       </div>
 
