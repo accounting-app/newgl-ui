@@ -192,11 +192,16 @@ export function JournalFormPage() {
     if (used.some((l) => cents(l.debit) <= 0 && cents(l.credit) <= 0)) return { ok: false as const, error: "Every line needs a debit or a credit amount." };
     if (debitCents !== creditCents) return { ok: false as const, error: `Debits and credits must be equal (difference ${money(Math.abs(debitCents - creditCents) / 100)}).` };
     const names = [...new Set(used.map((l) => l.name).filter(Boolean))];
+    // The reconcile mark belongs to the source account, so keep it while that account is still on the entry.
+    const sourceAccountId = loaded?.sourceAccountId && used.some((l) => l.accountId === loaded.sourceAccountId) ? loaded.sourceAccountId : used[0].accountId;
+    // The register's Account column shows the other side, as seen from the source account.
+    const other = used.find((l) => l.accountId !== sourceAccountId) ?? used[0];
     return {
       ok: true as const,
       used,
       payee: names.length === 1 ? names[0] : undefined,
-      label: used.length > 2 ? "Split" : accounts.find((a) => a.id === used[0].accountId)?.name ?? "",
+      sourceAccountId,
+      label: used.length > 2 ? "Split" : accounts.find((a) => a.id === other.accountId)?.name ?? "",
       postings: used.map((l) => ({
         accountId: l.accountId,
         type: cents(l.debit) > 0 ? ("DEBIT" as const) : ("CREDIT" as const),
@@ -226,7 +231,7 @@ export function JournalFormPage() {
     if (!built.ok) return setError(built.error);
     const body = {
       ...head,
-      payload: { memo: memo.trim() || undefined, payee: built.payee, accountLabel: built.label, sourceAccountId: built.used[0].accountId, postings: built.postings },
+      payload: { memo: memo.trim() || undefined, payee: built.payee, accountLabel: built.label, sourceAccountId: built.sourceAccountId, postings: built.postings },
       formState: { memo, lines: built.used.map(({ accountId, debit, credit, description, name }) => ({ accountId, debit, credit, description, name })) }
     };
     setSaving(true);
@@ -263,9 +268,7 @@ export function JournalFormPage() {
     const built = buildPostings();
     if (!built.ok) return setError(built.error);
     if (txnId && !loaded) return setError(loadError ?? "This transaction is still loading.");
-    const { used, postings, label, payee } = built;
-    // The reconcile mark belongs to the source account, so keep it while that account is still on the entry.
-    const sourceAccountId = loaded?.sourceAccountId && used.some((l) => l.accountId === loaded.sourceAccountId) ? loaded.sourceAccountId : used[0].accountId;
+    const { postings, label, payee, sourceAccountId } = built;
     const body = { transactionDate: date, referenceNumber: number.trim() || undefined, memo: memo.trim() || undefined, payee, accountLabel: label, sourceAccountId, postings };
     setSaving(true);
     setError(null);
