@@ -65,6 +65,8 @@ export function EditTransactionForm({
                 <InputField
                   type="text"
                   value={editor.refNo}
+                  disabled={entry.transactionType === "DEPOSIT"}
+                  placeholder="Ref No."
                   onChange={(event) => onEditorChange("refNo", event.target.value)}
                   className="w-full placeholder:text-[var(--color-text-disabled)]"
                 />
@@ -105,7 +107,7 @@ export function EditTransactionForm({
                   value={editor.payment}
                   disabled={isPaymentDisabled}
                   onChange={(event) => onEditorChange("payment", event.target.value)}
-                  placeholder="0.00"
+                  placeholder="Payment"
                   className="w-full text-right placeholder:text-[var(--color-text-disabled)]"
                 />
               </td>
@@ -117,7 +119,7 @@ export function EditTransactionForm({
                   value={editor.deposit}
                   disabled={isDepositDisabled}
                   onChange={(event) => onEditorChange("deposit", event.target.value)}
-                  placeholder="0.00"
+                  placeholder="Deposit"
                   className="w-full text-right placeholder:text-[var(--color-text-disabled)]"
                 />
               </td>

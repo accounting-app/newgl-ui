@@ -79,7 +79,8 @@ export function AddTransactionForm({
                   type="text"
                   value={draftTransaction.refNo}
                   onChange={(event) => onDraftFieldChange("refNo", event.target.value)}
-                  placeholder="Ref No"
+                  disabled={draftTransaction.transactionTypeId === "DEPOSIT"}
+                  placeholder="Ref No."
                   className="w-full placeholder:text-[var(--color-text-disabled)]"
                 />
                 <InputField type="text" value={draftTransaction.transactionTypeLabel} disabled className="mt-1 w-full" />
@@ -136,7 +137,7 @@ export function AddTransactionForm({
                   value={draftTransaction.payment}
                   disabled={isDraftInflowType}
                   onChange={(event) => onDraftFieldChange("payment", event.target.value)}
-                  placeholder="0.00"
+                  placeholder="Payment"
                   className="w-full text-right placeholder:text-[var(--color-text-disabled)]"
                 />
                 {draftErrors.payment ? <p className="mt-1 text-xs text-[var(--color-negative)]">{draftErrors.payment}</p> : null}
@@ -149,7 +150,7 @@ export function AddTransactionForm({
                   value={draftTransaction.deposit}
                   disabled={isDraftOutflowType}
                   onChange={(event) => onDraftFieldChange("deposit", event.target.value)}
-                  placeholder="0.00"
+                  placeholder="Deposit"
                   className="w-full text-right placeholder:text-[var(--color-text-disabled)]"
                 />
                 {draftErrors.deposit ? <p className="mt-1 text-xs text-[var(--color-negative)]">{draftErrors.deposit}</p> : null}

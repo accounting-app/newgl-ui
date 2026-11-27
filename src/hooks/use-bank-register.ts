@@ -220,7 +220,7 @@ export function useBankRegister() {
         transactionTypeLabel: selectedTypeLabel,
         date: new Date().toISOString().slice(0, 10),
         // A check gets the account's next check number; either way the field stays editable.
-        refNo: transactionTypeId === "CHECK" ? nextCheckNumber(entries) : generateNextRefNumber(existingRefNumbers),
+        refNo: transactionTypeId === "CHECK" ? nextCheckNumber(entries) : transactionTypeId === "DEPOSIT" ? "" : generateNextRefNumber(existingRefNumbers),
         payee: "",
         accountTypeId: "",
         memo: "",
@@ -348,7 +348,7 @@ export function useBankRegister() {
     // A check number the user cleared stays blank rather than becoming a TX- ref.
     const referenceNumber =
       draftTransaction.refNo.trim() ||
-      (draftTransaction.transactionTypeId === "CHECK" ? undefined : generateNextRefNumber(existingRefNumbers));
+      (["CHECK", "DEPOSIT"].includes(draftTransaction.transactionTypeId) ? undefined : generateNextRefNumber(existingRefNumbers));
     const domainTransactionType = toDomainTransactionType(draftTransaction.transactionTypeId);
 
     const selectedCounterparty = accounts.find(

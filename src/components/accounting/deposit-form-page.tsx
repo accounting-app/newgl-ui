@@ -1,7 +1,7 @@
 "use client";
 
 import { CANNOT_SHOW, formDetails, useSavedTransaction } from "@/lib/hooks/use-saved-transaction";
-import { LinkedFiles } from "@/components/accounting/linked-files";
+import { DateField } from "@/components/ui/date-field";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ChevronDown, ChevronUp, GripVertical, Trash2 } from "lucide-react";
@@ -42,6 +42,9 @@ const RT_LINK = "text-left text-base font-medium text-[var(--color-negative)] ho
 const CELL = "border-l border-dotted border-[var(--color-divider-tertiary)] px-2 py-2";
 const CELL_INPUT = `${INPUT_BASE_CLASSES} h-9 rounded px-3 text-sm`;
 
+const OUTLINE_BUTTON = "rounded-md border-2 border-[var(--color-ui-primary)] px-4 py-1.5 font-medium text-[var(--color-ui-primary)] hover:bg-[var(--color-action-passive-subtle-hover)]";
+const FOOTER_LINK = "font-medium text-[var(--color-ui-primary)] hover:underline";
+
 const cents = (value: string) => Math.round((Number(value) || 0) * 100);
 const money = (value: number) => value.toLocaleString("en-US", { style: "currency", currency: "USD" });
 
@@ -68,6 +71,8 @@ export function DepositFormPage() {
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [lines, setLines] = useState<Line[]>(startingLines);
   const [open, setOpen] = useState(true);
+  // QBO shows lines as plain text; only the one being edited has input boxes.
+  const [activeLineId, setActiveLineId] = useState<string | null>(null);
   const [memo, setMemo] = useState("");
   const [cashBackId, setCashBackId] = useState("");
   const [cashBackMemo, setCashBackMemo] = useState("");
@@ -129,6 +134,7 @@ export function DepositFormPage() {
     }));
     while (next.length < 2) next.push(blankLine());
     setLines(next);
+    void attachments.loadLinked(txn.id).catch(() => toast({ variant: "error", title: "Could not load the attachments" }));
   });
   const savedSourceId = txnId ? loaded?.sourceAccountId ?? loaded?.postings.find((p) => p.type === "DEBIT")?.accountId : undefined;
 
@@ -245,7 +251,7 @@ export function DepositFormPage() {
     }
   }
 
-  async function save(after: "stay" | "close") {
+  async function save(after: "stay" | "close" | "new") {
     setMenuOpen(false);
     if (!date) return setError("Enter the deposit date.");
     const built = buildPostings();
@@ -265,8 +271,10 @@ export function DepositFormPage() {
       };
       if (loaded) {
         setLoaded(await services.transactionService.updateTransaction(loaded.id, body));
+        await attachments.linkTo(loaded.id).catch(() => toast({ variant: "error", title: "Saved, but the attachments could not be linked" }));
         toast({ variant: "success", title: "Deposit saved" });
-        if (after === "close") closePage();
+        if (after === "new") window.location.assign("/deposit");
+        else if (after === "close") closePage();
         else services.accountService.listAccounts().then(setAccounts).catch(() => undefined);
         return;
       }
@@ -333,16 +341,6 @@ export function DepositFormPage() {
     <button type="button" onClick={exportCsv} className={`${RT_TOOLBAR_LINK} mr-2`}>Export To CSV</button>
   );
 
-  const editFooter = (
-    <>
-      <button type="button" onClick={closePage} className="text-base font-medium text-[var(--color-text-global)] hover:underline">Cancel</button>
-      <div className="flex items-center gap-3">
-        <Button variant="secondary" className="!rounded-md" disabled={saving || !loaded} onClick={() => void save("stay")}>Save</Button>
-        <Button variant="primary" className="!rounded-md" disabled={saving || !loaded} onClick={() => void save("close")}>{saving ? "Saving..." : "Save and close"}</Button>
-      </div>
-    </>
-  );
-
   const footer = tpl.active ? (
     <>
       <div className="flex items-center gap-6">
@@ -353,18 +351,15 @@ export function DepositFormPage() {
       <Button className="!rounded-md" disabled={saving} onClick={() => void saveTemplate()}>{saving ? "Saving..." : "Save template"}</Button>
     </>
   ) : (
-    <>
-      <div className="flex items-center gap-6">
-        <button type="button" onClick={closePage} className="text-base font-medium text-[var(--color-text-global)] hover:underline">Cancel</button>
-        <button type="button" onClick={resetForm} className="text-base font-medium text-[var(--color-text-global)] hover:underline">Clear</button>
-      </div>
-      <div className="flex items-center gap-4 text-base font-medium text-[var(--color-text-global)]">
-        <button type="button" onClick={() => window.print()} className="hover:underline">Print</button>
-        <button type="button" onClick={() => tpl.start(date)} className="hover:underline">Make recurring</button>
-      </div>
-      <div ref={menuRef} className="relative inline-flex">
-        <Button className="!rounded-l-md !rounded-r-none" disabled={saving} onClick={() => void save("stay")}>{saving ? "Saving..." : "Save and new"}</Button>
-        <Button className="!rounded-l-none !rounded-r-md border-l border-l-white/30 !min-w-0 px-2" aria-label="More save options" disabled={saving} onClick={() => setMenuOpen((v) => !v)}>
+    <div className="ml-auto flex flex-wrap items-center justify-end gap-6 text-base">
+      <button type="button" onClick={closePage} className={`${OUTLINE_BUTTON} mr-8`}>Cancel</button>
+      {txnId ? null : <button type="button" onClick={resetForm} className={FOOTER_LINK}>Clear</button>}
+      <button type="button" onClick={() => window.print()} className={FOOTER_LINK}>Print</button>
+      <button type="button" onClick={() => tpl.start(date)} className={FOOTER_LINK}>Make recurring</button>
+      <button type="button" disabled title="More options aren't available yet" className={`${FOOTER_LINK} cursor-not-allowed opacity-60`}>More</button>
+      <div ref={menuRef} className="relative ml-6 inline-flex">
+        <Button variant="primary" className="!rounded-l-md !rounded-r-none" disabled={saving || Boolean(txnId && !loaded)} onClick={() => void save(txnId ? "new" : "stay")}>{saving ? "Saving..." : "Save and new"}</Button>
+        <Button variant="primary" className="!rounded-l-none !rounded-r-md border-l border-l-white/30 !min-w-0 px-2" aria-label="More save options" disabled={saving || Boolean(txnId && !loaded)} onClick={() => setMenuOpen((v) => !v)}>
           <ChevronDown className="h-4 w-4" aria-hidden="true" />
         </Button>
         {menuOpen ? (
@@ -373,11 +368,11 @@ export function DepositFormPage() {
           </div>
         ) : null}
       </div>
-    </>
+    </div>
   );
 
   return (
-    <FullScreenFormShell title={<>Bank Deposit {loaded?.reconcileStatus === "R" ? <span className="text-lg text-[var(--color-negative)]">(Reconciled)</span> : null}</>} onClose={closePage} toolbar={toolbar} footer={txnId && !tpl.active ? editFooter : footer}>
+    <FullScreenFormShell title={<>Bank Deposit {loaded?.reconcileStatus === "R" ? <span className="text-lg text-[var(--color-negative)]">(Reconciled)</span> : null}</>} onClose={closePage} toolbar={toolbar} footer={footer} hideSettings toolbarFirst>
       <div className="px-6 pb-8 pt-5">
         {tpl.active ? (
           <div className="pb-6">
@@ -403,7 +398,7 @@ export function DepositFormPage() {
             ) : null}
             <div>
               <label className={LABEL} htmlFor="deposit-date">Date</label>
-              <InputField id="deposit-date" type="date" value={date} onChange={(event) => setDate(event.target.value)} className="w-[200px]" />
+              <DateField id="deposit-date" value={date} onChange={setDate} className="w-[240px]" />
             </div>
           </div>
           <div className="text-right">
@@ -412,7 +407,7 @@ export function DepositFormPage() {
           </div>
         </div>
         )}
-        <button type="button" onClick={() => setOpen((v) => !v)} aria-expanded={open} className="mb-3 flex items-center gap-3 text-2xl text-[var(--color-text-global)]">
+        <button type="button" onClick={() => setOpen((v) => !v)} aria-expanded={open} className="mb-3 flex items-center gap-3 text-2xl font-semibold text-[var(--color-text-global)]">
           {open ? <ChevronDown className="h-6 w-6" aria-hidden="true" /> : <ChevronUp className="h-6 w-6" aria-hidden="true" />}
           Add funds to this deposit
         </button>
@@ -446,15 +441,15 @@ export function DepositFormPage() {
               </thead>
               <tbody>
                 {lines.map((line, index) => (
-                  <tr key={line.id} className="border-b border-[var(--color-divider-tertiary)] hover:bg-[var(--color-table-row-hover)]">
+                  <tr key={line.id} onClick={() => setActiveLineId(line.id)} onFocus={() => setActiveLineId(line.id)} className="h-[53px] border-b border-[var(--color-divider-tertiary)] hover:bg-[var(--color-table-row-hover)]">
                     <td className="text-[var(--color-icon-muted)]"><GripVertical className="h-4 w-4" aria-hidden="true" /></td>
                     <td className="px-2 py-2 text-center">{index + 1}</td>
-                    <td className="px-2 py-2"><Select value={line.receivedFrom} onChange={(v) => updateLine(line.id, { receivedFrom: v })} options={nameOptions} placeholder="" allowCustomValue={false} /></td>
-                    <td className={CELL}><Select value={line.accountId} onChange={(v) => updateLine(line.id, { accountId: v })} options={lineAccountOptions} placeholder="" allowCustomValue={false} /></td>
-                    <td className={CELL}><input value={line.description} onChange={(event) => updateLine(line.id, { description: event.target.value })} aria-label={`Line ${index + 1} description`} className={CELL_INPUT} /></td>
-                    <td className={CELL}><Select value={line.method} onChange={(v) => updateLine(line.id, { method: v })} options={methodOptions} placeholder="" allowCustomValue={false} onAddNew={() => setMethodModalFor(line.id)} addNewLabel="+ Add new" /></td>
-                    <td className={CELL}><input value={line.refNo} onChange={(event) => updateLine(line.id, { refNo: event.target.value })} aria-label={`Line ${index + 1} ref no.`} className={CELL_INPUT} /></td>
-                    <td className={CELL}><input type="number" min="0" step="0.01" value={line.amount} onChange={(event) => updateLine(line.id, { amount: event.target.value })} aria-label={`Line ${index + 1} amount`} className={`${CELL_INPUT} text-right`} /></td>
+                    <td className="px-2 py-2">{activeLineId === line.id ? <Select value={line.receivedFrom} onChange={(v) => updateLine(line.id, { receivedFrom: v })} options={nameOptions} placeholder="" allowCustomValue={false} /> : <button type="button" aria-label={`Line ${index + 1} received from`} onClick={() => setActiveLineId(line.id)} className="block min-h-9 w-full truncate px-3 text-left">{line.receivedFrom}</button>}</td>
+                    <td className={CELL}>{activeLineId === line.id ? <Select value={line.accountId} onChange={(v) => updateLine(line.id, { accountId: v })} options={lineAccountOptions} placeholder="" allowCustomValue={false} /> : <button type="button" aria-label={`Line ${index + 1} account`} onClick={() => setActiveLineId(line.id)} className="block min-h-9 w-full truncate px-3 text-left">{accounts.find((a) => a.id === line.accountId)?.name}</button>}</td>
+                    <td className={CELL}>{activeLineId === line.id ? <input value={line.description} onChange={(event) => updateLine(line.id, { description: event.target.value })} aria-label={`Line ${index + 1} description`} className={CELL_INPUT} /> : <button type="button" aria-label={`Line ${index + 1} description`} onClick={() => setActiveLineId(line.id)} className="block min-h-9 w-full truncate px-3 text-left">{line.description}</button>}</td>
+                    <td className={CELL}>{activeLineId === line.id ? <Select value={line.method} onChange={(v) => updateLine(line.id, { method: v })} options={methodOptions} placeholder="" allowCustomValue={false} onAddNew={() => setMethodModalFor(line.id)} addNewLabel="+ Add new" /> : <button type="button" aria-label={`Line ${index + 1} payment method`} onClick={() => setActiveLineId(line.id)} className="block min-h-9 w-full truncate px-3 text-left">{line.method}</button>}</td>
+                    <td className={CELL}>{activeLineId === line.id ? <input value={line.refNo} onChange={(event) => updateLine(line.id, { refNo: event.target.value })} aria-label={`Line ${index + 1} ref no.`} className={CELL_INPUT} /> : <button type="button" aria-label={`Line ${index + 1} ref no.`} onClick={() => setActiveLineId(line.id)} className="block min-h-9 w-full truncate px-3 text-left">{line.refNo}</button>}</td>
+                    <td className={CELL}>{activeLineId === line.id ? <input type="number" min="0" step="0.01" value={line.amount} onChange={(event) => updateLine(line.id, { amount: event.target.value })} aria-label={`Line ${index + 1} amount`} className={`${CELL_INPUT} text-right`} /> : <button type="button" aria-label={`Line ${index + 1} amount`} onClick={() => setActiveLineId(line.id)} className="block min-h-9 w-full truncate px-3 text-right">{line.amount === "" ? "" : money(cents(line.amount) / 100)}</button>}</td>
                     <td className="px-1 text-center">
                       <button type="button" aria-label="Delete line" onClick={() => setLines((current) => (current.length > 1 ? current.filter((l) => l.id !== line.id) : [blankLine()]))} className="text-[var(--color-text-global)] hover:text-[var(--color-negative)]"><Trash2 className="h-5 w-5" aria-hidden="true" /></button>
                     </td>
@@ -488,14 +483,7 @@ export function DepositFormPage() {
                 <button type="button" className={RT_LINK} onClick={() => setLines((current) => current.map((l) => ({ ...l, description: memo })))}>Copy Memo to Descriptions</button>
               </div>
             </div>
-            {txnId ? (
-              <div>
-                <span className={LABEL}>Attachments</span>
-                {loaded ? <LinkedFiles zone="forms" linkedId={loaded.id} /> : null}
-              </div>
-            ) : (
-              <AttachmentsField attachments={attachments} formLabel="Bank Deposit" />
-            )}
+            <AttachmentsField attachments={attachments} formLabel="Bank Deposit" />
           </div>
           <div className="w-[720px] max-w-full">
             <div className="flex flex-wrap items-end gap-4">
