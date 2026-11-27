@@ -1,19 +1,21 @@
 "use client";
 
 import { CANNOT_SHOW, formDetails, useSavedTransaction } from "@/lib/hooks/use-saved-transaction";
-import { LinkedFiles } from "@/components/accounting/linked-files";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ChevronDown, Copy, GripVertical, Trash2 } from "lucide-react";
+import { ChevronDown, ClipboardPaste, Copy, GripVertical, SquareArrowOutUpRight, Trash2 } from "lucide-react";
 import { AttachmentsField } from "@/components/accounting/attachments-field";
 import { FullScreenFormShell, RT_TOOLBAR_LINK, leaveFormPage } from "@/components/accounting/full-screen-form-shell";
 import { Button } from "@/components/ui/button";
+import { DateField } from "@/components/ui/date-field";
 import { INPUT_BASE_CLASSES, InputField } from "@/components/ui/input-field";
 import { Modal } from "@/components/ui/modal";
 import { RecurringIntervalRow, RecurringNameRow, useRecurringTemplate } from "@/components/accounting/recurring-template-fields";
 import { Select } from "@/components/ui/select";
 import { useToast } from "@/components/ui/toast/toast-context";
 import { ACCOUNT_CATEGORY_LABELS } from "@/constants/ui";
+import { multiplyLines } from "@/lib/accounting/multiply-lines";
+import { nextJournalNumber } from "@/lib/accounting/next-check-number";
 import { useCustomers } from "@/lib/hooks/use-customers";
 import { useFormAttachments } from "@/lib/hooks/use-form-attachments";
 import { useVendors } from "@/lib/hooks/use-vendors";
@@ -31,7 +33,6 @@ const blankLine = (): Line => {
 };
 const startingLines = () => Array.from({ length: 8 }, blankLine);
 
-const NEXT_KEY = "newgl:journal-next:v1";
 const COPY_KEY = "newgl:journal-copy:v1";
 const LABEL = "mb-1 block text-sm text-[var(--color-text-primary)]";
 const PLAIN_BUTTON = "rounded-md border border-[var(--color-button-border)] px-3 py-1.5 text-sm text-[var(--color-text-global)] hover:bg-[var(--color-action-passive-subtle-hover)]";
@@ -39,13 +40,18 @@ const RT_BUTTON = "rounded-md border border-[var(--color-negative)] px-3 py-1.5 
 const RT_LINK = "text-left text-base font-medium text-[var(--color-negative)] hover:underline disabled:cursor-not-allowed disabled:opacity-50";
 const CELL = "border-l border-dotted border-[var(--color-divider-tertiary)] px-2 py-2";
 const CELL_INPUT = `${INPUT_BASE_CLASSES} h-9 rounded px-3 text-sm`;
+// QBO shows a line as plain text until it is clicked.
+const CELL_TEXT = "block min-h-9 w-full truncate px-3";
+const FOOTER_LINK = "text-base font-medium text-[var(--color-text-global)] hover:underline disabled:cursor-not-allowed disabled:opacity-60";
 
 const cents = (value: string) => Math.round((Number(value) || 0) * 100);
 const money = (value: number) => value.toLocaleString("en-US", { style: "currency", currency: "USD" });
 
 // QBO's full-screen Journal Entry (/journal?rtAccountId=...&rt=close).
 // Save posts a real journal entry; debits must equal credits. "Save and
-// Reverse" also posts the mirror-image entry on a date you choose.
+// Reverse" also posts the mirror-image entry on a date you choose, while
+// "Reverse" only opens that mirror image for you to check and save.
+// ?txnId= edits a saved entry.
 export function JournalFormPage() {
   const router = useRouter();
   const params = useSearchParams();
@@ -67,6 +73,9 @@ export function JournalFormPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [activeLineId, setActiveLineId] = useState<string | null>(null);
+  const [percent, setPercent] = useState("");
+  const numberTyped = useRef(false);
   const [reverseOpen, setReverseOpen] = useState(false);
   const [reverseDate, setReverseDate] = useState("");
   const menuRef = useRef<HTMLDivElement>(null);
@@ -77,14 +86,17 @@ export function JournalFormPage() {
   useEffect(() => {
     try {
       if (new URLSearchParams(window.location.search).get("txnId")) return;
-      const stored = Number(window.localStorage.getItem(NEXT_KEY));
-      if (Number.isInteger(stored) && stored > 0) setNumber(String(stored));
-      // "Copy" in another tab leaves its lines here; take them once.
+      // "Copy" and "Reverse" leave their lines here; take them once.
       if (new URLSearchParams(window.location.search).get("copy") === "1") {
         const draft = JSON.parse(window.localStorage.getItem(COPY_KEY) ?? "null");
         window.localStorage.removeItem(COPY_KEY);
         if (draft) {
           setMemo(draft.memo ?? "");
+          if (draft.date) setDate(draft.date);
+          if (draft.number) {
+            numberTyped.current = true;
+            setNumber(draft.number);
+          }
           const next = (draft.lines as Omit<Line, "id">[]).map((l) => ({ ...blankLine(), ...l }));
           while (next.length < 8) next.push(blankLine());
           setLines(next);
@@ -94,6 +106,19 @@ export function JournalFormPage() {
       // storage unavailable: defaults
     }
   }, []);
+  useEffect(() => {
+    if (txnId) return;
+    let cancelled = false;
+    services.transactionService
+      .listTransactions()
+      .then((transactions) => {
+        if (!cancelled && !numberTyped.current) setNumber(nextJournalNumber(transactions));
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [txnId, services]);
   // ?template=<id> fills the form from a saved template; &edit=1 opens it as the template editor, otherwise it is "Use" (saving counts the occurrence as done).
   const templateParam = params.get("template");
   const editParam = params.get("edit") === "1";
@@ -128,10 +153,15 @@ export function JournalFormPage() {
       debit: p.type === "DEBIT" ? p.amount.toFixed(2) : "",
       credit: p.type === "CREDIT" ? p.amount.toFixed(2) : "",
       description: p.description ?? "",
-      name: p.details?.name ?? (txn.postings.length === 2 ? txn.payee ?? "" : "")
+      name: p.details?.name ?? ""
     }));
+    // An entry made from the register has a payee but no line names: show it on the register's line.
+    if (txn.payee && next.every((l) => !l.name)) {
+      (next.find((l) => l.accountId === txn.sourceAccountId) ?? next[0]).name = txn.payee;
+    }
     while (next.length < 8) next.push(blankLine());
     setLines(next);
+    void attachments.loadLinked(txn.id).catch(() => toast({ variant: "error", title: "Could not load the attachments" }));
   });
 
   const accountOptions = useMemo(() => accounts.filter((a) => a.status === "ACTIVE").sort((a, b) => a.name.localeCompare(b.name)).map((a) => ({ value: a.id, label: a.name, rightLabel: ACCOUNT_CATEGORY_LABELS[a.category] })), [accounts]);
@@ -165,7 +195,7 @@ export function JournalFormPage() {
     return {
       ok: true as const,
       used,
-      payee: names.length === 1 ? names[0] : names.length === 0 ? loaded?.payee : undefined,
+      payee: names.length === 1 ? names[0] : undefined,
       label: used.length > 2 ? "Split" : accounts.find((a) => a.id === used[0].accountId)?.name ?? "",
       postings: used.map((l) => ({
         accountId: l.accountId,
@@ -213,69 +243,52 @@ export function JournalFormPage() {
     }
   }
 
-  async function save(after: "stay" | "close", reverseOn?: string) {
+  async function postReversal(reverseOn: string, built: Extract<ReturnType<typeof buildPostings>, { ok: true }>, sourceAccountId: string) {
+    const reversal = await services.transactionService.createTransaction({
+      type: "JOURNAL_ENTRY",
+      transactionDate: reverseOn,
+      referenceNumber: number ? `${number}R` : undefined,
+      memo: `Reversal of journal entry ${number}`.trim(),
+      payee: built.payee,
+      accountLabel: built.label,
+      sourceAccountId,
+      postings: built.postings.map((p) => ({ ...p, type: p.type === "DEBIT" ? ("CREDIT" as const) : ("DEBIT" as const) }))
+    });
+    await services.transactionService.postTransaction(reversal.id);
+  }
+
+  async function save(after: "stay" | "close" | "new", reverseOn?: string) {
     setMenuOpen(false);
     if (!date) return setError("Enter the journal date.");
     const built = buildPostings();
     if (!built.ok) return setError(built.error);
-    const { used, postings, label } = built;
-    const names = built.payee ? [built.payee] : [];
-    if (txnId) {
-      if (!loaded) return setError(loadError ?? "This transaction is still loading.");
-      setSaving(true);
-      setError(null);
-      try {
-        // The reconcile mark belongs to the source account, so keep it while that account is still on the entry.
-        const sourceAccountId = used.some((l) => l.accountId === loaded.sourceAccountId) ? loaded.sourceAccountId : used[0].accountId;
-        setLoaded(await services.transactionService.updateTransaction(loaded.id, { transactionDate: date, referenceNumber: number || undefined, memo: memo.trim() || undefined, payee: built.payee, accountLabel: label, sourceAccountId, postings }));
-        toast({ variant: "success", title: "Journal entry saved" });
-        if (after === "close") closePage();
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Could not save this journal entry.");
-      } finally {
-        setSaving(false);
-      }
-      return;
-    }
+    if (txnId && !loaded) return setError(loadError ?? "This transaction is still loading.");
+    const { used, postings, label, payee } = built;
+    // The reconcile mark belongs to the source account, so keep it while that account is still on the entry.
+    const sourceAccountId = loaded?.sourceAccountId && used.some((l) => l.accountId === loaded.sourceAccountId) ? loaded.sourceAccountId : used[0].accountId;
+    const body = { transactionDate: date, referenceNumber: number.trim() || undefined, memo: memo.trim() || undefined, payee, accountLabel: label, sourceAccountId, postings };
     setSaving(true);
     setError(null);
     try {
-      const created = await services.transactionService.createTransaction({
-        type: "JOURNAL_ENTRY",
-        transactionDate: date,
-        referenceNumber: number,
-        memo: memo.trim() || undefined,
-        payee: names.length === 1 ? names[0] : undefined,
-        accountLabel: label,
-        sourceAccountId: used[0].accountId,
-        postings
-      });
-      await services.transactionService.postTransaction(created.id);
-      await attachments.linkTo(created.id).catch(() => toast({ variant: "error", title: "Saved, but the attachments could not be linked" }));
-      if (reverseOn) {
-        const reversal = await services.transactionService.createTransaction({
-          type: "JOURNAL_ENTRY",
-          transactionDate: reverseOn,
-          referenceNumber: `${number}-R`,
-          memo: `Reversal of journal entry ${number}`,
-          payee: names.length === 1 ? names[0] : undefined,
-          accountLabel: label,
-          sourceAccountId: used[0].accountId,
-          postings: postings.map((p) => ({ ...p, type: p.type === "DEBIT" ? ("CREDIT" as const) : ("DEBIT" as const) }))
-        });
-        await services.transactionService.postTransaction(reversal.id);
+      let savedId: string;
+      if (loaded) {
+        setLoaded(await services.transactionService.updateTransaction(loaded.id, { ...body, dueDate: loaded.dueDate, paymentMethod: loaded.paymentMethod, details: loaded.details }));
+        savedId = loaded.id;
+      } else {
+        const created = await services.transactionService.createTransaction({ ...body, type: "JOURNAL_ENTRY" });
+        await services.transactionService.postTransaction(created.id);
+        savedId = created.id;
+        if (useTplId) await advanceRecurring(useTplId).catch(() => undefined);
       }
-      const following = String((Number(number) || 0) + 1);
-      try {
-        window.localStorage.setItem(NEXT_KEY, following);
-      } catch {
-        // not persisted
-      }
-      if (useTplId) await advanceRecurring(useTplId).catch(() => undefined);
+      await attachments.linkTo(savedId).catch(() => toast({ variant: "error", title: "Saved, but the attachments could not be linked" }));
+      if (reverseOn) await postReversal(reverseOn, built, sourceAccountId);
       toast({ variant: "success", title: reverseOn ? "Journal entry saved and reversed" : "Journal entry saved" });
       if (after === "close") closePage();
+      else if (after === "new") window.location.assign("/journal");
       else {
-        resetForm(following);
+        // "Save" keeps the entry open.
+        await attachments.loadLinked(savedId).catch(() => undefined);
+        if (!loaded) router.replace(`/journal?txnId=${encodeURIComponent(savedId)}`);
         services.accountService.listAccounts().then(setAccounts).catch(() => undefined);
       }
     } catch (err) {
@@ -285,9 +298,40 @@ export function JournalFormPage() {
     }
   }
 
-  function openReverse() {
+  const firstOfNextMonth = () => {
     const base = new Date(`${date || new Date().toISOString().slice(0, 10)}T00:00:00`);
-    setReverseDate(new Date(base.getFullYear(), base.getMonth() + 1, 1).toLocaleDateString("en-CA"));
+    return new Date(base.getFullYear(), base.getMonth() + 1, 1).toLocaleDateString("en-CA");
+  };
+
+  // "Reverse" opens the mirror image as a new, unsaved entry.
+  function reverseEntry() {
+    const used = lines.filter((l) => l.accountId || l.debit || l.credit);
+    if (used.length === 0) return setError("There are no lines to reverse.");
+    try {
+      window.localStorage.setItem(
+        COPY_KEY,
+        JSON.stringify({
+          memo: `Reversal of journal entry ${number}`.trim(),
+          date: firstOfNextMonth(),
+          number: number ? `${number}R` : "",
+          lines: used.map(({ accountId, debit, credit, description, name }) => ({ accountId, debit: credit, credit: debit, description, name }))
+        })
+      );
+    } catch {
+      return toast({ variant: "error", title: "Could not reverse this entry" });
+    }
+    window.location.assign("/journal?copy=1");
+  }
+
+  function multiply() {
+    const value = Number(percent);
+    if (!(value > 0)) return toast({ variant: "info", title: "Enter a percentage above zero" });
+    setLines((current) => multiplyLines(current, value));
+    setPercent("");
+  }
+
+  function openReverse() {
+    setReverseDate(firstOfNextMonth());
     setReverseOpen(true);
   }
   const clearZeroLines = () => setLines((current) => { const kept = current.filter((l) => cents(l.debit) > 0 || cents(l.credit) > 0 || l.accountId || l.description); return kept.length >= 2 ? kept : [...kept, ...Array.from({ length: 2 - kept.length }, blankLine)]; });
@@ -332,22 +376,12 @@ export function JournalFormPage() {
     window.open("/journal?rt=close&copy=1", "_blank");
   }
 
+  const sortIcon = <button type="button" disabled aria-label="Sort lines" title="Sorting lines isn't available yet" className="flex h-9 items-center px-2 text-[var(--color-negative)] disabled:opacity-60"><span aria-hidden="true" className="text-lg leading-none">↑↓</span></button>;
   const toolbar = (
     <>
-      <button type="button" disabled aria-label="Sort lines" title="Sorting lines isn't available yet" className="flex h-9 items-center px-2 text-[var(--color-negative)] disabled:opacity-60"><span aria-hidden="true" className="text-lg leading-none">↑↓</span></button>
       <button type="button" onClick={exportCsv} className={RT_TOOLBAR_LINK}>Export CSV</button>
       <button type="button" onClick={() => void pasteFromClipboard()} className={RT_TOOLBAR_LINK}>Paste Excel</button>
       {tpl.active ? null : <button type="button" onClick={copyEntry} className="flex h-9 items-center gap-1.5 rounded-md px-2 text-sm text-[var(--color-text-global)] hover:bg-[var(--color-action-passive-subtle-hover)]"><Copy className="h-5 w-5" aria-hidden="true" />Copy</button>}
-    </>
-  );
-
-  const editFooter = (
-    <>
-      <button type="button" onClick={closePage} className="text-base font-medium text-[var(--color-text-global)] hover:underline">Cancel</button>
-      <div className="flex items-center gap-3">
-        <Button variant="secondary" className="!rounded-md" disabled={saving || !loaded} onClick={() => void save("stay")}>Save</Button>
-        <Button variant="primary" className="!rounded-md" disabled={saving || !loaded} onClick={() => void save("close")}>{saving ? "Saving..." : "Save and close"}</Button>
-      </div>
     </>
   );
 
@@ -361,20 +395,18 @@ export function JournalFormPage() {
       <Button className="!rounded-md" disabled={saving} onClick={() => void saveTemplate()}>{saving ? "Saving..." : "Save template"}</Button>
     </>
   ) : (
-    <>
-      <div className="flex items-center gap-3">
-        <Button variant="secondary" className="!rounded-md" onClick={closePage}>Cancel</Button>
-        <Button variant="secondary" className="!rounded-md" onClick={() => resetForm()}>Clear</Button>
-      </div>
-      <div className="flex items-center gap-6 text-base text-[var(--color-text-global)]">
-        <button type="button" onClick={() => window.print()} className="hover:underline">Print</button>
-        <button type="button" onClick={() => tpl.start(date)} className="hover:underline">Make recurring</button>
-      </div>
-      <div className="flex items-center gap-3">
-        <Button variant="secondary" className="!rounded-md" disabled={saving} onClick={() => void save("stay")}>Save</Button>
+    <div className="ml-auto flex flex-wrap items-center justify-end gap-8">
+      <Button variant="secondary" className="!rounded-md" onClick={closePage}>Cancel</Button>
+      {txnId ? null : <button type="button" onClick={() => resetForm()} className={FOOTER_LINK}>Clear</button>}
+      <button type="button" onClick={() => window.print()} className={`${FOOTER_LINK} !text-[var(--color-negative)]`}>RightTool Print</button>
+      <button type="button" onClick={reverseEntry} className={FOOTER_LINK}>Reverse</button>
+      <button type="button" onClick={() => tpl.start(date)} className={FOOTER_LINK}>Make recurring</button>
+      <button type="button" disabled title="More options aren't available yet" className={FOOTER_LINK}>More</button>
+      <div className="ml-6 flex items-center gap-3">
+        <Button variant="secondary" className="!rounded-md" disabled={saving || Boolean(txnId && !loaded)} onClick={() => void save("stay")}>Save</Button>
         <div ref={menuRef} className="relative inline-flex">
-          <Button className="!rounded-l-md !rounded-r-none" disabled={saving} onClick={() => void save("stay")}>{saving ? "Saving..." : "Save and new"}</Button>
-          <Button className="!rounded-l-none !rounded-r-md border-l border-l-white/30 !min-w-0 px-2" aria-label="More save options" disabled={saving} onClick={() => setMenuOpen((v) => !v)}>
+          <Button variant="primary" className="!rounded-l-md !rounded-r-none" disabled={saving || Boolean(txnId && !loaded)} onClick={() => void save("new")}>{saving ? "Saving..." : "Save and new"}</Button>
+          <Button variant="primary" className="!rounded-l-none !rounded-r-md border-l border-l-white/30 !min-w-0 px-2" aria-label="More save options" disabled={saving || Boolean(txnId && !loaded)} onClick={() => setMenuOpen((v) => !v)}>
             <ChevronDown className="h-4 w-4" aria-hidden="true" />
           </Button>
           {menuOpen ? (
@@ -384,11 +416,11 @@ export function JournalFormPage() {
           ) : null}
         </div>
       </div>
-    </>
+    </div>
   );
 
   return (
-    <FullScreenFormShell title={<>{`Journal Entry #${number}`} {loaded?.reconcileStatus === "R" ? <span className="text-lg text-[var(--color-negative)]">(Reconciled)</span> : null}</>} onClose={closePage} toolbar={toolbar} onSettings={() => toast({ variant: "info", title: "Choose what you use isn't available yet" })} settingsLabel="Choose what you use" footer={txnId && !tpl.active ? editFooter : footer}>
+    <FullScreenFormShell title={<>{`Journal Entry #${number}`} {loaded?.reconcileStatus === "R" ? <span className="text-lg text-[var(--color-negative)]">(Reconciled)</span> : null}</>} onClose={closePage} toolbar={toolbar} onSettings={() => toast({ variant: "info", title: "Choose what you use isn't available yet" })} settingsLabel="Choose what you use" footer={footer} leadingTools={sortIcon}>
       <div className="px-6 pb-8 pt-5">
         {tpl.active ? (
           <div className="pb-6">
@@ -400,15 +432,19 @@ export function JournalFormPage() {
         <div className="flex flex-wrap items-end gap-4 pb-6">
           <div>
             <label className={LABEL} htmlFor="journal-date">Journal date</label>
-            <InputField id="journal-date" type="date" value={date} onChange={(event) => setDate(event.target.value)} className="w-[200px]" />
+            <DateField id="journal-date" value={date} onChange={setDate} className="w-[160px]" />
           </div>
           <div>
             <label className={LABEL} htmlFor="journal-no">Journal no.</label>
-            <InputField id="journal-no" value={number} onChange={(event) => setNumber(event.target.value)} className="w-[260px]" />
+            <InputField id="journal-no" value={number} onChange={(event) => { numberTyped.current = true; setNumber(event.target.value); }} className="w-[260px]" />
           </div>
         </div>
         )}
 
+        <div className="mb-2 flex justify-end gap-3 text-[var(--color-text-global)]">
+          <button type="button" onClick={exportCsv} aria-label="Export lines" title="Export lines" className="hover:text-[var(--color-link-action)]"><SquareArrowOutUpRight className="h-5 w-5" aria-hidden="true" /></button>
+          <button type="button" onClick={() => void pasteFromClipboard()} aria-label="Paste from Excel" title="Paste from Excel" className="hover:text-[var(--color-link-action)]"><ClipboardPaste className="h-5 w-5" aria-hidden="true" /></button>
+        </div>
         <table className="w-full table-fixed border-collapse text-sm">
           <colgroup>
             <col className="w-6" />
@@ -434,19 +470,27 @@ export function JournalFormPage() {
             </tr>
           </thead>
           <tbody>
-            {lines.map((line, index) => (
-              <tr key={line.id} className="border-b border-[var(--color-divider-tertiary)] hover:bg-[var(--color-table-row-hover)]">
+            {lines.map((line, index) => {
+              const active = activeLineId === line.id;
+              const open = () => setActiveLineId(line.id);
+              const text = (label: string, value: string, align = "text-left") => (
+                <button type="button" aria-label={`Line ${index + 1} ${label}`} onClick={open} onFocus={open} className={`${CELL_TEXT} ${align}`}>{value}</button>
+              );
+              const amount = (value: string) => (value ? money(cents(value) / 100) : "");
+              return (
+              <tr key={line.id} onClick={open} className="h-[53px] border-b border-[var(--color-divider-tertiary)] hover:bg-[var(--color-table-row-hover)]">
                 <td className="text-[var(--color-icon-muted)]"><GripVertical className="h-4 w-4" aria-hidden="true" /></td>
                 <td className="px-2 py-2 text-center">{index + 1}</td>
-                <td className="px-2 py-2"><Select value={line.accountId} onChange={(v) => updateLine(line.id, { accountId: v })} options={accountOptions} placeholder="" allowCustomValue={false} /></td>
-                <td className={CELL}><input type="number" min="0" step="0.01" value={line.debit} onChange={(event) => updateLine(line.id, { debit: event.target.value, credit: event.target.value ? "" : line.credit })} aria-label={`Line ${index + 1} debit`} className={`${CELL_INPUT} text-right`} /></td>
-                <td className={CELL}><input type="number" min="0" step="0.01" value={line.credit} onChange={(event) => updateLine(line.id, { credit: event.target.value, debit: event.target.value ? "" : line.debit })} aria-label={`Line ${index + 1} credit`} className={`${CELL_INPUT} text-right`} /></td>
-                <td className={CELL}><input value={line.description} onChange={(event) => updateLine(line.id, { description: event.target.value })} aria-label={`Line ${index + 1} description`} className={CELL_INPUT} /></td>
-                <td className={CELL}><Select value={line.name} onChange={(v) => updateLine(line.id, { name: v })} options={nameOptions} placeholder="" allowCustomValue={false} /></td>
+                <td className="px-2 py-2">{active ? <Select value={line.accountId} onChange={(v) => updateLine(line.id, { accountId: v })} options={accountOptions} placeholder="" allowCustomValue={false} /> : text("account", accounts.find((a) => a.id === line.accountId)?.name ?? "")}</td>
+                <td className={CELL}>{active ? <input type="number" min="0" step="0.01" value={line.debit} onChange={(event) => updateLine(line.id, { debit: event.target.value, credit: event.target.value ? "" : line.credit })} aria-label={`Line ${index + 1} debit`} className={`${CELL_INPUT} text-right`} /> : text("debit", amount(line.debit), "text-right")}</td>
+                <td className={CELL}>{active ? <input type="number" min="0" step="0.01" value={line.credit} onChange={(event) => updateLine(line.id, { credit: event.target.value, debit: event.target.value ? "" : line.debit })} aria-label={`Line ${index + 1} credit`} className={`${CELL_INPUT} text-right`} /> : text("credit", amount(line.credit), "text-right")}</td>
+                <td className={CELL}>{active ? <input value={line.description} onChange={(event) => updateLine(line.id, { description: event.target.value })} aria-label={`Line ${index + 1} description`} className={CELL_INPUT} /> : text("description", line.description)}</td>
+                <td className={CELL}>{active ? <Select value={line.name} onChange={(v) => updateLine(line.id, { name: v })} options={nameOptions} placeholder="" allowCustomValue={false} /> : text("name", line.name)}</td>
                 <td className="px-1 text-center"><button type="button" aria-label="Copy line" onClick={() => setLines((current) => { const i = current.findIndex((l) => l.id === line.id); return [...current.slice(0, i + 1), { ...line, id: blankLine().id }, ...current.slice(i + 1)]; })} className="text-[var(--color-text-global)]"><Copy className="h-5 w-5" aria-hidden="true" /></button></td>
                 <td className="px-1 text-center"><button type="button" aria-label="Delete line" onClick={() => setLines((current) => (current.length > 1 ? current.filter((l) => l.id !== line.id) : [blankLine()]))} className="text-[var(--color-text-global)] hover:text-[var(--color-negative)]"><Trash2 className="h-5 w-5" aria-hidden="true" /></button></td>
               </tr>
-            ))}
+              );
+            })}
             <tr className="border-b border-[var(--color-divider-tertiary)] font-semibold text-[var(--color-text-global)]">
               <td colSpan={3} className="px-2 py-3 text-right">Total</td>
               <td className="px-2 py-3 text-right">{money(debitCents / 100)}</td>
@@ -458,8 +502,12 @@ export function JournalFormPage() {
         <div className="mt-4 flex flex-wrap items-center gap-3">
           <button type="button" className={PLAIN_BUTTON} onClick={() => setLines((current) => [...current, blankLine(), blankLine()])}>Add lines</button>
           <button type="button" className={PLAIN_BUTTON} onClick={() => setLines(startingLines())}>Clear all lines</button>
+          <span className="ml-4 flex items-center gap-2">
+            <input value={percent} onChange={(event) => setPercent(event.target.value.replace(/[^0-9.]/g, ""))} onKeyDown={(event) => event.key === "Enter" && multiply()} placeholder="%" aria-label="Percentage" className="h-8 w-14 rounded border border-[var(--color-negative)] bg-transparent px-2 text-sm" />
+            <button type="button" onClick={multiply} className="text-sm text-[var(--color-negative)] hover:underline">Multiply by %</button>
+          </span>
           <button type="button" className={RT_BUTTON} onClick={clearZeroLines}>Clear 0 Value Lines</button>
-          {tpl.active || txnId ? null : <button type="button" className={`${RT_LINK} ml-2 !text-sm font-semibold`} disabled={saving} onClick={openReverse}>Save and Reverse</button>}
+          {tpl.active ? null : <button type="button" className={`${RT_LINK} ml-2 !text-sm font-semibold`} disabled={saving} onClick={openReverse}>Save and Reverse</button>}
         </div>
 
         <div className="mt-10 flex flex-wrap gap-8">
@@ -475,14 +523,7 @@ export function JournalFormPage() {
             </div>
           </div>
           <div className="w-[520px] max-w-full">
-            {txnId ? (
-              <div>
-                <span className={LABEL}>Attachments</span>
-                {loaded ? <LinkedFiles zone="forms" linkedId={loaded.id} /> : null}
-              </div>
-            ) : (
-              <AttachmentsField attachments={attachments} formLabel="Journal Entry" />
-            )}
+            <AttachmentsField attachments={attachments} formLabel="Journal Entry" />
           </div>
         </div>
         {error ?? loadError ? <p className="mt-3 text-sm text-[var(--color-negative)]" role="alert">{error ?? loadError}</p> : null}
@@ -495,7 +536,7 @@ export function JournalFormPage() {
         <InputField id="journal-reverse-date" type="date" value={reverseDate} onChange={(event) => setReverseDate(event.target.value)} />
         <div className="mt-4 flex justify-end gap-3">
           <Button variant="secondary" onClick={() => setReverseOpen(false)}>Cancel</Button>
-          <Button disabled={!reverseDate || saving} onClick={() => { setReverseOpen(false); void save("stay", reverseDate); }}>Save and Reverse</Button>
+          <Button variant="primary" disabled={!reverseDate || saving} onClick={() => { setReverseOpen(false); void save("stay", reverseDate); }}>Save and Reverse</Button>
         </div>
       </Modal>
     </FullScreenFormShell>

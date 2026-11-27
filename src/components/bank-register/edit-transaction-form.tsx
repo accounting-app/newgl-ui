@@ -24,8 +24,8 @@ type EditTransactionFormProps = {
   onOpenPayeeModal: () => void;
   onOpenAccountModal: () => void;
   onDelete: () => void;
-  /** Opens the transaction in its full form. */
-  onEdit: () => void;
+  /** Opens the transaction in its full form; left out for types that have none, which disables Edit. */
+  onEdit?: () => void;
   onCancel: () => void;
   onSave: () => void;
 };
@@ -148,7 +148,7 @@ export function EditTransactionForm({
         >
           Delete
         </Button>
-        <Button variant="secondary" disabled={isDeletingRow || isSavingRow} onClick={onEdit}>
+        <Button variant="secondary" disabled={!onEdit || isDeletingRow || isSavingRow} title={onEdit ? undefined : "There is no full form for this type yet"} onClick={onEdit}>
           Edit
         </Button>
         <Button variant="secondary" disabled={isDeletingRow || isSavingRow} onClick={onCancel}>

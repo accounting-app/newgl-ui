@@ -22,7 +22,7 @@ import {
 } from "@/modules/accounting/presentation/transaction-type-policy";
 import { findReceivableAccount } from "@/lib/accounting/receivables";
 import { generateNextRefNumber } from "@/modules/accounting/domain/accounting-reports";
-import { nextCheckNumber, nextSalesReceiptNumber } from "@/lib/accounting/next-check-number";
+import { nextCheckNumber, nextJournalNumber, nextSalesReceiptNumber } from "@/lib/accounting/next-check-number";
 import type { BatchRegisterEntryUpdate } from "@/modules/accounting/application/contracts";
 import { nextAccountCode } from "@/lib/accounting/next-account-code";
 import type {
@@ -112,6 +112,7 @@ export function useBankRegister() {
   const [isSavingDraft, setIsSavingDraft] = useState(false);
   const [entries, setEntries] = useState<RegisterEntry[]>([]);
   const [existingRefNumbers, setExistingRefNumbers] = useState<string[]>([]);
+  const [journalNumber, setJournalNumber] = useState("1");
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
   const [selectedPostings, setSelectedPostings] = useState<LedgerPosting[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -159,6 +160,7 @@ export function useBankRegister() {
 
   const refreshRefNumbers = useCallback(async () => {
     const transactions = await services.transactionService.listTransactions();
+    setJournalNumber(nextJournalNumber(transactions));
     setExistingRefNumbers(
       transactions
         .map((transaction) => transaction.referenceNumber)
@@ -226,7 +228,9 @@ export function useBankRegister() {
             ? nextCheckNumber(entries)
             : transactionTypeId === "SALES_RECEIPT"
               ? nextSalesReceiptNumber(entries)
-              : transactionTypeId === "DEPOSIT" || transactionTypeId === "RECEIVE_PAYMENT" || transactionTypeId === "EXPENSE"
+              : transactionTypeId === "JOURNAL_ENTRY"
+                ? journalNumber
+                : transactionTypeId === "DEPOSIT" || transactionTypeId === "RECEIVE_PAYMENT" || transactionTypeId === "EXPENSE"
                 ? ""
                 : generateNextRefNumber(existingRefNumbers),
         payee: "",
@@ -241,7 +245,7 @@ export function useBankRegister() {
       setDraftErrors({});
       setError(null);
     },
-    [availableTransactionTypes, entries, existingRefNumbers, refreshRefNumbers, selectedAccountId]
+    [availableTransactionTypes, entries, existingRefNumbers, journalNumber, refreshRefNumbers, selectedAccountId]
   );
 
   const toggleSplitMode = useCallback(() => {
@@ -356,7 +360,7 @@ export function useBankRegister() {
     // These types stay blank when the field is empty rather than getting a TX- ref.
     const referenceNumber =
       draftTransaction.refNo.trim() ||
-      (["CHECK", "DEPOSIT", "SALES_RECEIPT", "RECEIVE_PAYMENT", "EXPENSE"].includes(draftTransaction.transactionTypeId) ? undefined : generateNextRefNumber(existingRefNumbers));
+      (["CHECK", "DEPOSIT", "SALES_RECEIPT", "RECEIVE_PAYMENT", "EXPENSE", "JOURNAL_ENTRY"].includes(draftTransaction.transactionTypeId) ? undefined : generateNextRefNumber(existingRefNumbers));
     const domainTransactionType = toDomainTransactionType(draftTransaction.transactionTypeId);
 
     const selectedCounterparty = accounts.find(
@@ -481,7 +485,11 @@ export function useBankRegister() {
           accountLabel,
           sourceAccountId: selectedAccountId,
           reconcileStatus: draftTransaction.reconcileStatus || undefined,
-          postings: [...offsetPostings, { accountId: selectedAccountId, type: selectedPostingType, amount }]
+          // A journal entry lists the register's own account first, as QBO does.
+          postings:
+            domainTransactionType === "JOURNAL_ENTRY"
+              ? [{ accountId: selectedAccountId, type: selectedPostingType, amount }, ...offsetPostings]
+              : [...offsetPostings, { accountId: selectedAccountId, type: selectedPostingType, amount }]
         });
         await services.transactionService.postTransaction(transaction.id);
       }

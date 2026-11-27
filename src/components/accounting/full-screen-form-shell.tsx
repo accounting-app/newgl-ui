@@ -23,13 +23,15 @@ type Props = {
   centerTools?: boolean;
   /** QBO's Receive Payment header has no pin or arrow. */
   hideTools?: boolean;
+  /** Journal Entry has its sort icon ahead of the pin and arrow. */
+  leadingTools?: React.ReactNode;
   children: React.ReactNode;
 };
 
 // The one look shared by QBO's full-screen forms opened by URL (/expense,
 // /salesreceipt, ...?rtAccountId=...&rt=close): title with the history icon,
 // RightTool's toolbar, a scrolling body, and a pinned footer bar.
-export function FullScreenFormShell({ title, onClose, toolbar, onSettings, settingsLabel = "Settings", footer, centerTools = false, hideSettings = false, toolbarFirst = false, hideTools = false, children }: Props) {
+export function FullScreenFormShell({ title, onClose, toolbar, onSettings, settingsLabel = "Settings", footer, centerTools = false, hideSettings = false, toolbarFirst = false, hideTools = false, leadingTools, children }: Props) {
   const { toast } = useToast();
   const bodyRef = useRef<HTMLDivElement>(null);
   const tools = (
@@ -47,6 +49,7 @@ export function FullScreenFormShell({ title, onClose, toolbar, onSettings, setti
         </h1>
         {centerTools ? <div className="absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center gap-4">{tools}</div> : null}
         <div className="flex items-center gap-1">
+          {leadingTools}
           {centerTools || toolbarFirst || hideTools ? null : tools}
           {toolbar}
           {toolbarFirst && !centerTools ? tools : null}

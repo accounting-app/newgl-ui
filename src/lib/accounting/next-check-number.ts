@@ -1,4 +1,4 @@
-import type { RegisterEntry } from "@/modules/accounting/domain/models";
+import type { RegisterEntry, Transaction } from "@/modules/accounting/domain/models";
 
 type NumberedEntry = Pick<RegisterEntry, "transactionType" | "refNumber" | "createdAt">;
 
@@ -21,3 +21,14 @@ export const nextCheckNumber = (entries: NumberedEntry[]) => nextDocumentNumber(
 
 /** QBO starts sales receipts at 1001. */
 export const nextSalesReceiptNumber = (entries: NumberedEntry[]) => nextDocumentNumber(entries, "SALES_RECEIPT", "1001");
+
+/**
+ * Journal numbers run across the whole company, not per account. Invoices are
+ * also posted as journal entries; they carry a due date, so they're left out.
+ */
+export function nextJournalNumber(transactions: Pick<Transaction, "type" | "referenceNumber" | "createdAt" | "dueDate">[]): string {
+  const journals = transactions
+    .filter((txn) => txn.type === "JOURNAL_ENTRY" && !txn.dueDate)
+    .map((txn) => ({ transactionType: "JOURNAL_ENTRY" as const, refNumber: txn.referenceNumber, createdAt: txn.createdAt ?? "" }));
+  return nextDocumentNumber(journals, "JOURNAL_ENTRY", "1");
+}

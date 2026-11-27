@@ -619,10 +619,7 @@ export function RegisterTable({
   // "Edit" opens the full form for the transaction's type, as in QBO.
   function openFullForm(entry: RegisterEntry) {
     const path = FULL_FORM_PATHS[entry.transactionType];
-    if (!path) {
-      toast({ variant: "info", title: `Editing a ${formatTransactionTypeLabel(entry.transactionType)} in its full form isn't available yet` });
-      return;
-    }
+    if (!path) return;
     router.push(`${path}?txnId=${encodeURIComponent(entry.transactionId)}`);
   }
 
@@ -1007,7 +1004,7 @@ export function RegisterTable({
                           onOpenPayeeModal={() => openPayeeModal("row")}
                           onOpenAccountModal={() => openAccountModal("row")}
                           onDelete={handleDeleteRow}
-                          onEdit={() => openFullForm(selectedEntry)}
+                          onEdit={FULL_FORM_PATHS[selectedEntry.transactionType] ? () => openFullForm(selectedEntry) : undefined}
                           onCancel={() => {
                             setSelectedEntryId(null);
                             setRowError(null);
