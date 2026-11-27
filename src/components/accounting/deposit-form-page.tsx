@@ -5,6 +5,7 @@ import { DateField } from "@/components/ui/date-field";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ChevronDown, ChevronUp, GripVertical, Trash2 } from "lucide-react";
+import { MoreMenu, useTransactionPrint } from "@/components/accounting/transaction-actions";
 import { FullScreenFormShell, RT_TOOLBAR_LINK, leaveFormPage } from "@/components/accounting/full-screen-form-shell";
 import { AddAccountModal } from "@/components/bank-register/add-account-modal";
 import { Button } from "@/components/ui/button";
@@ -168,6 +169,7 @@ export function DepositFormPage() {
 
   const updateLine = (id: string, patch: Partial<Line>) => setLines((current) => current.map((l) => (l.id === id ? { ...l, ...patch } : l)));
   const closePage = () => leaveFormPage(router);
+  const printSaved = useTransactionPrint();
   function resetForm() {
     setLines(startingLines());
     setMemo("");
@@ -354,9 +356,9 @@ export function DepositFormPage() {
     <div className="ml-auto flex flex-wrap items-center justify-end gap-6 text-base">
       <button type="button" onClick={closePage} className={`${OUTLINE_BUTTON} mr-8`}>Cancel</button>
       {txnId ? null : <button type="button" onClick={resetForm} className={FOOTER_LINK}>Clear</button>}
-      <button type="button" onClick={() => window.print()} className={FOOTER_LINK}>Print</button>
+      <button type="button" onClick={() => void printSaved(loaded)} className={FOOTER_LINK}>Print</button>
       <button type="button" onClick={() => tpl.start(date)} className={FOOTER_LINK}>Make recurring</button>
-      <button type="button" disabled title="More options aren't available yet" className={`${FOOTER_LINK} cursor-not-allowed opacity-60`}>More</button>
+      <MoreMenu transaction={loaded} onRemoved={closePage} className={FOOTER_LINK} />
       <div ref={menuRef} className="relative ml-6 inline-flex">
         <Button variant="primary" className="!rounded-l-md !rounded-r-none" disabled={saving || Boolean(txnId && !loaded)} onClick={() => void save(txnId ? "new" : "stay")}>{saving ? "Saving..." : "Save and new"}</Button>
         <Button variant="primary" className="!rounded-l-none !rounded-r-md border-l border-l-white/30 !min-w-0 px-2" aria-label="More save options" disabled={saving || Boolean(txnId && !loaded)} onClick={() => setMenuOpen((v) => !v)}>

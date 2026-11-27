@@ -6,6 +6,7 @@ import { nextSalesReceiptNumber } from "@/lib/accounting/next-check-number";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ChevronDown, CircleHelp, Copy, GripVertical, Lock, LockOpen, Plus, Trash2 } from "lucide-react";
+import { MoreMenu, useTransactionPrint } from "@/components/accounting/transaction-actions";
 import { FullScreenFormShell, RT_TOOLBAR_LINK, leaveFormPage } from "@/components/accounting/full-screen-form-shell";
 import { ProductServicePanel } from "@/components/accounting/product-service-panel";
 import { AddAccountModal } from "@/components/bank-register/add-account-modal";
@@ -181,6 +182,7 @@ export function SalesReceiptFormPage() {
   const totalCents = lines.reduce((sum, l) => sum + lineAmount(l), 0);
 
   const closePage = () => leaveFormPage(router);
+  const printSaved = useTransactionPrint();
   function resetForm(nextNumber?: string) {
     setCustomer("");
     setEmail("");
@@ -338,11 +340,11 @@ export function SalesReceiptFormPage() {
     <div className="ml-auto flex flex-wrap items-center justify-end gap-6 text-base">
       <button type="button" onClick={closePage} className={FOOTER_LINK}>Cancel</button>
       {txnId ? null : <button type="button" onClick={() => resetForm()} className={FOOTER_LINK}>Clear</button>}
-      <button type="button" onClick={() => window.print()} className={FOOTER_LINK}>Print or Preview</button>
+      <button type="button" onClick={() => void printSaved(loaded)} className={FOOTER_LINK}>Print or Preview</button>
       {divider}
       <button type="button" disabled title="Customizing the form isn't available yet" className={`${FOOTER_LINK} cursor-not-allowed opacity-60`}>Customize</button>
       {divider}
-      <button type="button" disabled title="More options aren't available yet" className={`${FOOTER_LINK} cursor-not-allowed opacity-60`}>More</button>
+      <MoreMenu transaction={loaded} onRemoved={closePage} className={FOOTER_LINK} />
       <button type="button" disabled={saving || Boolean(txnId && !loaded)} onClick={() => void save("stay")} className={`${OUTLINE_BUTTON} disabled:opacity-50`}>Record</button>
       <div ref={menuRef} className="relative inline-flex">
         <Button variant="primary" className="!rounded-l-md !rounded-r-none" disabled={saving || Boolean(txnId && !loaded)} onClick={() => void save("close")}>{saving ? "Recording..." : "Record and close"}</Button>

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { AttachmentsField } from "@/components/accounting/attachments-field";
+import { MoreMenu, useTransactionPrint } from "@/components/accounting/transaction-actions";
 import { FullScreenFormShell, leaveFormPage } from "@/components/accounting/full-screen-form-shell";
 import { CHECKBOX, ListCount, ListTools, PAYMENT_BOX, RT_BUTTON, SECTION_TITLE, TD, TH } from "@/components/accounting/payment-form-parts";
 import { AddAccountModal } from "@/components/bank-register/add-account-modal";
@@ -160,6 +161,7 @@ export function BillPaymentFormPage() {
   const allPicked = rows.length > 0 && rows.every((b) => (txnId ? paidByThis.includes(b) : picked.has(b.id)));
 
   const closePage = () => leaveFormPage(router);
+  const printSaved = useTransactionPrint();
   function choosePayee(name: string) {
     setPayee(name);
     setMailing(addressFor(name));
@@ -323,9 +325,9 @@ export function BillPaymentFormPage() {
       <button type="button" onClick={closePage} className={OUTLINE_BUTTON}>Cancel</button>
       <button type="button" disabled title="Copying this payment isn't available yet" className={FOOTER_RT}>RightTool Copy</button>
       <button type="button" disabled title="Remittance advice isn't available yet" className={FOOTER_RT}>Remittance</button>
-      <button type="button" onClick={() => window.print()} className={FOOTER_LINK}>Print check</button>
+      <button type="button" onClick={() => void printSaved(loaded, "check")} className={FOOTER_LINK}>Print check</button>
       <button type="button" disabled title="Ordering checks isn't available yet" className={FOOTER_LINK}>Order checks</button>
-      <button type="button" disabled title="More options aren't available yet" className={FOOTER_LINK}>More</button>
+      <MoreMenu transaction={loaded} onRemoved={closePage} className={FOOTER_LINK} />
       <div ref={menuRef} className="relative ml-6 inline-flex">
         <Button variant="primary" className="!rounded-l-md !rounded-r-none" disabled={busy} onClick={() => void save("close")}>{saving ? "Saving..." : "Save and close"}</Button>
         <Button variant="primary" className="!rounded-l-none !rounded-r-md border-l border-l-white/30 !min-w-0 px-2" aria-label="More save options" disabled={busy} onClick={() => setMenuOpen((v) => !v)}>

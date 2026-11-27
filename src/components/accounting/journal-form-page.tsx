@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ChevronDown, ClipboardPaste, Copy, GripVertical, SquareArrowOutUpRight, Trash2 } from "lucide-react";
 import { AttachmentsField } from "@/components/accounting/attachments-field";
+import { MoreMenu, useTransactionPrint } from "@/components/accounting/transaction-actions";
 import { FullScreenFormShell, RT_TOOLBAR_LINK, leaveFormPage } from "@/components/accounting/full-screen-form-shell";
 import { Button } from "@/components/ui/button";
 import { DateField } from "@/components/ui/date-field";
@@ -174,6 +175,7 @@ export function JournalFormPage() {
   const creditCents = lines.reduce((sum, l) => sum + cents(l.credit), 0);
 
   const closePage = () => leaveFormPage(router);
+  const printSaved = useTransactionPrint();
   const updateLine = (id: string, patch: Partial<Line>) => setLines((current) => current.map((l) => (l.id === id ? { ...l, ...patch } : l)));
   function resetForm(nextNumber?: string) {
     setLines(startingLines());
@@ -401,10 +403,10 @@ export function JournalFormPage() {
     <div className="ml-auto flex flex-wrap items-center justify-end gap-8">
       <Button variant="secondary" className="!rounded-md" onClick={closePage}>Cancel</Button>
       {txnId ? null : <button type="button" onClick={() => resetForm()} className={FOOTER_LINK}>Clear</button>}
-      <button type="button" onClick={() => window.print()} className={`${FOOTER_LINK} !text-[var(--color-negative)]`}>RightTool Print</button>
+      <button type="button" onClick={() => void printSaved(loaded)} className={`${FOOTER_LINK} !text-[var(--color-negative)]`}>RightTool Print</button>
       <button type="button" onClick={reverseEntry} className={FOOTER_LINK}>Reverse</button>
       <button type="button" onClick={() => tpl.start(date)} className={FOOTER_LINK}>Make recurring</button>
-      <button type="button" disabled title="More options aren't available yet" className={FOOTER_LINK}>More</button>
+      <MoreMenu transaction={loaded} onRemoved={closePage} className={FOOTER_LINK} />
       <div className="ml-6 flex items-center gap-3">
         <Button variant="secondary" className="!rounded-md" disabled={saving || Boolean(txnId && !loaded)} onClick={() => void save("stay")}>Save</Button>
         <div ref={menuRef} className="relative inline-flex">

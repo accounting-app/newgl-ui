@@ -6,6 +6,7 @@ import { DateField } from "@/components/ui/date-field";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ChevronDown, ChevronUp, ClipboardPaste, Copy, GripVertical, Plus, Settings, SquareArrowOutUpRight, Trash2, X } from "lucide-react";
+import { MoreMenu, useTransactionPrint } from "@/components/accounting/transaction-actions";
 import { FullScreenFormShell, leaveFormPage } from "@/components/accounting/full-screen-form-shell";
 import { ExpensePasteModal } from "@/components/accounting/expense-paste-modal";
 import type { PastedLine } from "@/components/accounting/expense-paste-modal";
@@ -245,6 +246,7 @@ export function ExpenseFormPage({ kind = "expense" }: { kind?: "expense" | "chec
   const categoryName = (id: string) => accounts.find((a) => a.id === id)?.name ?? "";
 
   const closePage = () => leaveFormPage(router);
+  const printSaved = useTransactionPrint();
 
   useEffect(() => {
     if (!txnId) return;
@@ -508,12 +510,12 @@ export function ExpenseFormPage({ kind = "expense" }: { kind?: "expense" | "chec
       {txnId ? null : <button type="button" onClick={resetForm} className={FOOTER_LINK}>Clear</button>}
       {isCheck ? (
         <>
-          <button type="button" onClick={() => window.print()} className={FOOTER_LINK}>Print check</button>
+          <button type="button" onClick={() => void printSaved(loaded, "check")} className={FOOTER_LINK}>Print check</button>
           <button type="button" disabled title="Ordering checks isn't available yet" className={`${FOOTER_LINK} cursor-not-allowed opacity-60`}>Order checks</button>
         </>
       ) : null}
       <button type="button" onClick={() => tpl.start(date)} className={FOOTER_LINK}>Make recurring</button>
-      <button type="button" disabled title="More options aren't available yet" className={`${FOOTER_LINK} cursor-not-allowed opacity-60`}>More</button>
+      <MoreMenu transaction={loaded} onRemoved={closePage} className={FOOTER_LINK} />
       <div className="ml-6 flex items-center gap-4">
         <button type="button" disabled={saving || Boolean(txnId && !loaded)} onClick={() => void save("stay")} className={`${OUTLINE_BUTTON} disabled:opacity-50`}>Save</button>
         <div ref={saveMenuRef} className="relative inline-flex">

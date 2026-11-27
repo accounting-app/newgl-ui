@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ChevronDown } from "lucide-react";
 import { AttachmentsField } from "@/components/accounting/attachments-field";
+import { MoreMenu, useTransactionPrint } from "@/components/accounting/transaction-actions";
 import { FullScreenFormShell, leaveFormPage } from "@/components/accounting/full-screen-form-shell";
 import { CHECKBOX, ListCount, ListTools, NO_APPLY, PAYMENT_BOX, RT_BUTTON, SECTION_TITLE, TD, TH } from "@/components/accounting/payment-form-parts";
 import { AddAccountModal } from "@/components/bank-register/add-account-modal";
@@ -143,6 +144,7 @@ export function ReceivePaymentFormPage() {
   const creditCents = Math.max(0, cents(amount) - appliedCents);
 
   const closePage = () => leaveFormPage(router);
+  const printSaved = useTransactionPrint();
   function chooseCustomer(name: string) {
     setCustomer(name);
     setPicked(new Set());
@@ -322,8 +324,8 @@ export function ReceivePaymentFormPage() {
   const footer = (
     <>
       <button type="button" onClick={closePage} className={`ml-auto ${footerLink}`}>Cancel</button>
-      <button type="button" onClick={() => window.print()} className={footerLink}>Print</button>
-      <button type="button" onClick={() => toast({ variant: "info", title: "More isn't available yet" })} className={`border-l border-[var(--color-divider-tertiary)] pl-4 ${footerLink}`}>More</button>
+      <button type="button" onClick={() => void printSaved(loaded)} className={footerLink}>Print</button>
+      <MoreMenu transaction={loaded} onRemoved={closePage} className={`border-l border-[var(--color-divider-tertiary)] pl-4 ${footerLink}`} />
       <div className="flex items-center gap-3">
         <Button variant="secondary" className="!rounded-md" disabled={saving || Boolean(txnId && !loaded)} onClick={() => void save("stay")}>Record</Button>
         <div ref={menuRef} className="relative inline-flex">
