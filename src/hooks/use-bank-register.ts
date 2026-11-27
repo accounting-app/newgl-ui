@@ -20,7 +20,9 @@ import {
   isRegisterAccountCategory,
   toDomainTransactionType
 } from "@/modules/accounting/presentation/transaction-type-policy";
+import { findPayableAccount, findReceivableAccount } from "@/lib/accounting/receivables";
 import { generateNextRefNumber } from "@/modules/accounting/domain/accounting-reports";
+import { nextCheckNumber, nextJournalNumber, nextSalesReceiptNumber } from "@/lib/accounting/next-check-number";
 import type { BatchRegisterEntryUpdate } from "@/modules/accounting/application/contracts";
 import { nextAccountCode } from "@/lib/accounting/next-account-code";
 import type {
@@ -66,6 +68,12 @@ export type InlineEntryEditorInput = {
   reconcileStatus: ReconcileStatus;
 };
 
+/** The edit row's ✓ cell cycles all three, as in QBO: blank -> C -> R -> blank. */
+export function nextEditorReconcileStatus(current: ReconcileStatus): ReconcileStatus {
+  if (current === "") return "C";
+  return current === "C" ? "R" : "";
+}
+
 export function nextReconcileStatus(current: ReconcileStatus): ReconcileStatus {
   if (current === "") return "C";
   // "R" is only ever set by finishing a reconciliation, never by hand.
@@ -104,6 +112,7 @@ export function useBankRegister() {
   const [isSavingDraft, setIsSavingDraft] = useState(false);
   const [entries, setEntries] = useState<RegisterEntry[]>([]);
   const [existingRefNumbers, setExistingRefNumbers] = useState<string[]>([]);
+  const [journalNumber, setJournalNumber] = useState("1");
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
   const [selectedPostings, setSelectedPostings] = useState<LedgerPosting[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -151,6 +160,7 @@ export function useBankRegister() {
 
   const refreshRefNumbers = useCallback(async () => {
     const transactions = await services.transactionService.listTransactions();
+    setJournalNumber(nextJournalNumber(transactions));
     setExistingRefNumbers(
       transactions
         .map((transaction) => transaction.referenceNumber)
@@ -212,7 +222,17 @@ export function useBankRegister() {
         transactionTypeId,
         transactionTypeLabel: selectedTypeLabel,
         date: new Date().toISOString().slice(0, 10),
-        refNo: generateNextRefNumber(existingRefNumbers),
+        // A check gets the account's next check number; either way the field stays editable.
+        refNo:
+          transactionTypeId === "CHECK" || transactionTypeId === "BILL_PAYMENT"
+            ? nextCheckNumber(entries)
+            : transactionTypeId === "SALES_RECEIPT"
+              ? nextSalesReceiptNumber(entries)
+              : transactionTypeId === "JOURNAL_ENTRY"
+                ? journalNumber
+                : transactionTypeId === "DEPOSIT" || transactionTypeId === "RECEIVE_PAYMENT" || transactionTypeId === "EXPENSE"
+                ? ""
+                : generateNextRefNumber(existingRefNumbers),
         payee: "",
         accountTypeId: "",
         memo: "",
@@ -225,7 +245,7 @@ export function useBankRegister() {
       setDraftErrors({});
       setError(null);
     },
-    [availableTransactionTypes, existingRefNumbers, refreshRefNumbers, selectedAccountId]
+    [availableTransactionTypes, entries, existingRefNumbers, journalNumber, refreshRefNumbers, selectedAccountId]
   );
 
   const toggleSplitMode = useCallback(() => {
@@ -337,8 +357,10 @@ export function useBankRegister() {
       return;
     }
 
+    // These types stay blank when the field is empty rather than getting a TX- ref.
     const referenceNumber =
-      draftTransaction.refNo.trim() || generateNextRefNumber(existingRefNumbers);
+      draftTransaction.refNo.trim() ||
+      (["CHECK", "DEPOSIT", "SALES_RECEIPT", "RECEIVE_PAYMENT", "EXPENSE", "JOURNAL_ENTRY", "BILL_PAYMENT"].includes(draftTransaction.transactionTypeId) ? undefined : generateNextRefNumber(existingRefNumbers));
     const domainTransactionType = toDomainTransactionType(draftTransaction.transactionTypeId);
 
     const selectedCounterparty = accounts.find(
@@ -375,9 +397,19 @@ export function useBankRegister() {
               ]
         });
       } else if (isInflowTransactionType(draftTransaction.transactionTypeId)) {
+        // A received payment always comes out of Accounts Receivable (the row's Account is locked).
+        let receivable = !useSplits && domainTransactionType === "RECEIVE_PAYMENT" ? findReceivableAccount(accounts) : undefined;
+        if (!useSplits && domainTransactionType === "RECEIVE_PAYMENT" && !receivable) {
+          receivable = await services.accountService.createAccount({ code: nextAccountCode(accounts), name: "Accounts Receivable", category: "ACCOUNTS_RECEIVABLE", currency: "USD" });
+        }
         const incomeAccount = useSplits
           ? undefined
-          : selectedCounterparty ??
+          : receivable ??
+            selectedCounterparty ??
+            (domainTransactionType === "SALES_RECEIPT"
+              ? accounts.find((account) => account.category === "INCOME" && ["Services", "Sales"].includes(account.name)) ??
+                accounts.find((account) => account.category === "INCOME")
+              : undefined) ??
             findCounterpartyAccount(accounts, selectedAccountId, [
               "Personal income",
               "Owners investment",
@@ -422,9 +454,17 @@ export function useBankRegister() {
           await services.transactionService.postTransaction(transaction.id);
         }
       } else {
+        // A bill payment always goes into Accounts Payable (the row's Account is locked).
+        // Not CC_BILL_PAYMENT, which pays a card rather than a vendor's bills.
+        const paysBills = !useSplits && draftTransaction.transactionTypeId === "BILL_PAYMENT";
+        let payable = paysBills ? findPayableAccount(accounts) : undefined;
+        if (paysBills && !payable) {
+          payable = await services.accountService.createAccount({ code: nextAccountCode(accounts), name: "Accounts Payable", category: "ACCOUNTS_PAYABLE", currency: "USD" });
+        }
         const expenseOrOffset = useSplits
           ? undefined
-          : selectedCounterparty ??
+          : payable ??
+            selectedCounterparty ??
             findCounterpartyAccount(accounts, selectedAccountId, [
               "Personal expense",
               "Charitable donations",
@@ -453,7 +493,11 @@ export function useBankRegister() {
           accountLabel,
           sourceAccountId: selectedAccountId,
           reconcileStatus: draftTransaction.reconcileStatus || undefined,
-          postings: [...offsetPostings, { accountId: selectedAccountId, type: selectedPostingType, amount }]
+          // A journal entry lists the register's own account first, as QBO does.
+          postings:
+            domainTransactionType === "JOURNAL_ENTRY"
+              ? [{ accountId: selectedAccountId, type: selectedPostingType, amount }, ...offsetPostings]
+              : [...offsetPostings, { accountId: selectedAccountId, type: selectedPostingType, amount }]
         });
         await services.transactionService.postTransaction(transaction.id);
       }
@@ -482,6 +526,7 @@ export function useBankRegister() {
     refreshEntries,
     refreshRefNumbers,
     selectedAccountId,
+    services.accountService,
     services.transactionService
   ]);
 
@@ -602,6 +647,14 @@ export function useBankRegister() {
     [refreshAccounts, refreshEntries, services.registerService]
   );
 
+  const setEntryReconcileStatus = useCallback(
+    async (entryId: string, status: ReconcileStatus) => {
+      await services.registerService.setReconcileStatus(entryId, status);
+      await refreshEntries();
+    },
+    [refreshEntries, services.registerService]
+  );
+
   const cycleDraftReconcileStatus = useCallback(() => {
     setDraftTransaction((current) =>
       current ? { ...current, reconcileStatus: nextReconcileStatus(current.reconcileStatus) } : current
@@ -671,6 +724,7 @@ export function useBankRegister() {
     cancelDraftTransaction,
     cycleDraftReconcileStatus,
     cycleReconcileStatus,
+    setEntryReconcileStatus,
     deleteRegisterEntryInline,
     updateRegisterEntryInline,
     batchUpdateRegisterEntries,

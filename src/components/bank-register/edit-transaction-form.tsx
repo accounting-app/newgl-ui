@@ -1,3 +1,4 @@
+import { DateField } from "@/components/ui/date-field";
 import { ReconcileStatusCell } from "@/components/bank-register/reconcile-status";
 import { RegisterTableColumnGroup } from "@/components/bank-register/register-table-column-group";
 import { SelectField } from "@/components/bank-register/select-field";
@@ -23,6 +24,8 @@ type EditTransactionFormProps = {
   onOpenPayeeModal: () => void;
   onOpenAccountModal: () => void;
   onDelete: () => void;
+  /** Opens the transaction in its full form; left out for types that have none, which disables Edit. */
+  onEdit?: () => void;
   onCancel: () => void;
   onSave: () => void;
 };
@@ -42,11 +45,15 @@ export function EditTransactionForm({
   onOpenPayeeModal,
   onOpenAccountModal,
   onDelete,
+  onEdit,
   onCancel,
   onSave
 }: EditTransactionFormProps) {
   const locked = isEntryLocked(entry.reconcileStatus ?? "");
   const lockedLabel = entry.reconcileStatus === "R" ? "reconciled" : "cleared";
+  // A sales receipt's account comes from its products and a received payment's is
+  // always Accounts Receivable, so neither can be changed from the row.
+  const accountLocked = locked || ["SALES_RECEIPT", "RECEIVE_PAYMENT", "BILL_PAYMENT"].includes(entry.transactionType);
   return (
     <div className="form-transaction-row">
       <div className="form-transaction-row-top">
@@ -55,21 +62,18 @@ export function EditTransactionForm({
           <tbody>
             <tr className="align-top">
               <td className="form-control">
-                <InputField
-                  type="date"
-                  value={editor.date}
-                  onChange={(event) => onEditorChange("date", event.target.value)}
-                  className="w-full placeholder:text-[var(--color-text-disabled)]"
-                />
+                <DateField value={editor.date} onChange={(date) => onEditorChange("date", date)} />
               </td>
               <td className="form-control">
                 <InputField
                   type="text"
                   value={editor.refNo}
+                  disabled={entry.transactionType === "DEPOSIT"}
+                  placeholder="Ref No."
                   onChange={(event) => onEditorChange("refNo", event.target.value)}
                   className="w-full placeholder:text-[var(--color-text-disabled)]"
                 />
-                <InputField type="text" value={entry.transactionType} disabled className="mt-1 w-full" />
+                <InputField type="text" value={entry.transactionType.toLowerCase().split("_").map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(" ")} disabled className="mt-1 w-full" />
               </td>
               <td className="form-control">
                 <SelectField
@@ -85,8 +89,8 @@ export function EditTransactionForm({
                   placeholder="Account"
                   onChange={(value) => onEditorChange("accountTypeId", value)}
                   allowCustomValue={false}
-                  disabled={locked}
-                  onAddNew={locked ? undefined : onOpenAccountModal}
+                  disabled={accountLocked}
+                  onAddNew={accountLocked ? undefined : onOpenAccountModal}
                 />
               </td>
               <td className="form-control">
@@ -106,7 +110,7 @@ export function EditTransactionForm({
                   value={editor.payment}
                   disabled={isPaymentDisabled}
                   onChange={(event) => onEditorChange("payment", event.target.value)}
-                  placeholder="0.00"
+                  placeholder="Payment"
                   className="w-full text-right placeholder:text-[var(--color-text-disabled)]"
                 />
               </td>
@@ -118,14 +122,12 @@ export function EditTransactionForm({
                   value={editor.deposit}
                   disabled={isDepositDisabled}
                   onChange={(event) => onEditorChange("deposit", event.target.value)}
-                  placeholder="0.00"
+                  placeholder="Deposit"
                   className="w-full text-right placeholder:text-[var(--color-text-disabled)]"
                 />
               </td>
               <ReconcileStatusCell status={editor.reconcileStatus} onCycle={onReconcileCycle} />
-              <td className="form-control">
-                <div className="rounded border border-[var(--color-divider-tertiary)] bg-[var(--color-container-background-secondary)] px-2 py-1 text-right text-xs text-[var(--color-icon-secondary)]">-</div>
-              </td>
+              <td className="form-control">&nbsp;</td>
             </tr>
           </tbody>
         </table>
@@ -134,8 +136,8 @@ export function EditTransactionForm({
       <div className="form-transaction-row-bottom flex items-center justify-end gap-2">
         {locked ? (
           <p className="mb-1 mr-auto text-xs text-amber-600">
-            This transaction is {lockedLabel} and is locked. Clear the reconcile mark on the row to
-            edit it, or create a reversal.
+            This transaction is {lockedLabel} and is locked: only the ✓ mark can be changed here. Set it to
+            blank and save to edit the rest, or create a reversal.
           </p>
         ) : null}
         {rowError ? <p className="mb-1 text-xs text-[var(--color-negative)]">{rowError}</p> : null}
@@ -146,7 +148,7 @@ export function EditTransactionForm({
         >
           Delete
         </Button>
-        <Button variant="secondary" disabled={isDeletingRow || isSavingRow} onClick={() => undefined}>
+        <Button variant="secondary" disabled={!onEdit || isDeletingRow || isSavingRow} title={onEdit ? undefined : "There is no full form for this type yet"} onClick={onEdit}>
           Edit
         </Button>
         <Button variant="secondary" disabled={isDeletingRow || isSavingRow} onClick={onCancel}>
@@ -154,7 +156,7 @@ export function EditTransactionForm({
         </Button>
         <Button
           variant="primary"
-          disabled={isDeletingRow || isSavingRow || locked}
+          disabled={isDeletingRow || isSavingRow || (locked && editor.reconcileStatus === (entry.reconcileStatus ?? ""))}
           onClick={onSave}
         >
           {isSavingRow ? "Saving..." : "Save"}

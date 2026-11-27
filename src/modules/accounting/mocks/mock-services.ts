@@ -622,6 +622,13 @@ export class MockTransactionService implements TransactionService {
     return transaction;
   }
 
+  async updateTransaction(id: string, input: Omit<CreateTransactionInput, "type" | "reconcileStatus">): Promise<Transaction> {
+    validateDoubleEntry(input.postings);
+    const transaction = await this.getTransactionById(id);
+    Object.assign(transaction, input, { updatedAt: nowIso() });
+    return transaction;
+  }
+
   async getTransactionById(id: string): Promise<Transaction> {
     const transaction = this.store.transactions.find((item) => item.id === id);
     if (!transaction) {

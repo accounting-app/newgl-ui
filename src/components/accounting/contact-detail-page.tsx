@@ -112,8 +112,8 @@ export function ContactDetailPage({ kind }: { kind: Kind }) {
 
   const today = new Date().toISOString().slice(0, 10);
   const openInvoices = invoices.filter((i) => i.customerId === nameId && i.status === "OPEN");
-  const openBalance = openInvoices.reduce((sum, i) => sum + i.amount, 0);
-  const overdue = openInvoices.filter((i) => i.dueDate < today).reduce((sum, i) => sum + i.amount, 0);
+  const openBalance = openInvoices.reduce((sum, i) => sum + i.openBalance, 0);
+  const overdue = openInvoices.filter((i) => i.dueDate < today).reduce((sum, i) => sum + i.openBalance, 0);
 
   function startEdit() {
     if (!contact) return;

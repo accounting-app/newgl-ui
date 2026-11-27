@@ -31,7 +31,7 @@ export function InvoiceFormDrawer({
   /** Pre-selects a customer -- e.g. opening this from that customer's own "Create invoice" row action. */
   initialCustomerId?: string;
   onAddCustomer: (name: string) => Promise<string>;
-  onSave: (input: Omit<Invoice, "id" | "createdAt" | "status">) => void;
+  onSave: (input: Omit<Invoice, "id" | "createdAt" | "status" | "openBalance" | "paidAmount" | "payments">) => void;
   onClose: () => void;
 }) {
   // Doubles as both a selected customer id and (while allowCustomValue is

@@ -15,6 +15,7 @@ import { SelectField } from "@/components/bank-register/select-field";
 import type { SelectFieldOption } from "@/components/bank-register/select-field";
 import { TablePagination } from "@/components/bank-register/table-pagination";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { BookOpenText, Database, Download, FileUp, Funnel, Printer, Settings } from "lucide-react";
 import { IconButton } from "@/components/ui/icon-button";
 import { Tooltip } from "@/components/ui/tooltip";
@@ -25,7 +26,7 @@ import {
 } from "@/constants/ui";
 import type { Account, RegisterEntry } from "@/modules/accounting/domain/models";
 import {
-  nextReconcileStatus
+  nextEditorReconcileStatus
 } from "@hooks/use-bank-register";
 import type {
   DraftSplitLine,
@@ -47,6 +48,10 @@ import { BatchEditRow } from "@/components/bank-register/batch-edit-row";
 import { BatchFieldsModal } from "@/components/bank-register/batch-fields-modal";
 import { requestConfirmation } from "@/components/ui/confirm-dialog";
 import { useToast } from "@/components/ui/toast/toast-context";
+import { useCustomers } from "@/lib/hooks/use-customers";
+import { useVendors } from "@/lib/hooks/use-vendors";
+import { listBills } from "@/lib/services/bills-service";
+import { listInvoices } from "@/lib/services/invoices-service";
 import type { BatchRegisterEntryUpdate } from "@/modules/accounting/application/contracts";
 import {
   EMPTY_BATCH_FIELDS,
@@ -54,13 +59,19 @@ import {
   batchLockedReason,
   buildBatchUpdates,
   isBatchSelectable,
+  isBatchTickable,
+  skippedMessage,
   summarizeBatchSelection,
   validateBatchEdit
 } from "@/lib/accounting/register-batch";
 import type { BatchEditFields, BatchEditValues } from "@/lib/accounting/register-batch";
 
 type RegisterTableProps = {
+  /** Changes only the reconcile mark -- the one thing allowed on a C or R entry. */
+  onSetReconcileStatus: (entryId: string, status: RegisterEntry["reconcileStatus"]) => Promise<void>;
   entries: RegisterEntry[];
+  /** Shown on the left of the top pagination row ("Reconciled through ..."). */
+  topLeft?: React.ReactNode;
   /** Deep-link from another screen (e.g. a duplicate-transaction warning during CSV import): opens this entry's inline editor and jumps to its page once entries have loaded. */
   deepLinkTransactionId?: string | null;
   draftTransaction: DraftTransactionForm | null;
@@ -104,6 +115,22 @@ type RegisterTableProps = {
 
 const batchSelectedRowClass = "bg-[color-mix(in_srgb,var(--color-negative)_10%,transparent)]";
 
+const MONEY = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
+const money = (value: number) => MONEY.format(value);
+// The register shows dates as MM/DD/YYYY, like QBO (entries carry ISO dates).
+const displayDate = (iso: string) => (/^\d{4}-\d{2}-\d{2}/.test(iso) ? `${iso.slice(5, 7)}/${iso.slice(8, 10)}/${iso.slice(0, 4)}` : iso);
+
+/** Transaction types whose full form can load and re-save an existing one. */
+const FULL_FORM_PATHS: Partial<Record<RegisterEntry["transactionType"], string>> = {
+  EXPENSE: "/expense",
+  CHECK: "/check",
+  DEPOSIT: "/deposit",
+  SALES_RECEIPT: "/salesreceipt",
+  RECEIVE_PAYMENT: "/recvpayment",
+  BILL_PAYMENT: "/billpayment",
+  JOURNAL_ENTRY: "/journal"
+};
+
 function rowStyle(status: RegisterEntry["status"]): string {
   if (status === "VOIDED" || status === "DELETED") {
     return "line-through text-[var(--color-text-disabled)]";
@@ -123,7 +150,9 @@ function formatTransactionTypeLabel(transactionType: RegisterEntry["transactionT
 }
 
 export function RegisterTable({
+  onSetReconcileStatus,
   entries,
+  topLeft,
   deepLinkTransactionId,
   draftTransaction,
   draftErrors,
@@ -182,6 +211,7 @@ export function RegisterTable({
   const [currentPage, setCurrentPage] = useState<number>(1);
   const appliedDeepLinkRef = useRef(false);
   const { toast } = useToast();
+  const router = useRouter();
   const topRef = useRef<HTMLDivElement>(null);
 
   // Batch mode: BATCH -> tick rows -> EDIT (pick fields, fill the pink row,
@@ -202,15 +232,34 @@ export function RegisterTable({
   const [lastTouchedEntryId, setLastTouchedEntryId] = useState<string | null>(null);
   const [jumpTargetId, setJumpTargetId] = useState<string | null>(null);
 
-  const payeeOptions = useMemo(
-    () =>
-      payees.map((payee) => ({
-        value: payee.name,
-        label: payee.name,
-        rightLabel: payee.kind.toLowerCase()
-      })),
-    [payees]
-  );
+  const { items: customers, add: addCustomer } = useCustomers();
+  const { items: vendors, add: addVendor } = useVendors();
+  // The company's customers and vendors, then any other name already used in this register.
+  const payeeOptions = useMemo(() => {
+    const options = new Map<string, { value: string; label: string; rightLabel: string }>();
+    const include = (name: string, kind: string) => {
+      if (!options.has(name.toLowerCase())) options.set(name.toLowerCase(), { value: name, label: name, rightLabel: kind });
+    };
+    customers.filter((c) => c.status !== "ARCHIVED").forEach((c) => include(c.name, "customer"));
+    vendors.filter((v) => v.status !== "ARCHIVED").forEach((v) => include(v.name, "vendor"));
+    // Names read off the entries carry no real kind, so only an employee added here is labelled.
+    payees.forEach((payee) => include(payee.name, payee.kind === "EMPLOYEE" ? "employee" : ""));
+    return [...options.values()].sort((a, b) => a.label.localeCompare(b.label));
+  }, [customers, vendors, payees]);
+
+  // Payments that paid an invoice or bill keep their amount (the API refuses a change too).
+  const [linkedPaymentIds, setLinkedPaymentIds] = useState<ReadonlySet<string>>(new Set());
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([listInvoices(), listBills()])
+      .then(([invoices, bills]) => {
+        if (!cancelled) setLinkedPaymentIds(new Set([...invoices, ...bills].flatMap((item) => item.payments.map((payment) => payment.transactionId))));
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [entries]);
   const {
     filterPopoverRef,
     filterButtonRef,
@@ -322,11 +371,14 @@ export function RegisterTable({
     });
   }, [entries]);
 
-  const selectableEntries = useMemo(() => filteredEntries.filter(isBatchSelectable), [filteredEntries]);
-  const selectedBatchEntries = useMemo(
-    () => entries.filter((entry) => batchSelectedIds.has(entry.id) && isBatchSelectable(entry)),
+  const selectableEntries = useMemo(() => filteredEntries.filter(isBatchTickable), [filteredEntries]);
+  const tickedEntries = useMemo(
+    () => entries.filter((entry) => batchSelectedIds.has(entry.id) && isBatchTickable(entry)),
     [batchSelectedIds, entries]
   );
+  // What Edit/Delete actually change: Cleared and Reconciled rows are skipped.
+  const selectedBatchEntries = useMemo(() => tickedEntries.filter(isBatchSelectable), [tickedEntries]);
+  const skippedCount = tickedEntries.length - selectedBatchEntries.length;
 
   // Scroll to and flash the Jump To Last target once its page is showing.
   useEffect(() => {
@@ -417,7 +469,7 @@ export function RegisterTable({
   }
 
   function toggleBatchEntry(entry: RegisterEntry) {
-    if (!isBatchSelectable(entry)) return;
+    if (!isBatchTickable(entry)) return;
     setLastTouchedEntryId(entry.id);
     setBatchSelectedIds((current) => {
       const next = new Set(current);
@@ -444,6 +496,10 @@ export function RegisterTable({
   }
 
   async function confirmBatchEdit() {
+    if (selectedBatchEntries.length === 0) {
+      setBatchError(skippedCount > 0 ? "Reconciled and Cleared transactions can't be changed." : "Tick at least one transaction to edit.");
+      return;
+    }
     const problem = validateBatchEdit(batchFields, batchValues, registerAccountId);
     if (problem) {
       setBatchError(problem);
@@ -454,6 +510,7 @@ export function RegisterTable({
       title: `Apply batch edit to ${count} transaction${count === 1 ? "" : "s"}?`,
       message:
         `Payments ${paymentTotal.toFixed(2)}, deposits ${depositTotal.toFixed(2)} are affected. ` +
+        (skippedCount > 0 ? `${skippedMessage(skippedCount)} ` : "") +
         "All changes are applied together or not at all, and the batch is one entry in Settings > Ledger > Version history if you need to undo it.",
       confirmLabel: "Confirm Batch"
     });
@@ -470,17 +527,21 @@ export function RegisterTable({
     }
   }
 
+  // Like RightTool, DELETE always asks -- even with nothing ticked, where OK
+  // simply does nothing.
   async function deleteBatch() {
     const { count, paymentTotal, depositTotal } = summarizeBatchSelection(selectedBatchEntries);
-    if (count === 0) return;
     const confirmed = await requestConfirmation({
-      title: `Delete ${count} transaction${count === 1 ? "" : "s"}?`,
+      title: "Delete transactions",
       message:
-        `Payments ${paymentTotal.toFixed(2)}, deposits ${depositTotal.toFixed(2)} will be removed from the ledger. ` +
-        "All are deleted together or none are, and the batch is one entry in Settings > Ledger > Version history.",
-      confirmLabel: "Delete"
+        `You are about to Delete ${count} transaction${count === 1 ? "" : "s"} totaling ${(paymentTotal + depositTotal).toFixed(2)}\n\n` +
+        (skippedCount > 0 ? `${skippedMessage(skippedCount)}\n\n` : "") +
+        "Keep in mind that Reconciled and Cleared transactions will NOT delete. " +
+        "The rest are deleted together or none are, and you can undo it from Settings > Ledger > Version history.\n\n" +
+        "Are you sure?",
+      confirmLabel: "OK"
     });
-    if (!confirmed) return;
+    if (!confirmed || count === 0) return;
     try {
       await onBatchDelete(selectedBatchEntries.map((entry) => entry.id));
       toast({ variant: "success", title: `Deleted ${count} transaction${count === 1 ? "" : "s"}` });
@@ -512,7 +573,7 @@ export function RegisterTable({
   }
 
   function cycleEditorReconcileStatus() {
-    setEditor((current) => ({ ...current, reconcileStatus: nextReconcileStatus(current.reconcileStatus) }));
+    setEditor((current) => ({ ...current, reconcileStatus: nextEditorReconcileStatus(current.reconcileStatus) }));
   }
 
   function openPayeeModal(target: "draft" | "row") {
@@ -525,8 +586,37 @@ export function RegisterTable({
     setIsAccountModalOpen(true);
   }
 
+  // Marking R by hand has no statement behind it, so ask first.
+  function confirmHandReconcile() {
+    return requestConfirmation({
+      title: "Mark as reconciled?",
+      message:
+        "This transaction will be marked R without a bank statement. It will count toward the account's reconciled balance, " +
+        "and it will be locked until you change the mark back.\n\nAre you sure?",
+      confirmLabel: "OK"
+    });
+  }
+
   async function handleSaveRow() {
     if (!selectedEntryId) return;
+    const current = entries.find((item) => item.id === selectedEntryId)?.reconcileStatus ?? "";
+    const becomesReconciled = editor.reconcileStatus === "R" && current !== "R";
+    // A Cleared or Reconciled entry is locked: only its mark can be saved.
+    if (current !== "") {
+      if (editor.reconcileStatus === current) return;
+      if (becomesReconciled && !(await confirmHandReconcile())) return;
+      try {
+        setIsSavingRow(true);
+        setRowError(null);
+        await onSetReconcileStatus(selectedEntryId, editor.reconcileStatus);
+        setSelectedEntryId(null);
+      } catch (error) {
+        setRowError(error instanceof Error ? error.message : "Failed to save changes.");
+      } finally {
+        setIsSavingRow(false);
+      }
+      return;
+    }
     const payment = Number(editor.payment || 0);
     const deposit = Number(editor.deposit || 0);
     if (!editor.date) {
@@ -537,6 +627,7 @@ export function RegisterTable({
       setRowError("Use only payment or deposit and provide one amount.");
       return;
     }
+    if (becomesReconciled && !(await confirmHandReconcile())) return;
     try {
       setIsSavingRow(true);
       setRowError(null);
@@ -549,8 +640,21 @@ export function RegisterTable({
     }
   }
 
+  // "Edit" opens the full form for the transaction's type, as in QBO.
+  function openFullForm(entry: RegisterEntry) {
+    const path = FULL_FORM_PATHS[entry.transactionType];
+    if (!path) return;
+    router.push(`${path}?txnId=${encodeURIComponent(entry.transactionId)}`);
+  }
+
   async function handleDeleteRow() {
     if (!selectedEntryId) return;
+    const confirmed = await requestConfirmation({
+      title: "Delete transaction",
+      message: "Are you sure you want to delete this transaction?",
+      warning: true
+    });
+    if (!confirmed) return;
     try {
       setIsDeletingRow(true);
       setRowError(null);
@@ -579,29 +683,29 @@ export function RegisterTable({
             role="button"
             tabIndex={0}
           >
-            <td className="p-2 text-[13px] align-top text-[var(--color-text-primary)]">
-              {entry.date}
+            <td className="px-2 py-[7px] text-[15px] align-top text-[var(--color-text-primary)]">
+              {displayDate(entry.date)}
             </td>
-            <td className="border-l border-l-dotted border-l-[var(--color-divider-tertiary)] p-2 text-[13px] align-top">
+            <td className="border-l border-l-dotted border-l-[var(--color-divider-tertiary)] px-2 py-[7px] text-[15px] align-top">
               {entry.refNumber ?? ""}
             </td>
-            <td className="border-l border-l-dotted border-l-[var(--color-divider-tertiary)] p-2 text-[13px] align-top">
+            <td className="border-l border-l-dotted border-l-[var(--color-divider-tertiary)] px-2 py-[7px] text-[15px] align-top">
               {entry.payee ?? ""}
             </td>
-            <td className="border-l border-l-dotted border-l-[var(--color-divider-tertiary)] p-2 text-[13px] align-top text-[var(--color-text-primary)]">
+            <td className="border-l border-l-dotted border-l-[var(--color-divider-tertiary)] px-2 py-[7px] text-[15px] align-top text-[var(--color-text-primary)]">
               {entry.memo ?? ""}
             </td>
-            <td className="border-l border-l-dotted border-l-[var(--color-divider-tertiary)] p-2 text-[13px] text-right align-top text-[var(--color-text-primary)]">
-              {entry.payment ? entry.payment.toFixed(2) : ""}
+            <td className="border-l border-l-dotted border-l-[var(--color-divider-tertiary)] px-2 py-[7px] text-[15px] text-right align-top text-[var(--color-text-primary)]">
+              {entry.payment ? money(entry.payment) : ""}
             </td>
-            <td className="border-l border-l-dotted border-l-[var(--color-divider-tertiary)] p-2 text-[13px] text-right align-top text-[var(--color-text-primary)]">
-              {entry.deposit ? entry.deposit.toFixed(2) : ""}
+            <td className="border-l border-l-dotted border-l-[var(--color-divider-tertiary)] px-2 py-[7px] text-[15px] text-right align-top text-[var(--color-text-primary)]">
+              {entry.deposit ? money(entry.deposit) : ""}
             </td>
-            <td className="border-l text-center border-l-dotted border-l-[var(--color-divider-tertiary)] p-2 text-[13px] align-top text-[var(--color-text-primary)]">
+            <td className="border-l text-center border-l-dotted border-l-[var(--color-divider-tertiary)] px-2 py-[7px] text-[15px] align-top text-[var(--color-text-primary)]">
               {entry.reconcileStatus}
             </td>
-            <td className="p-2 border-l border-l-dotted border-l-[var(--color-divider-tertiary)] text-[13px] text-right align-top font-medium text-[var(--color-text-global)]">
-              {entry.runningBalance.toFixed(2)}
+            <td className="px-2 py-[7px] border-l border-l-dotted border-l-[var(--color-divider-tertiary)] text-[15px] text-right align-top text-[var(--color-text-global)]">
+              {money(entry.runningBalance)}
             </td>
           </tr>
           <tr
@@ -615,12 +719,13 @@ export function RegisterTable({
             role="button"
             tabIndex={0}
           >
-            <td className="p-2 text-[13px] align-top text-[var(--color-icon-secondary)]">
+            <td className="px-2 py-[7px] text-[15px] align-top text-[var(--color-icon-secondary)]">
               {isBatchMode ? (
                 <input
                   type="checkbox"
+                  className="qbo-checkbox align-middle disabled:cursor-not-allowed disabled:opacity-40"
                   checked={batchSelectedIds.has(entry.id)}
-                  disabled={!isBatchSelectable(entry)}
+                  disabled={!isBatchTickable(entry)}
                   title={batchLockedReason(entry) ?? undefined}
                   aria-label={`Select transaction ${entry.refNumber || entry.date}`}
                   onClick={(event) => event.stopPropagation()}
@@ -630,25 +735,25 @@ export function RegisterTable({
                 <>&nbsp;</>
               )}
             </td>
-            <td className="border-l border-l-dotted border-l-[var(--color-divider-tertiary)] p-2 text-[13px] align-top text-[var(--color-icon-secondary)]">
+            <td className="border-l border-l-dotted border-l-[var(--color-divider-tertiary)] px-2 py-[7px] text-[15px] align-top text-[var(--color-icon-secondary)]">
               {formatTransactionTypeLabel(entry.transactionType)}
             </td>
-            <td className="border-l border-l-dotted border-l-[var(--color-divider-tertiary)] p-2 text-[13px] align-top text-[var(--color-icon-secondary)]">
+            <td className="border-l border-l-dotted border-l-[var(--color-divider-tertiary)] px-2 py-[7px] text-[15px] align-top text-[var(--color-icon-secondary)]">
               {entry.accountLabel ?? ""}
             </td>
-            <td className="border-l border-l-dotted border-l-[var(--color-divider-tertiary)] p-2 text-[13px] align-top text-[var(--color-icon-secondary)]">
+            <td className="border-l border-l-dotted border-l-[var(--color-divider-tertiary)] px-2 py-[7px] text-[15px] align-top text-[var(--color-icon-secondary)]">
               &nbsp;
             </td>
-            <td className="border-l border-l-dotted border-l-[var(--color-divider-tertiary)] p-2 text-[13px] text-right align-top text-[var(--color-icon-secondary)]">
+            <td className="border-l border-l-dotted border-l-[var(--color-divider-tertiary)] px-2 py-[7px] text-[15px] text-right align-top text-[var(--color-icon-secondary)]">
               &nbsp;
             </td>
-            <td className="border-l border-l-dotted border-l-[var(--color-divider-tertiary)] p-2 text-[13px] text-right align-top text-[var(--color-icon-secondary)]">
+            <td className="border-l border-l-dotted border-l-[var(--color-divider-tertiary)] px-2 py-[7px] text-[15px] text-right align-top text-[var(--color-icon-secondary)]">
               &nbsp;
             </td>
-            <td className="border-l border-l-dotted border-l-[var(--color-divider-tertiary)] p-2 text-[13px] text-center align-top text-[var(--color-icon-secondary)]">
+            <td className="border-l border-l-dotted border-l-[var(--color-divider-tertiary)] px-2 py-[7px] text-[15px] text-center align-top text-[var(--color-icon-secondary)]">
               &nbsp;
             </td>
-            <td className="p-2 border-l border-l-dotted border-l-[var(--color-divider-tertiary)] text-[13px] text-right align-top text-[var(--color-icon-secondary)]">&nbsp;</td>
+            <td className="px-2 py-[7px] border-l border-l-dotted border-l-[var(--color-divider-tertiary)] text-[15px] text-right align-top text-[var(--color-icon-secondary)]">&nbsp;</td>
           </tr>
         </tbody>
       </table>
@@ -658,16 +763,20 @@ export function RegisterTable({
   return (
     <>
       <div ref={topRef} />
-      <TablePagination
-        totalItems={filteredEntries.length}
-        currentPage={filteredEntries.length > 0 ? currentPage : 0}
-        totalPages={totalPages}
-        start={paginationStart}
-        end={paginationEnd}
-        onPageChange={setCurrentPage}
-      />
+      <div className="mb-3 flex items-center justify-between gap-4">
+        <div>{topLeft}</div>
+        <TablePagination
+          inline
+          totalItems={filteredEntries.length}
+          currentPage={filteredEntries.length > 0 ? currentPage : 0}
+          totalPages={totalPages}
+          start={paginationStart}
+          end={paginationEnd}
+          onPageChange={setCurrentPage}
+        />
+      </div>
       <div className="register-table relative overflow-visible bg-[var(--color-container-background-primary)]">
-      <div className="action-bar flex h-[45px] items-center justify-between border-b border-[var(--color-divider-tertiary)] px-4">
+      <div className="action-bar flex h-[59px] items-center justify-between border-b border-[var(--color-divider-tertiary)] px-4">
         <div className="relative flex items-center gap-1">
           <button
             ref={filterButtonRef}
@@ -710,18 +819,10 @@ export function RegisterTable({
           )}
           <button
             type="button"
-            className="ml-3 text-[13px] text-[var(--color-link-text)] hover:underline"
+            className="ml-3 text-sm text-[var(--color-link-text)] hover:underline"
             onClick={resetBatch}
           >
             Reset Batch Buttons
-          </button>
-          <button
-            type="button"
-            className="ml-3 text-[13px] text-[var(--color-link-text)] hover:underline disabled:cursor-not-allowed disabled:text-[var(--color-text-disabled)] disabled:no-underline"
-            onClick={jumpToLast}
-            disabled={!lastTouchedEntryId}
-          >
-            Jump To Last
           </button>
           {isFilterPopoverOpen ? (
             <FilterFormPopover
@@ -750,6 +851,14 @@ export function RegisterTable({
           ) : null}
         </div>
         <div className="flex h-full items-center gap-4 text-[var(--color-icon-muted)]">
+          <button
+            type="button"
+            className="text-sm text-[var(--color-link-text)] hover:underline disabled:cursor-not-allowed disabled:text-[var(--color-text-disabled)] disabled:no-underline"
+            onClick={jumpToLast}
+            disabled={!lastTouchedEntryId}
+          >
+            Jump To Last
+          </button>
           <Tooltip label="Print" side="bottom">
             <IconButton icon={Printer} label="Print" onClick={handlePrintRegister} />
           </Tooltip>
@@ -820,10 +929,15 @@ export function RegisterTable({
       <RegisterTableHeader
         batch={{
           active: isBatchMode,
-          selectedCount: selectedBatchEntries.length,
+          selectedCount: tickedEntries.length,
           selectableCount: selectableEntries.length,
           onStart: startBatch,
-          onEdit: () => setIsChoosingBatchFields(true),
+          onEdit: () => {
+            // The pink row appears right away, with the field chooser on top.
+            setIsBatchEditing(true);
+            setBatchError(null);
+            setIsChoosingBatchFields(true);
+          },
           onDelete: () => void deleteBatch(),
           onToggleSelectAll: toggleSelectAllBatch
         }}
@@ -907,13 +1021,14 @@ export function RegisterTable({
                           rowError={rowError}
                           isSavingRow={isSavingRow}
                           isDeletingRow={isDeletingRow}
-                          isPaymentDisabled={REGISTER_INFLOW_ROW_TYPES.has(selectedEntry.transactionType)}
-                          isDepositDisabled={REGISTER_OUTFLOW_ROW_TYPES.has(selectedEntry.transactionType)}
+                          isPaymentDisabled={REGISTER_INFLOW_ROW_TYPES.has(selectedEntry.transactionType) || linkedPaymentIds.has(selectedEntry.transactionId)}
+                          isDepositDisabled={REGISTER_OUTFLOW_ROW_TYPES.has(selectedEntry.transactionType) || linkedPaymentIds.has(selectedEntry.transactionId)}
                           onEditorChange={(field, value) => setEditor((current) => ({ ...current, [field]: value }))}
                           onReconcileCycle={cycleEditorReconcileStatus}
                           onOpenPayeeModal={() => openPayeeModal("row")}
                           onOpenAccountModal={() => openAccountModal("row")}
                           onDelete={handleDeleteRow}
+                          onEdit={FULL_FORM_PATHS[selectedEntry.transactionType] ? () => openFullForm(selectedEntry) : undefined}
                           onCancel={() => {
                             setSelectedEntryId(null);
                             setRowError(null);
@@ -951,16 +1066,17 @@ export function RegisterTable({
         fields={batchFields}
         onChange={setBatchFields}
         onClose={() => setIsChoosingBatchFields(false)}
-        onContinue={() => {
-          setIsChoosingBatchFields(false);
-          setIsBatchEditing(true);
-          setBatchError(null);
-        }}
       />
       <PayeeSideModal
         open={isPayeeModalOpen}
         onClose={() => setIsPayeeModalOpen(false)}
         onSave={(payee) => {
+          // A new customer or vendor is saved to the company, not just this screen.
+          const known = [...customers, ...vendors].some((c) => c.name.toLowerCase() === payee.name.toLowerCase());
+          if (!known && (payee.kind === "CUSTOMER" || payee.kind === "VENDOR")) {
+            const save = payee.kind === "CUSTOMER" ? addCustomer({ name: payee.name }) : addVendor({ name: payee.name });
+            save.catch((err) => toast({ variant: "error", title: "Could not add contact", description: err instanceof Error ? err.message : undefined }));
+          }
           setPayees((previous) => {
             const exists = previous.some((item) => item.name.toLowerCase() === payee.name.toLowerCase());
             return exists ? previous : [...previous, payee];

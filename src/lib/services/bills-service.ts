@@ -21,6 +21,10 @@ export type Bill = {
   postedTransactionId?: string;
   paymentTransactionId?: string;
   createdAt: string;
+  /** What is still owed, and the payments (or credits) applied so far. */
+  openBalance: number;
+  paidAmount: number;
+  payments: { transactionId: string; amount: number }[];
 };
 
 export type CreateBillInput = {
@@ -38,6 +42,8 @@ export type UpdateBillInput = Partial<CreateBillInput>;
 export type PayBillInput = {
   paymentAccountId: string;
   paymentDate?: string;
+  /** Left out, the whole open balance is paid. */
+  amount?: number;
 };
 
 export function listBills(): Promise<Bill[]> {
@@ -54,6 +60,11 @@ export function updateBill(billId: string, patch: UpdateBillInput): Promise<Bill
 
 export function payBill(billId: string, input: PayBillInput): Promise<Bill> {
   return request<Bill>(BASE_API_URL, `/bills/${billId}/pay`, { method: "POST", body: JSON.stringify(input) });
+}
+
+/** Applies money from an existing payment (or unapplied credit) to this bill. Posts nothing. */
+export function applyBillPayment(billId: string, input: { paymentTransactionId: string; amount: number }): Promise<Bill> {
+  return request<Bill>(BASE_API_URL, `/bills/${billId}/apply`, { method: "POST", body: JSON.stringify(input) });
 }
 
 export async function deleteBill(billId: string): Promise<void> {

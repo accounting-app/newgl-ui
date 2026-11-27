@@ -6,7 +6,7 @@ export const metadata: Metadata = {
   title: "Receive Payment"
 };
 
-// QBO's own URL shape: /recvpayment?rtAccountId=<id>&rt=close. useSearchParams needs a Suspense boundary.
+// QBO's own URL shape: /recvpayment?rtAccountId=<id>&rt=close, or ?txnId=<id> to edit a saved payment. useSearchParams needs a Suspense boundary.
 export default function ReceivePaymentRoute() {
   return (
     <Suspense fallback={null}>

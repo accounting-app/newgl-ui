@@ -54,8 +54,8 @@ export function SalesOverviewPage() {
   const [duration, setDuration] = useState<"month" | "quarter" | "year">("month");
   const [compareToPrevYear, setCompareToPrevYear] = usePersistedJSON(visibleKey, false);
 
-  const notPaidTotal = useMemo(() => invoices.filter((i) => i.status === "OPEN").reduce((sum, i) => sum + i.amount, 0), [invoices]);
-  const paidTotal = useMemo(() => invoices.filter((i) => i.status === "PAID").reduce((sum, i) => sum + i.amount, 0), [invoices]);
+  const notPaidTotal = useMemo(() => invoices.filter((i) => i.status === "OPEN").reduce((sum, i) => sum + i.openBalance, 0), [invoices]);
+  const paidTotal = useMemo(() => invoices.reduce((sum, i) => sum + i.paidAmount, 0), [invoices]);
 
   const now = new Date();
   const monthlyIncome = useMemo(() => {
@@ -78,7 +78,7 @@ export function SalesOverviewPage() {
     { label: "Create sales receipt", disabledReason: "Not available yet" }
   ];
 
-  async function handleSaveInvoice(input: Omit<Invoice, "id" | "createdAt" | "status">) {
+  async function handleSaveInvoice(input: Omit<Invoice, "id" | "createdAt" | "status" | "openBalance" | "paidAmount" | "payments">) {
     try {
       await addInvoice(input);
       setShowInvoiceDrawer(false);

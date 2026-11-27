@@ -97,8 +97,8 @@ export function ExpensesBillsOverviewPage() {
   const accountById = useMemo(() => new Map(accounts.map((a) => [a.id, a])), [accounts]);
 
   const forReviewTotal = useMemo(() => bills.filter((b) => b.status === "DRAFT").reduce((s, b) => s + b.amount, 0), [bills]);
-  const unpaidTotal = useMemo(() => bills.filter((b) => b.status === "OPEN").reduce((s, b) => s + b.amount, 0), [bills]);
-  const paidTotal = useMemo(() => bills.filter((b) => b.status === "PAID").reduce((s, b) => s + b.amount, 0), [bills]);
+  const unpaidTotal = useMemo(() => bills.filter((b) => b.status === "OPEN").reduce((s, b) => s + b.openBalance, 0), [bills]);
+  const paidTotal = useMemo(() => bills.reduce((s, b) => s + b.paidAmount, 0), [bills]);
 
   const monthlySpend = useMemo(() => {
     const year = new Date().getFullYear();

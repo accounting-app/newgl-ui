@@ -715,7 +715,7 @@ function PayBillDialog({
       <div className="w-full max-w-sm rounded-lg bg-[var(--color-container-background-primary)] p-5 shadow-xl">
         <h2 className="mb-1 text-lg font-semibold text-[var(--color-text-global)]">Mark bill paid</h2>
         <p className="mb-4 text-sm text-[var(--color-text-primary)]">
-          {formatMoney(bill.amount)} to {vendorName}
+          {formatMoney(bill.openBalance)} to {vendorName}
         </p>
         <form onSubmit={handleSubmit} className="flex flex-col gap-3">
           <Select label="Payment account" value={paymentAccountId} onChange={setPaymentAccountId} options={bankAccountOptions} placeholder="Select account" allowCustomValue={false} />

@@ -195,8 +195,8 @@ function RecipientsTab({
   const paidTotalByVendor = useMemo(() => {
     const totals = new Map<string, number>();
     bills
-      .filter((b) => b.status === "PAID" && b.billDate.startsWith(taxYear))
-      .forEach((b) => totals.set(b.vendorId, (totals.get(b.vendorId) ?? 0) + b.amount));
+      .filter((b) => b.paidAmount > 0 && b.billDate.startsWith(taxYear))
+      .forEach((b) => totals.set(b.vendorId, (totals.get(b.vendorId) ?? 0) + b.paidAmount));
     return totals;
   }, [bills, taxYear]);
 

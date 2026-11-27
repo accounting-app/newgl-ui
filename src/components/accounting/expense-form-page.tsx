@@ -1,8 +1,12 @@
 "use client";
 
+import { nextCheckNumber } from "@/lib/accounting/next-check-number";
+import { formDetails } from "@/lib/hooks/use-saved-transaction";
+import { DateField } from "@/components/ui/date-field";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ChevronDown, ChevronUp, ClipboardPaste, Copy, GripVertical, Plus, Settings, SquareArrowOutUpRight, Trash2, X } from "lucide-react";
+import { MoreMenu, useTransactionPrint } from "@/components/accounting/transaction-actions";
 import { FullScreenFormShell, leaveFormPage } from "@/components/accounting/full-screen-form-shell";
 import { ExpensePasteModal } from "@/components/accounting/expense-paste-modal";
 import type { PastedLine } from "@/components/accounting/expense-paste-modal";
@@ -23,7 +27,7 @@ import { advanceRecurring, createRecurring, listRecurring, updateRecurring } fro
 import type { RecurringTemplate } from "@/lib/services/recurring-service";
 import { RecurringIntervalRow, RecurringNameRow, useRecurringTemplate } from "@/components/accounting/recurring-template-fields";
 import { getServiceContainer } from "@/lib/services/service-container-v2";
-import type { Account } from "@/modules/accounting/domain/models";
+import type { Account, Transaction } from "@/modules/accounting/domain/models";
 
 type Line = { id: string; categoryAccountId: string; description: string; amount: string };
 
@@ -44,7 +48,6 @@ const RT_BUTTON = "rounded-md border border-[var(--color-negative)] px-3 py-1.5 
 const PLAIN_BUTTON = "rounded-md border border-[var(--color-button-border)] px-3 py-1.5 text-sm text-[var(--color-text-global)] hover:bg-[var(--color-action-passive-subtle-hover)]";
 // Transaction types the "Copy options" panel can copy this expense into (QBO's list).
 const COPY_TARGETS = ["Bill", "Check", "Credit Card Credit", "Credit Memo", "Delayed Charge", "Delayed Credit", "Estimate", "Expense", "Invoice", "Journal Entry", "Purchase Order", "Refund Receipt", "Sales Order", "Sales Receipt", "Vendor Credit"];
-const CHECK_NEXT_KEY = "newgl:check-next:v1";
 const COPY_KEY = "newgl:expense-copy:v1";
 const COLUMNS_KEY = "newgl:expense-columns:v1";
 const TAGS_KEY = "newgl:expense-use-tags:v1";
@@ -52,6 +55,9 @@ type Columns = { description: boolean; amount: boolean };
 const COPY_ICON_BUTTON = "flex items-center gap-1.5 rounded-md px-2 py-1 text-sm text-[var(--color-text-global)] hover:bg-[var(--color-action-passive-subtle-hover)]";
 const CHECKBOX = "h-5 w-5 cursor-pointer rounded accent-[var(--color-ui-primary)] disabled:cursor-not-allowed";
 const RT_LINK = "text-left text-sm font-semibold text-[var(--color-negative)] hover:underline disabled:cursor-not-allowed disabled:opacity-50 disabled:no-underline";
+
+const OUTLINE_BUTTON = "rounded-md border-2 border-[var(--color-ui-primary)] px-4 py-1.5 font-medium text-[var(--color-ui-primary)] hover:bg-[var(--color-action-passive-subtle-hover)]";
+const FOOTER_LINK = "font-medium text-[var(--color-ui-primary)] hover:underline";
 
 const cents = (value: string) => Math.round((Number(value) || 0) * 100);
 const money = (value: number) => value.toLocaleString("en-US", { style: "currency", currency: "USD" });
@@ -84,7 +90,10 @@ export function ExpenseFormPage({ kind = "expense" }: { kind?: "expense" | "chec
   const [refNo, setRefNo] = useState("");
   const [lines, setLines] = useState<Line[]>(startingLines);
   const [memo, setMemo] = useState("");
-  const [linesOpen, setLinesOpen] = useState(true);
+  // The chevron under the header folds it away to give the lines more room.
+  const [headerOpen, setHeaderOpen] = useState(true);
+  // QBO shows lines as plain text; only the one being edited has input boxes.
+  const [activeLineId, setActiveLineId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [payeeModalOpen, setPayeeModalOpen] = useState(false);
@@ -94,6 +103,10 @@ export function ExpenseFormPage({ kind = "expense" }: { kind?: "expense" | "chec
   const [newMethod, setNewMethod] = useState("");
   const [accountModalOpen, setAccountModalOpen] = useState(false);
   const attachments = useFormAttachments();
+  // ?txnId=<id> opens a saved Expense/Check to edit it (the register's "Edit").
+  const txnId = params.get("txnId");
+  const [loaded, setLoaded] = useState<Transaction | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [saveMenuOpen, setSaveMenuOpen] = useState(false);
   const saveMenuRef = useRef<HTMLDivElement>(null);
   const [panel, setPanel] = useState<"copy" | "settings" | null>(null);
@@ -123,15 +136,6 @@ export function ExpenseFormPage({ kind = "expense" }: { kind?: "expense" | "chec
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [templateParam]);
 
-  useEffect(() => {
-    if (!isCheck) return;
-    try {
-      const stored = Number(window.localStorage.getItem(CHECK_NEXT_KEY));
-      if (Number.isInteger(stored) && stored > 0) setCheckNo(String(stored));
-    } catch {
-      // storage unavailable: start at 1
-    }
-  }, [isCheck]);
 
   useEffect(() => {
     try {
@@ -193,16 +197,36 @@ export function ExpenseFormPage({ kind = "expense" }: { kind?: "expense" | "chec
     return () => document.removeEventListener("mousedown", onDown);
   }, [saveMenuOpen]);
 
-  const paymentAccounts = useMemo(() => accounts.filter((a) => (isCheck ? a.category === "BANK" : PAYMENT_CATEGORIES.has(a.category))).sort((a, b) => a.name.localeCompare(b.name)), [accounts, isCheck]);
-  const methodOptions = useMemo(() => [...new Set([...DEFAULT_METHODS, ...customMethods])].sort((a, b) => a.localeCompare(b)).map((m) => ({ value: m, label: m })), [customMethods]);
+  const savedSourceId = loaded?.sourceAccountId;
+  const paymentAccounts = useMemo(() => accounts.filter((a) => a.id === savedSourceId || (isCheck ? a.category === "BANK" : PAYMENT_CATEGORIES.has(a.category))).sort((a, b) => a.name.localeCompare(b.name)), [accounts, isCheck, savedSourceId]);
+  const methodOptions = useMemo(() => [...new Set([...DEFAULT_METHODS, ...customMethods, ...(method ? [method] : [])])].sort((a, b) => a.localeCompare(b)).map((m) => ({ value: m, label: m })), [customMethods, method]);
   const payeeRecord = useMemo(() => vendors.find((v) => v.name === payee) ?? customers.find((c) => c.name === payee), [vendors, customers, payee]);
   const paymentAccount = accounts.find((a) => a.id === paymentAccountId);
   useEffect(() => {
-    if (isCheck) setMailing([payeeRecord?.name, payeeRecord?.address].filter(Boolean).join("\n"));
+    // A saved check keeps its own address until the payee is changed.
+    if (!isCheck || (params.get("txnId") && (!loaded || (payee === (loaded.payee ?? "") && loaded.details?.mailing)))) return;
+    setMailing([payeeRecord?.name, payeeRecord?.address].filter(Boolean).join("\n"));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isCheck, payeeRecord]);
+  const checkNoTyped = useRef(false);
+  useEffect(() => {
+    if (!isCheck || params.get("txnId") || !paymentAccountId) return;
+    let cancelled = false;
+    services.registerService
+      .listRegisterEntries(paymentAccountId)
+      .then((entries) => {
+        if (!cancelled && !checkNoTyped.current) setCheckNo(nextCheckNumber(entries));
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isCheck, paymentAccountId]);
   // If no (or an unknown) rtAccountId came in, default to the first bank/card account once loaded.
   useEffect(() => {
-    if (accounts.length === 0 || paymentAccount) return;
+    // Never swap in a default while editing: it would silently move the transaction.
+    if (params.get("txnId") || accounts.length === 0 || paymentAccount) return;
     if (paymentAccounts[0]) setPaymentAccountId(paymentAccounts[0].id);
   }, [accounts, paymentAccount, paymentAccounts]);
 
@@ -211,17 +235,56 @@ export function ExpenseFormPage({ kind = "expense" }: { kind?: "expense" | "chec
     () => accounts.filter((a) => a.id !== paymentAccountId).map((a) => ({ value: a.id, label: a.name, rightLabel: ACCOUNT_CATEGORY_LABELS[a.category] })),
     [accounts, paymentAccountId]
   );
-  const payeeOptions = useMemo(
-    () => [
+  const payeeOptions = useMemo(() => {
+    const contacts = [
       ...vendors.map((v) => ({ value: v.name, label: v.name, rightLabel: "Vendor" })),
       ...customers.map((c) => ({ value: c.name, label: c.name, rightLabel: "Customer" }))
-    ],
-    [vendors, customers]
-  );
+    ];
+    return payee && !contacts.some((c) => c.value === payee) ? [{ value: payee, label: payee, rightLabel: "" }, ...contacts] : contacts;
+  }, [vendors, customers, payee]);
   const totalCents = lines.reduce((sum, l) => sum + cents(l.amount), 0);
   const categoryName = (id: string) => accounts.find((a) => a.id === id)?.name ?? "";
 
   const closePage = () => leaveFormPage(router);
+  const printSaved = useTransactionPrint();
+
+  useEffect(() => {
+    if (!txnId) return;
+    let cancelled = false;
+    services.transactionService
+      .getTransactionById(txnId)
+      .then((txn) => {
+        if (cancelled) return;
+        if (txn.type !== (isCheck ? "CHECK" : "EXPENSE")) return setLoadError(`This transaction isn't ${isCheck ? "a check" : "an expense"}.`);
+        // The paying account is the source; every other line must be a debit for this form to show it.
+        const sourceId = txn.sourceAccountId ?? txn.postings.find((p) => p.type === "CREDIT")?.accountId;
+        const categoryLines = txn.postings.filter((p) => !(p.accountId === sourceId && p.type === "CREDIT"));
+        if (!sourceId || categoryLines.length !== txn.postings.length - 1 || categoryLines.some((p) => p.type !== "DEBIT")) {
+          return setLoadError("This transaction has lines this form can't show. Edit it from the register or as a journal entry.");
+        }
+        setLoaded({ ...txn, sourceAccountId: sourceId });
+        void attachments.loadLinked(txn.id).catch(() => toast({ variant: "error", title: "Could not load the attachments" }));
+        setPaymentAccountId(sourceId);
+        setPayee(txn.payee ?? "");
+        setDate(txn.transactionDate);
+        setMethod(txn.paymentMethod ?? "");
+        if (isCheck) setCheckNo(txn.referenceNumber ?? "");
+        else setRefNo(txn.referenceNumber ?? "");
+        setMemo(txn.memo ?? "");
+        setMailing(txn.details?.mailing ?? "");
+        setPrintLater(txn.details?.printLater === "1");
+        const next = categoryLines.map((p) => ({ ...blankLine(), categoryAccountId: p.accountId, description: p.description ?? "", amount: p.amount.toFixed(2) }));
+        while (next.length < 2) next.push(blankLine());
+        setLines(next);
+      })
+      .catch((err) => {
+        if (!cancelled) setLoadError(err instanceof Error ? err.message : "Could not load this transaction.");
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [txnId]);
 
   function resetForm() {
     setPayee("");
@@ -236,7 +299,7 @@ export function ExpenseFormPage({ kind = "expense" }: { kind?: "expense" | "chec
 
   const updateLine = (id: string, patch: Partial<Line>) => setLines((current) => current.map((l) => (l.id === id ? { ...l, ...patch } : l)));
 
-  async function save(after: "stay" | "close") {
+  async function save(after: "stay" | "close" | "new") {
     setSaveMenuOpen(false);
     if (!paymentAccount) return setError("Choose the payment account.");
     if (!date) return setError("Enter the payment date.");
@@ -248,8 +311,10 @@ export function ExpenseFormPage({ kind = "expense" }: { kind?: "expense" | "chec
     setError(null);
     try {
       const total = totalCents / 100;
-      const created = await services.transactionService.createTransaction({
-        type: isCheck ? "CHECK" : "EXPENSE",
+      if (txnId && !loaded) throw new Error(loadError ?? "This transaction is still loading.");
+      const body = {
+        paymentMethod: method || undefined,
+        details: isCheck ? formDetails({ mailing, printLater: printLater ? "1" : "" }) : undefined,
         transactionDate: date,
         referenceNumber: (isCheck ? checkNo : refNo).trim() || undefined,
         memo: memo.trim() || undefined,
@@ -257,22 +322,29 @@ export function ExpenseFormPage({ kind = "expense" }: { kind?: "expense" | "chec
         accountLabel: used.length > 1 ? "Split" : categoryName(used[0].categoryAccountId),
         sourceAccountId: paymentAccount.id,
         postings: [
-          ...used.map((l) => ({ accountId: l.categoryAccountId, type: "DEBIT" as const, amount: cents(l.amount) / 100 })),
+          ...used.map((l) => ({ accountId: l.categoryAccountId, type: "DEBIT" as const, amount: cents(l.amount) / 100, description: l.description.trim() || undefined })),
           { accountId: paymentAccount.id, type: "CREDIT" as const, amount: total }
         ]
-      });
+      };
+      if (loaded) {
+        const saved = await services.transactionService.updateTransaction(loaded.id, { ...body, dueDate: loaded.dueDate });
+        setLoaded({ ...saved, sourceAccountId: paymentAccount.id });
+        await attachments.linkTo(saved.id).catch(() => toast({ variant: "error", title: "Saved, but the attachments could not be linked" }));
+        await attachments.loadLinked(saved.id).catch(() => undefined);
+        toast({ variant: "success", title: isCheck ? "Check saved" : "Expense saved" });
+        if (after === "close") closePage();
+        else if (after === "new") window.location.assign(isCheck ? "/check" : "/expense");
+        else services.accountService.listAccounts().then(setAccounts).catch(() => undefined);
+        return;
+      }
+      const created = await services.transactionService.createTransaction({ ...body, type: isCheck ? "CHECK" : "EXPENSE" });
       await services.transactionService.postTransaction(created.id);
       await attachments.linkTo(created.id).catch(() => toast({ variant: "error", title: "Saved, but the attachments could not be linked" }));
       if (useTplId) await advanceRecurring(useTplId).catch(() => undefined);
       toast({ variant: "success", title: isCheck ? "Check saved" : "Expense saved" });
-      if (isCheck) {
-        const following = String((Number(checkNo) || 0) + 1);
-        setCheckNo(following);
-        try {
-          window.localStorage.setItem(CHECK_NEXT_KEY, following);
-        } catch {
-          // not persisted
-        }
+      if (isCheck && /^\d+$/.test(checkNo.trim())) {
+        checkNoTyped.current = false;
+        setCheckNo(String(Number(checkNo) + 1).padStart(checkNo.trim().length, "0"));
       }
       if (after === "close") closePage();
       else {
@@ -433,42 +505,44 @@ export function ExpenseFormPage({ kind = "expense" }: { kind?: "expense" | "chec
       <Button className="!rounded-md" disabled={saving} onClick={() => void saveTemplate()}>{saving ? "Saving..." : "Save template"}</Button>
     </>
   ) : (
-    <>
-        <div className="flex items-center gap-3">
-          <Button variant="secondary" className="!rounded-md" onClick={closePage}>Cancel</Button>
-          <Button variant="secondary" className="!rounded-md" onClick={resetForm}>Clear</Button>
-        </div>
-        <div className="flex items-center gap-8 text-base">
-          {isCheck ? (
-            <>
-              <button type="button" onClick={() => window.print()} className="text-[var(--color-text-global)] hover:underline">Print check</button>
-              <button type="button" disabled title="Ordering checks isn't available yet" className="cursor-not-allowed text-[var(--color-text-disabled)]">Order checks</button>
-            </>
+    <div className="ml-auto flex flex-wrap items-center justify-end gap-8 text-base">
+      <button type="button" onClick={closePage} className={OUTLINE_BUTTON}>Cancel</button>
+      {txnId ? null : <button type="button" onClick={resetForm} className={FOOTER_LINK}>Clear</button>}
+      {isCheck ? (
+        <>
+          <button type="button" onClick={() => void printSaved(loaded, "check")} className={FOOTER_LINK}>Print check</button>
+          <button type="button" disabled title="Ordering checks isn't available yet" className={`${FOOTER_LINK} cursor-not-allowed opacity-60`}>Order checks</button>
+        </>
+      ) : null}
+      <button type="button" onClick={() => tpl.start(date)} className={FOOTER_LINK}>Make recurring</button>
+      <MoreMenu transaction={loaded} onRemoved={closePage} className={FOOTER_LINK} />
+      <div className="ml-6 flex items-center gap-4">
+        <button type="button" disabled={saving || Boolean(txnId && !loaded)} onClick={() => void save("stay")} className={`${OUTLINE_BUTTON} disabled:opacity-50`}>Save</button>
+        <div ref={saveMenuRef} className="relative inline-flex">
+          <Button variant="primary" className="!rounded-l-md !rounded-r-none" disabled={saving || Boolean(txnId && !loaded)} onClick={() => void save("close")}>{saving ? "Saving..." : "Save and close"}</Button>
+          <Button variant="primary" className="!rounded-l-none !rounded-r-md border-l border-l-white/30 !min-w-0 px-2" aria-label="More save options" disabled={saving || Boolean(txnId && !loaded)} onClick={() => setSaveMenuOpen((v) => !v)}>
+            <ChevronDown className="h-4 w-4" aria-hidden="true" />
+          </Button>
+          {saveMenuOpen ? (
+            <div className="absolute bottom-full right-0 mb-1 w-40 rounded-lg border border-[var(--color-divider-tertiary)] bg-[var(--color-container-background-primary)] py-1 shadow-lg">
+              <button type="button" onClick={() => void save(txnId ? "new" : "stay")} className="block w-full px-3 py-1.5 text-left text-sm text-[var(--color-text-global)] hover:bg-[var(--color-action-passive-subtle-hover)]">Save and new</button>
+            </div>
           ) : null}
-          <button type="button" onClick={() => tpl.start(date)} className="text-[var(--color-text-global)] hover:underline">Make recurring</button>
-          {isCheck ? <button type="button" disabled title="More options aren't available yet" className="cursor-not-allowed text-[var(--color-text-disabled)]">More</button> : null}
         </div>
-        <div className="flex items-center gap-3">
-          <Button variant="secondary" className="!rounded-md" disabled={saving} onClick={() => void save("stay")}>Save</Button>
-          <div ref={saveMenuRef} className="relative inline-flex">
-            <Button className="!rounded-l-md !rounded-r-none" disabled={saving} onClick={() => void save("close")}>{saving ? "Saving..." : "Save and close"}</Button>
-            <Button className="!rounded-l-none !rounded-r-md border-l border-l-white/30 !min-w-0 px-2" aria-label="More save options" disabled={saving} onClick={() => setSaveMenuOpen((v) => !v)}>
-              <ChevronDown className="h-4 w-4" aria-hidden="true" />
-            </Button>
-            {saveMenuOpen ? (
-              <div className="absolute bottom-full right-0 mb-1 w-40 rounded-lg border border-[var(--color-divider-tertiary)] bg-[var(--color-container-background-primary)] py-1 shadow-lg">
-                <button type="button" onClick={() => void save("stay")} className="block w-full px-3 py-1.5 text-left text-sm text-[var(--color-text-global)] hover:bg-[var(--color-action-passive-subtle-hover)]">Save and new</button>
-              </div>
-            ) : null}
-          </div>
-        </div>
-    </>
+      </div>
+    </div>
   );
 
   return (
     <FullScreenFormShell
-      title={isCheck ? `Check #${checkNo}` : "Expense"}
+      title={
+        <>
+          <span className="font-semibold">{isCheck ? `Check #${checkNo}` : "Expense"}</span>
+          {loaded?.reconcileStatus === "R" ? <span className="text-lg text-[var(--color-negative)]">(Reconciled)</span> : null}
+        </>
+      }
       onClose={closePage}
+      centerTools
       toolbar={
         tpl.active ? null : <button type="button" onClick={() => setPanel("copy")} className="flex h-9 items-center gap-1.5 rounded-md px-2 text-sm text-[var(--color-text-global)] hover:bg-[var(--color-action-passive-subtle-hover)]">
           <Copy className="h-5 w-5" aria-hidden="true" />
@@ -479,7 +553,7 @@ export function ExpenseFormPage({ kind = "expense" }: { kind?: "expense" | "chec
       settingsLabel="Choose what you use"
       footer={footer}
     >
-      <div className="flex-1 overflow-y-auto px-6 pb-6">
+      <div className="flex-1 overflow-y-auto px-6 pb-6 pt-5">
         {tpl.active ? (
           <div className="pb-6">
             <p className="mb-3 text-sm font-semibold text-[var(--color-text-global)]">{isCheck ? "Recurring Check" : "Recurring Expense"}</p>
@@ -489,7 +563,7 @@ export function ExpenseFormPage({ kind = "expense" }: { kind?: "expense" | "chec
               <span className={LABEL}>Payee</span>
               <Select value={payee} onChange={setPayee} options={payeeOptions} placeholder="Who did you pay?" allowCustomValue={false} onAddNew={() => setPayeeModalOpen(true)} addNewLabel="+ Add new" />
               {payeeRecord ? (
-                <button type="button" onClick={() => window.open(`/${"is1099Contractor" in payeeRecord ? "vendor" : "customer"}detail?nameId=${encodeURIComponent(payeeRecord.id)}`, "_blank")} className="mt-1 block text-sm font-medium text-[var(--color-negative)] underline hover:no-underline">
+                <button type="button" onClick={() => window.open(`/${"is1099Contractor" in payeeRecord ? "vendor" : "customer"}detail?nameId=${encodeURIComponent(payeeRecord.id)}`, "_blank")} className="mt-1 block text-sm font-medium text-[var(--color-negative)] hover:underline">
                   Payee Details
                 </button>
               ) : null}
@@ -509,14 +583,14 @@ export function ExpenseFormPage({ kind = "expense" }: { kind?: "expense" | "chec
             ) : null}
           </div>
         ) : (
-        <>
+        <div className={headerOpen ? "" : "hidden"}>
         <div className="flex flex-wrap items-start justify-between gap-6 pb-6">
           <div className="flex flex-wrap gap-6">
             <div className="w-[320px]">
               <span className={LABEL}>Payee</span>
               <Select value={payee} onChange={setPayee} options={payeeOptions} placeholder="Who did you pay?" allowCustomValue={false} onAddNew={() => setPayeeModalOpen(true)} addNewLabel="+ Add new" />
               {payeeRecord ? (
-                <button type="button" onClick={() => window.open(`/${"is1099Contractor" in payeeRecord ? "vendor" : "customer"}detail?nameId=${encodeURIComponent(payeeRecord.id)}`, "_blank")} className="mt-1 block text-sm font-medium text-[var(--color-negative)] underline hover:no-underline">
+                <button type="button" onClick={() => window.open(`/${"is1099Contractor" in payeeRecord ? "vendor" : "customer"}detail?nameId=${encodeURIComponent(payeeRecord.id)}`, "_blank")} className="mt-1 block text-sm font-medium text-[var(--color-negative)] hover:underline">
                   Payee Details
                 </button>
               ) : null}
@@ -533,7 +607,7 @@ export function ExpenseFormPage({ kind = "expense" }: { kind?: "expense" | "chec
           </div>
           <div className="text-right">
             <p className="text-xs font-semibold uppercase text-[var(--color-text-global)]">Amount</p>
-            <p className="text-5xl text-[var(--color-text-global)]">{money(totalCents / 100)}</p>
+            <p className="text-5xl font-bold text-[var(--color-text-global)]">{money(totalCents / 100)}</p>
           </div>
         </div>
 
@@ -545,11 +619,11 @@ export function ExpenseFormPage({ kind = "expense" }: { kind?: "expense" | "chec
             </div>
             <div>
               <label className={LABEL} htmlFor="expense-date">Payment date</label>
-              <InputField id="expense-date" type="date" value={date} onChange={(event) => setDate(event.target.value)} className="w-[200px]" />
+              <DateField id="expense-date" value={date} onChange={setDate} className="w-[200px]" />
             </div>
             <div>
               <label className={LABEL} htmlFor="check-no">Check no.</label>
-              <InputField id="check-no" value={checkNo} disabled={printLater} onChange={(event) => setCheckNo(event.target.value)} className="w-[214px]" />
+              <InputField id="check-no" value={checkNo} disabled={printLater} onChange={(event) => { checkNoTyped.current = true; setCheckNo(event.target.value); }} className="w-[214px]" />
               <label className="mt-3 flex cursor-pointer items-center gap-3 text-sm"><input type="checkbox" checked={printLater} onChange={(event) => setPrintLater(event.target.checked)} className={CHECKBOX} />Print later</label>
             </div>
           </div>
@@ -557,7 +631,7 @@ export function ExpenseFormPage({ kind = "expense" }: { kind?: "expense" | "chec
         <div className="flex flex-wrap gap-6 pb-6">
           <div>
             <label className={LABEL} htmlFor="expense-date">Payment Date</label>
-            <InputField id="expense-date" type="date" value={date} onChange={(event) => setDate(event.target.value)} className="w-[200px]" />
+            <DateField id="expense-date" value={date} onChange={setDate} className="w-[200px]" />
           </div>
           <div className="w-[240px]">
             <span className={LABEL}>Payment Method</span>
@@ -570,15 +644,15 @@ export function ExpenseFormPage({ kind = "expense" }: { kind?: "expense" | "chec
         </div>
         )}
 
-        </>
+        </div>
         )}
 
         <section className="rounded-lg bg-[var(--color-container-background-primary)] px-6 pb-6 pt-2">
-          <button type="button" onClick={() => setLinesOpen((v) => !v)} aria-expanded={linesOpen} aria-label="Toggle category details" className="mx-auto mb-2 flex text-[var(--color-icon-secondary)]">
-            {linesOpen ? <ChevronUp className="h-5 w-5" aria-hidden="true" /> : <ChevronDown className="h-5 w-5" aria-hidden="true" />}
-          </button>
-          {linesOpen ? (
-            <>
+          {tpl.active ? null : (
+            <button type="button" onClick={() => setHeaderOpen((v) => !v)} aria-expanded={headerOpen} aria-label={headerOpen ? "Hide header" : "Show header"} className="relative -top-6 mx-auto -mb-3 flex h-9 w-9 items-center justify-center rounded-md border border-[var(--color-divider-tertiary)] bg-[var(--color-container-background-primary)] text-[var(--color-icon-secondary)]">
+              {headerOpen ? <ChevronUp className="h-5 w-5" aria-hidden="true" /> : <ChevronDown className="h-5 w-5" aria-hidden="true" />}
+            </button>
+          )}
               <div className="mb-2 flex justify-end gap-3 text-[var(--color-text-global)]">
                 <button type="button" onClick={exportCsv} aria-label="Export lines" title="Export lines" className="hover:text-[var(--color-link-action)]"><SquareArrowOutUpRight className="h-5 w-5" aria-hidden="true" /></button>
                 <button type="button" onClick={() => setPasteOpen(true)} aria-label="Paste from Excel" title="Paste from Excel" className="hover:text-[var(--color-link-action)]"><ClipboardPaste className="h-5 w-5" aria-hidden="true" /></button>
@@ -624,17 +698,29 @@ export function ExpenseFormPage({ kind = "expense" }: { kind?: "expense" | "chec
                 </thead>
                 <tbody>
                   {lines.map((line, index) => (
-                    <tr key={line.id} className={`border-b border-[var(--color-divider-tertiary)] hover:bg-[var(--color-table-row-hover)] ${index % 2 === 0 ? "bg-[var(--color-table-row-secondary)]" : ""}`}>
+                    <tr key={line.id} onClick={() => setActiveLineId(line.id)} onFocus={() => setActiveLineId(line.id)} className={`h-[53px] border-b border-[var(--color-divider-tertiary)] hover:bg-[var(--color-table-row-hover)] ${index % 2 === 0 ? "bg-[var(--color-table-row-secondary)]" : ""}`}>
                       <td className="text-[var(--color-icon-muted)]"><GripVertical className="h-4 w-4" aria-hidden="true" /></td>
                       <td className="px-2 py-2 text-center">{index + 1}</td>
                       <td className="px-2 py-2">
-                        <Select value={line.categoryAccountId} onChange={(v) => updateLine(line.id, { categoryAccountId: v })} options={categoryOptions} placeholder="" allowCustomValue={false} />
+                        {activeLineId === line.id ? (
+                          <Select value={line.categoryAccountId} onChange={(v) => updateLine(line.id, { categoryAccountId: v })} options={categoryOptions} placeholder="" allowCustomValue={false} />
+                        ) : (
+                          <button type="button" aria-label={`Line ${index + 1} category`} onClick={() => setActiveLineId(line.id)} className="block min-h-9 w-full truncate px-3 text-left">{categoryName(line.categoryAccountId)}</button>
+                        )}
                       </td>
                       {columns.description ? <td className="border-l border-[var(--color-divider-tertiary)] px-2 py-2">
-                        <input value={line.description} onChange={(event) => updateLine(line.id, { description: event.target.value })} aria-label={`Line ${index + 1} description`} className={`${INPUT_BASE_CLASSES} h-9 rounded px-3 text-sm`} />
+                        {activeLineId === line.id ? (
+                          <input value={line.description} onChange={(event) => updateLine(line.id, { description: event.target.value })} aria-label={`Line ${index + 1} description`} className={`${INPUT_BASE_CLASSES} h-9 rounded px-3 text-sm`} />
+                        ) : (
+                          <button type="button" aria-label={`Line ${index + 1} description`} onClick={() => setActiveLineId(line.id)} className="block min-h-9 w-full truncate px-3 text-left">{line.description}</button>
+                        )}
                       </td> : null}
                       {columns.amount ? <td className="border-l border-[var(--color-divider-tertiary)] px-2 py-2">
-                        <input type="number" min="0" step="0.01" value={line.amount} onChange={(event) => updateLine(line.id, { amount: event.target.value })} aria-label={`Line ${index + 1} amount`} className={`${INPUT_BASE_CLASSES} h-9 rounded px-3 text-right text-sm`} />
+                        {activeLineId === line.id ? (
+                          <input type="number" min="0" step="0.01" value={line.amount} onChange={(event) => updateLine(line.id, { amount: event.target.value })} aria-label={`Line ${index + 1} amount`} className={`${INPUT_BASE_CLASSES} h-9 rounded px-3 text-right text-sm`} />
+                        ) : (
+                          <button type="button" aria-label={`Line ${index + 1} amount`} onClick={() => setActiveLineId(line.id)} className="block min-h-9 w-full px-3 text-right">{line.amount === "" ? "" : money(cents(line.amount) / 100)}</button>
+                        )}
                       </td> : null}
                       {!columns.description && !columns.amount ? <td /> : null}
                       <td className="px-1 text-center">
@@ -660,14 +746,13 @@ export function ExpenseFormPage({ kind = "expense" }: { kind?: "expense" | "chec
                   <button type="button" className={RT_BUTTON} onClick={clearZeroLines}>Clear 0 Value Lines</button>
                   <button type="button" className={RT_BUTTON} onClick={exportCsv}>Export CSV</button>
                   <button type="button" className={RT_BUTTON} onClick={() => setPasteOpen(true)}>Paste From Excel</button>
+                  <button type="button" disabled title="Location journal entries aren't available yet" className={`${RT_BUTTON} cursor-not-allowed opacity-60`}>Location JE</button>
                 </div>
                 <p className="flex gap-16 pr-14 text-base font-semibold text-[var(--color-text-global)]">
                   <span>Total</span>
                   <span>{money(totalCents / 100)}</span>
                 </p>
               </div>
-            </>
-          ) : null}
 
           <div className="mt-6 flex flex-wrap gap-8">
             <div className="w-[520px] max-w-full">
@@ -682,11 +767,12 @@ export function ExpenseFormPage({ kind = "expense" }: { kind?: "expense" | "chec
               </div>
             </div>
             <div className="w-[520px] max-w-full">
-              <AttachmentsField attachments={attachments} formLabel="Expense" />
+              <AttachmentsField attachments={attachments} formLabel={isCheck ? "Check" : "Expense"} />
             </div>
           </div>
+          <p className="mt-6 text-center"><a href="https://www.intuit.com/privacy/" target="_blank" rel="noreferrer" className="text-[var(--color-link-action)] hover:underline">Privacy</a></p>
         </section>
-        {error ? <p className="mt-3 text-sm text-[var(--color-negative)]" role="alert">{error}</p> : null}
+        {error ?? loadError ? <p className="mt-3 text-sm text-[var(--color-negative)]" role="alert">{error ?? loadError}</p> : null}
       </div>
 
 

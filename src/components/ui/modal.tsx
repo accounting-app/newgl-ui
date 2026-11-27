@@ -20,6 +20,10 @@ type ModalProps = {
   title?: string;
   description?: string;
   size?: ModalSize;
+  /** No title row and no X: the content supplies its own way out. */
+  hideHeader?: boolean;
+  /** Above the full-screen transaction forms, for dialogs mounted outside them. */
+  onTop?: boolean;
   children: ReactNode;
 };
 
@@ -28,7 +32,7 @@ type ModalProps = {
 // import/journal-entry modals stay their own full-screen takeover pattern
 // (a different job: a multi-step wizard, not a focused single action), so
 // this doesn't replace those.
-export function Modal({ open, onClose, title, description, size = "md", children }: ModalProps) {
+export function Modal({ open, onClose, title, description, size = "md", hideHeader = false, onTop = false, children }: ModalProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
   useBodyScrollLock(open);
   useFocusTrap(dialogRef, open);
@@ -52,7 +56,7 @@ export function Modal({ open, onClose, title, description, size = "md", children
 
   return (
     <div
-      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4"
+      className={`fixed inset-0 ${onTop ? "z-[90]" : "z-[60]"} flex items-center justify-center bg-black/40 p-4`}
       onClick={(event) => {
         if (event.target === event.currentTarget) onClose();
       }}
@@ -61,11 +65,11 @@ export function Modal({ open, onClose, title, description, size = "md", children
         ref={dialogRef}
         role="dialog"
         aria-modal="true"
-        aria-label={title}
+        aria-label={title ?? (hideHeader ? "Confirmation" : undefined)}
         tabIndex={-1}
         className={`w-full ${SIZE_CLASSES[size]} max-h-[85vh] overflow-y-auto rounded-lg border border-[var(--color-divider-tertiary)] bg-[var(--color-container-background-primary)] p-6 shadow-lg outline-none`}
       >
-        <div className="mb-4 flex items-start justify-between gap-4">
+        {hideHeader ? null : <div className="mb-4 flex items-start justify-between gap-4">
           <div>
             {title ? <h2 className="text-lg font-semibold text-[var(--color-text-global)]">{title}</h2> : null}
             {description ? <p className="mt-1 text-sm text-[var(--color-text-primary)]">{description}</p> : null}
@@ -78,7 +82,7 @@ export function Modal({ open, onClose, title, description, size = "md", children
           >
             <X className="h-4 w-4" aria-hidden="true" />
           </button>
-        </div>
+        </div>}
         {children}
       </div>
     </div>

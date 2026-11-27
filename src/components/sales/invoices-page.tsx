@@ -46,7 +46,7 @@ export function InvoicesPage() {
   const tabInvoices = useMemo(() => invoices.filter((i) => i.status === tab).sort((a, b) => b.invoiceDate.localeCompare(a.invoiceDate)), [invoices, tab]);
   const total = useMemo(() => tabInvoices.reduce((sum, i) => sum + i.amount, 0), [tabInvoices]);
 
-  async function handleSaveInvoice(input: Omit<Invoice, "id" | "createdAt" | "status">) {
+  async function handleSaveInvoice(input: Omit<Invoice, "id" | "createdAt" | "status" | "openBalance" | "paidAmount" | "payments">) {
     try {
       await addInvoice(input);
       setShowInvoiceDrawer(false);
@@ -272,7 +272,7 @@ function PayInvoiceDialog({
       <div className="w-full max-w-sm rounded-lg bg-[var(--color-container-background-primary)] p-5 shadow-xl">
         <h2 className="mb-1 text-lg font-semibold text-[var(--color-text-global)]">Mark invoice paid</h2>
         <p className="mb-4 text-sm text-[var(--color-text-primary)]">
-          {formatMoney(invoice.amount)} from {customerName}
+          {formatMoney(invoice.openBalance)} from {customerName}
         </p>
         <form onSubmit={handleSubmit} className="flex flex-col gap-3">
           <Select label="Deposit to" value={depositAccountId} onChange={setDepositAccountId} options={depositAccountOptions} placeholder="Select account" allowCustomValue={false} />

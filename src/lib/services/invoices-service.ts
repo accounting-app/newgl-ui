@@ -18,6 +18,10 @@ export type Invoice = {
   postedTransactionId?: string;
   paymentTransactionId?: string;
   createdAt: string;
+  /** What is still owed, and the payments (or credits) applied so far. */
+  openBalance: number;
+  paidAmount: number;
+  payments: { transactionId: string; amount: number }[];
 };
 
 export type CreateInvoiceInput = {
@@ -35,6 +39,8 @@ export type UpdateInvoiceInput = Partial<CreateInvoiceInput>;
 export type PayInvoiceInput = {
   depositAccountId: string;
   paymentDate?: string;
+  /** Left out, the whole open balance is paid. */
+  amount?: number;
 };
 
 export function listInvoices(): Promise<Invoice[]> {
@@ -51,6 +57,11 @@ export function updateInvoice(invoiceId: string, patch: UpdateInvoiceInput): Pro
 
 export function payInvoice(invoiceId: string, input: PayInvoiceInput): Promise<Invoice> {
   return request<Invoice>(BASE_API_URL, `/invoices/${invoiceId}/pay`, { method: "POST", body: JSON.stringify(input) });
+}
+
+/** Applies money from an existing payment (or unapplied credit) to this invoice. Posts nothing. */
+export function applyInvoicePayment(invoiceId: string, input: { paymentTransactionId: string; amount: number }): Promise<Invoice> {
+  return request<Invoice>(BASE_API_URL, `/invoices/${invoiceId}/apply`, { method: "POST", body: JSON.stringify(input) });
 }
 
 export async function deleteInvoice(invoiceId: string): Promise<void> {

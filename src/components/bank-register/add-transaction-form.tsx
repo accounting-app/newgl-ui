@@ -1,3 +1,4 @@
+import { DateField } from "@/components/ui/date-field";
 import { ReconcileStatusCell } from "@/components/bank-register/reconcile-status";
 import { RegisterTableColumnGroup } from "@/components/bank-register/register-table-column-group";
 import { SelectField } from "@/components/bank-register/select-field";
@@ -70,12 +71,7 @@ export function AddTransactionForm({
           <tbody>
             <tr className="align-top">
               <td className="form-control">
-                <InputField
-                  type="date"
-                  value={draftTransaction.date}
-                  onChange={(event) => onDraftFieldChange("date", event.target.value)}
-                  className="w-full placeholder:text-[var(--color-text-disabled)]"
-                />
+                <DateField value={draftTransaction.date} onChange={(date) => onDraftFieldChange("date", date)} />
                 {draftErrors.date ? <p className="mt-1 text-xs text-[var(--color-negative)]">{draftErrors.date}</p> : null}
               </td>
               <td className="form-control">
@@ -83,7 +79,8 @@ export function AddTransactionForm({
                   type="text"
                   value={draftTransaction.refNo}
                   onChange={(event) => onDraftFieldChange("refNo", event.target.value)}
-                  placeholder="Ref No"
+                  disabled={draftTransaction.transactionTypeId === "DEPOSIT"}
+                  placeholder="Ref No."
                   className="w-full placeholder:text-[var(--color-text-disabled)]"
                 />
                 <InputField type="text" value={draftTransaction.transactionTypeLabel} disabled className="mt-1 w-full" />
@@ -140,7 +137,7 @@ export function AddTransactionForm({
                   value={draftTransaction.payment}
                   disabled={isDraftInflowType}
                   onChange={(event) => onDraftFieldChange("payment", event.target.value)}
-                  placeholder="0.00"
+                  placeholder="Payment"
                   className="w-full text-right placeholder:text-[var(--color-text-disabled)]"
                 />
                 {draftErrors.payment ? <p className="mt-1 text-xs text-[var(--color-negative)]">{draftErrors.payment}</p> : null}
@@ -153,15 +150,13 @@ export function AddTransactionForm({
                   value={draftTransaction.deposit}
                   disabled={isDraftOutflowType}
                   onChange={(event) => onDraftFieldChange("deposit", event.target.value)}
-                  placeholder="0.00"
+                  placeholder="Deposit"
                   className="w-full text-right placeholder:text-[var(--color-text-disabled)]"
                 />
                 {draftErrors.deposit ? <p className="mt-1 text-xs text-[var(--color-negative)]">{draftErrors.deposit}</p> : null}
               </td>
               <ReconcileStatusCell status={draftTransaction.reconcileStatus} onCycle={onReconcileCycle} />
-              <td className="form-control">
-                <div className="rounded border border-[var(--color-divider-tertiary)] bg-[var(--color-container-background-secondary)] px-2 py-1 text-right text-xs text-[var(--color-icon-secondary)]">-</div>
-              </td>
+              <td className="form-control">&nbsp;</td>
             </tr>
           </tbody>
         </table>

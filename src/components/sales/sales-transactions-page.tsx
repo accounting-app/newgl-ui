@@ -28,7 +28,7 @@ export function SalesTransactionsPage() {
   const customerNameById = useMemo(() => new Map(customers.map((c) => [c.id, c.name])), [customers]);
   const sorted = useMemo(() => [...invoices].sort((a, b) => b.invoiceDate.localeCompare(a.invoiceDate)), [invoices]);
 
-  async function handleSaveInvoice(input: Omit<Invoice, "id" | "createdAt" | "status">) {
+  async function handleSaveInvoice(input: Omit<Invoice, "id" | "createdAt" | "status" | "openBalance" | "paidAmount" | "payments">) {
     try {
       await addInvoice(input);
       setShowInvoiceDrawer(false);

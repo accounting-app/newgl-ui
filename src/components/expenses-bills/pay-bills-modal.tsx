@@ -48,7 +48,7 @@ export function PayBillsModal({
   const selectedAccount = accounts.find((a) => a.id === paymentAccountId);
 
   const selectedBills = useMemo(() => bills.filter((b) => selectedIds.has(b.id)), [bills, selectedIds]);
-  const totalAmount = useMemo(() => selectedBills.reduce((sum, b) => sum + b.amount, 0), [selectedBills]);
+  const totalAmount = useMemo(() => selectedBills.reduce((sum, b) => sum + b.openBalance, 0), [selectedBills]);
   const allSelected = bills.length > 0 && selectedIds.size === bills.length;
 
   function toggleAll(checked: boolean) {
@@ -166,7 +166,7 @@ export function PayBillsModal({
                         </td>
                         <td className="border-l border-l-dotted border-l-[var(--color-divider-tertiary)] p-2 align-top text-[13px] text-[var(--color-text-primary)]">{bill.billNumber || "--"}</td>
                         <td className="border-l border-l-dotted border-l-[var(--color-divider-tertiary)] p-2 align-top text-[13px] text-[var(--color-text-primary)]">{bill.dueDate}</td>
-                        <td className="border-l border-l-dotted border-l-[var(--color-divider-tertiary)] p-2 align-top text-right text-[13px] text-[var(--color-text-global)]">{formatMoney(bill.amount)}</td>
+                        <td className="border-l border-l-dotted border-l-[var(--color-divider-tertiary)] p-2 align-top text-right text-[13px] text-[var(--color-text-global)]">{formatMoney(bill.openBalance)}</td>
                       </tr>
                     ))}
                   </tbody>
