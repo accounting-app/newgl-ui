@@ -49,7 +49,7 @@ export function ConfirmDialogHost() {
 
   if (pending?.warning) {
     return (
-      <Modal open onClose={() => settle(false)} hideHeader size="sm">
+      <Modal open onTop onClose={() => settle(false)} hideHeader size="sm">
         <div className="flex items-center gap-4 px-3 pb-6 pt-4">
           <span aria-hidden="true" className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[#d52b1e] text-3xl font-bold text-white">
             !
@@ -69,7 +69,7 @@ export function ConfirmDialogHost() {
   }
 
   return (
-    <Modal open={pending !== null} onClose={() => settle(false)} title={pending?.title} size="sm">
+    <Modal open={pending !== null} onTop onClose={() => settle(false)} title={pending?.title} size="sm">
       <p className="mb-6 whitespace-pre-line text-sm text-[var(--color-text-primary)]">{pending?.message}</p>
       <div className="flex justify-end gap-3">
         <Button variant="secondary" onClick={() => settle(false)}>

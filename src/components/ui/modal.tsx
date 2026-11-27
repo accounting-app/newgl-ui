@@ -22,6 +22,8 @@ type ModalProps = {
   size?: ModalSize;
   /** No title row and no X: the content supplies its own way out. */
   hideHeader?: boolean;
+  /** Above the full-screen transaction forms, for dialogs mounted outside them. */
+  onTop?: boolean;
   children: ReactNode;
 };
 
@@ -30,7 +32,7 @@ type ModalProps = {
 // import/journal-entry modals stay their own full-screen takeover pattern
 // (a different job: a multi-step wizard, not a focused single action), so
 // this doesn't replace those.
-export function Modal({ open, onClose, title, description, size = "md", hideHeader = false, children }: ModalProps) {
+export function Modal({ open, onClose, title, description, size = "md", hideHeader = false, onTop = false, children }: ModalProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
   useBodyScrollLock(open);
   useFocusTrap(dialogRef, open);
@@ -54,7 +56,7 @@ export function Modal({ open, onClose, title, description, size = "md", hideHead
 
   return (
     <div
-      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4"
+      className={`fixed inset-0 ${onTop ? "z-[90]" : "z-[60]"} flex items-center justify-center bg-black/40 p-4`}
       onClick={(event) => {
         if (event.target === event.currentTarget) onClose();
       }}
