@@ -53,7 +53,7 @@ export function EditTransactionForm({
   const lockedLabel = entry.reconcileStatus === "R" ? "reconciled" : "cleared";
   // A sales receipt's account comes from its products and a received payment's is
   // always Accounts Receivable, so neither can be changed from the row.
-  const accountLocked = locked || entry.transactionType === "SALES_RECEIPT" || entry.transactionType === "RECEIVE_PAYMENT";
+  const accountLocked = locked || ["SALES_RECEIPT", "RECEIVE_PAYMENT", "BILL_PAYMENT"].includes(entry.transactionType);
   return (
     <div className="form-transaction-row">
       <div className="form-transaction-row-top">

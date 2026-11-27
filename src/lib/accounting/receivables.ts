@@ -6,24 +6,36 @@ export function findReceivableAccount(accounts: Account[]): Account | undefined 
   return receivable.find((account) => account.name === "Accounts Receivable") ?? receivable[0];
 }
 
+/** The account bill payments post against: the same pick the bills API makes. */
+export function findPayableAccount(accounts: Account[]): Account | undefined {
+  return accounts.find((account) => account.category === "ACCOUNTS_PAYABLE" && account.status === "ACTIVE");
+}
+
+const SIDES = {
+  customer: { type: "RECEIVE_PAYMENT", posting: "CREDIT", category: "ACCOUNTS_RECEIVABLE" },
+  vendor: { type: "BILL_PAYMENT", posting: "DEBIT", category: "ACCOUNTS_PAYABLE" }
+} as const;
+
 /**
- * A customer's payments that no invoice was paid with: QBO's "Unapplied
- * payment" credits. `appliedIds` are the invoices' payment transaction ids.
+ * Payments that no invoice or bill was paid with: QBO's "Unapplied payment"
+ * credits. `appliedIds` are the invoices' or bills' payment transaction ids.
  */
 export function unappliedPayments(
   transactions: Transaction[],
   accounts: Account[],
   appliedIds: ReadonlySet<string>,
-  customer: string
+  name: string,
+  contact: keyof typeof SIDES = "customer"
 ): { id: string; date: string; amount: number }[] {
-  const receivableIds = new Set(accounts.filter((account) => account.category === "ACCOUNTS_RECEIVABLE").map((account) => account.id));
-  if (!customer) return [];
+  const side = SIDES[contact];
+  const accountIds = new Set(accounts.filter((account) => account.category === side.category).map((account) => account.id));
+  if (!name) return [];
   return transactions
-    .filter((txn) => txn.type === "RECEIVE_PAYMENT" && txn.status === "POSTED" && !txn.reversedAt && txn.payee === customer && !appliedIds.has(txn.id))
+    .filter((txn) => txn.type === side.type && txn.status === "POSTED" && !txn.reversedAt && txn.payee === name && !appliedIds.has(txn.id))
     .map((txn) => ({
       id: txn.id,
       date: txn.transactionDate,
-      amount: txn.postings.filter((p) => p.type === "CREDIT" && receivableIds.has(p.accountId)).reduce((sum, p) => sum + p.amount, 0)
+      amount: txn.postings.filter((p) => p.type === side.posting && accountIds.has(p.accountId)).reduce((sum, p) => sum + p.amount, 0)
     }))
     .filter((credit) => credit.amount > 0)
     .sort((a, b) => a.date.localeCompare(b.date));

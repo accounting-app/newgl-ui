@@ -35,3 +35,18 @@ describe("unappliedPayments", () => {
     expect(unappliedPayments(transactions, accounts, new Set(["applied"]), "John Doe")).toEqual([{ id: "open", date: "2026-11-27", amount: 90 }]);
   });
 });
+
+describe("unappliedPayments for a vendor", () => {
+  test("reads bill payments debited to Accounts Payable", () => {
+    const payable = account("ap", "Accounts Payable", "ACCOUNTS_PAYABLE");
+    const billPayment = {
+      ...payment("bp"),
+      type: "BILL_PAYMENT",
+      postings: [
+        { accountId: "ap", type: "DEBIT", amount: 400 },
+        { accountId: "bank", type: "CREDIT", amount: 400 }
+      ]
+    } as Transaction;
+    expect(unappliedPayments([billPayment, payment("received")], [...accounts, payable], new Set(), "John Doe", "vendor")).toEqual([{ id: "bp", date: "2026-11-27", amount: 400 }]);
+  });
+});

@@ -2,9 +2,10 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ChevronDown, ChevronLeft, ChevronRight, Settings } from "lucide-react";
+import { ChevronDown } from "lucide-react";
 import { AttachmentsField } from "@/components/accounting/attachments-field";
 import { FullScreenFormShell, leaveFormPage } from "@/components/accounting/full-screen-form-shell";
+import { CHECKBOX, ListCount, ListTools, NO_APPLY, PAYMENT_BOX, RT_BUTTON, SECTION_TITLE, TD, TH } from "@/components/accounting/payment-form-parts";
 import { AddAccountModal } from "@/components/bank-register/add-account-modal";
 import { Button } from "@/components/ui/button";
 import { DateField } from "@/components/ui/date-field";
@@ -31,46 +32,6 @@ const CARD_TITLE = "border-b border-[var(--color-divider-tertiary)] px-5 py-4 te
 const cents = (value: number | string) => Math.round((Number(value) || 0) * 100);
 const money = (value: number) => value.toLocaleString("en-US", { style: "currency", currency: "USD" });
 const usDate = (iso: string) => `${iso.slice(5, 7)}/${iso.slice(8, 10)}/${iso.slice(0, 4)}`;
-
-const SECTION_TITLE = "text-2xl font-bold text-[var(--color-text-global)]";
-const RT_BUTTON = "rounded-lg border border-[var(--color-negative)] px-3 py-2 text-xs font-bold text-[var(--color-negative)] hover:bg-[var(--color-action-passive-subtle-hover)] disabled:cursor-not-allowed disabled:opacity-60";
-const TH = "border-l border-[var(--color-divider-tertiary)] px-3 py-3";
-const TD = "border-l border-[var(--color-divider-tertiary)] px-3 py-3";
-const CHECKBOX = "h-5 w-5 cursor-pointer accent-[var(--color-ui-primary)] disabled:cursor-not-allowed";
-const PAYMENT_BOX = "ml-auto flex h-9 w-full max-w-[160px] items-center justify-end rounded border border-[var(--color-input-border-primary)] px-2";
-const NO_APPLY = "Applying a saved payment to invoices isn't available yet";
-
-/** QBO's search box and "Filter" row above each of the two lists. */
-function ListTools({ placeholder, value, onChange, children }: { placeholder: string; value: string; onChange: (value: string) => void; children?: React.ReactNode }) {
-  return (
-    <div className="mt-3 flex flex-wrap items-center gap-3">
-      <div className="w-[200px]">
-        <InputField value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} aria-label={placeholder} />
-      </div>
-      <Button variant="secondary" className="!rounded-md" disabled title="Filters aren't available yet">
-        Filter <ChevronRight className="h-4 w-4" aria-hidden="true" />
-      </Button>
-      <span className="px-2 text-sm">All</span>
-      {children}
-      <button type="button" disabled aria-label="List settings" title="List settings aren't available yet" className="ml-auto cursor-not-allowed p-2 opacity-60">
-        <Settings className="h-5 w-5" aria-hidden="true" />
-      </button>
-    </div>
-  );
-}
-
-function ListCount({ count }: { count: number }) {
-  return (
-    <div className="mt-3 flex items-center justify-end gap-3 text-sm">
-      <span>{count === 0 ? "0 of 0" : `1 - ${count} of ${count} items`}</span>
-      <ChevronLeft className="h-4 w-4 opacity-40" aria-hidden="true" />
-      <span>Page</span>
-      <span className="flex h-9 w-10 items-center justify-center rounded border border-[var(--color-input-border-primary)]">1</span>
-      <span>of 1</span>
-      <ChevronRight className="h-4 w-4 opacity-40" aria-hidden="true" />
-    </div>
-  );
-}
 
 // QBO's full-screen Receive Payment (/recvpayment?rtAccountId=...&rt=close).
 // rtAccountId is the account the money lands in. Record pays each ticked open

@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import { nextCheckNumber, nextJournalNumber, nextSalesReceiptNumber } from "./next-check-number";
 
-const entry = (refNumber: string | undefined, createdAt: string, transactionType: "CHECK" | "DEPOSIT" | "SALES_RECEIPT" = "CHECK") => ({ refNumber, createdAt, transactionType });
+const entry = (refNumber: string | undefined, createdAt: string, transactionType: "CHECK" | "DEPOSIT" | "SALES_RECEIPT" | "BILL_PAYMENT" = "CHECK") => ({ refNumber, createdAt, transactionType });
 
 describe("nextCheckNumber", () => {
   test("starts at 1 without earlier numbered checks", () => {
@@ -12,6 +12,10 @@ describe("nextCheckNumber", () => {
 
   test("follows the most recently entered check, even if the number is lower", () => {
     expect(nextCheckNumber([entry("1001", "2026-01-01"), entry("11", "2026-02-01")])).toBe("12");
+  });
+
+  test("shares the sequence with bill payments", () => {
+    expect(nextCheckNumber([entry("5", "2026-01-01"), entry("11", "2026-02-01", "BILL_PAYMENT")])).toBe("12");
   });
 
   test("keeps leading zeros", () => {

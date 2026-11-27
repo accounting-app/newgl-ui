@@ -127,6 +127,7 @@ const FULL_FORM_PATHS: Partial<Record<RegisterEntry["transactionType"], string>>
   DEPOSIT: "/deposit",
   SALES_RECEIPT: "/salesreceipt",
   RECEIVE_PAYMENT: "/recvpayment",
+  BILL_PAYMENT: "/billpayment",
   JOURNAL_ENTRY: "/journal"
 };
 

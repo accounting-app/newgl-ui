@@ -20,7 +20,7 @@ import {
   isRegisterAccountCategory,
   toDomainTransactionType
 } from "@/modules/accounting/presentation/transaction-type-policy";
-import { findReceivableAccount } from "@/lib/accounting/receivables";
+import { findPayableAccount, findReceivableAccount } from "@/lib/accounting/receivables";
 import { generateNextRefNumber } from "@/modules/accounting/domain/accounting-reports";
 import { nextCheckNumber, nextJournalNumber, nextSalesReceiptNumber } from "@/lib/accounting/next-check-number";
 import type { BatchRegisterEntryUpdate } from "@/modules/accounting/application/contracts";
@@ -224,7 +224,7 @@ export function useBankRegister() {
         date: new Date().toISOString().slice(0, 10),
         // A check gets the account's next check number; either way the field stays editable.
         refNo:
-          transactionTypeId === "CHECK"
+          transactionTypeId === "CHECK" || transactionTypeId === "BILL_PAYMENT"
             ? nextCheckNumber(entries)
             : transactionTypeId === "SALES_RECEIPT"
               ? nextSalesReceiptNumber(entries)
@@ -360,7 +360,7 @@ export function useBankRegister() {
     // These types stay blank when the field is empty rather than getting a TX- ref.
     const referenceNumber =
       draftTransaction.refNo.trim() ||
-      (["CHECK", "DEPOSIT", "SALES_RECEIPT", "RECEIVE_PAYMENT", "EXPENSE", "JOURNAL_ENTRY"].includes(draftTransaction.transactionTypeId) ? undefined : generateNextRefNumber(existingRefNumbers));
+      (["CHECK", "DEPOSIT", "SALES_RECEIPT", "RECEIVE_PAYMENT", "EXPENSE", "JOURNAL_ENTRY", "BILL_PAYMENT"].includes(draftTransaction.transactionTypeId) ? undefined : generateNextRefNumber(existingRefNumbers));
     const domainTransactionType = toDomainTransactionType(draftTransaction.transactionTypeId);
 
     const selectedCounterparty = accounts.find(
@@ -454,9 +454,17 @@ export function useBankRegister() {
           await services.transactionService.postTransaction(transaction.id);
         }
       } else {
+        // A bill payment always goes into Accounts Payable (the row's Account is locked).
+        // Not CC_BILL_PAYMENT, which pays a card rather than a vendor's bills.
+        const paysBills = !useSplits && draftTransaction.transactionTypeId === "BILL_PAYMENT";
+        let payable = paysBills ? findPayableAccount(accounts) : undefined;
+        if (paysBills && !payable) {
+          payable = await services.accountService.createAccount({ code: nextAccountCode(accounts), name: "Accounts Payable", category: "ACCOUNTS_PAYABLE", currency: "USD" });
+        }
         const expenseOrOffset = useSplits
           ? undefined
-          : selectedCounterparty ??
+          : payable ??
+            selectedCounterparty ??
             findCounterpartyAccount(accounts, selectedAccountId, [
               "Personal expense",
               "Charitable donations",
