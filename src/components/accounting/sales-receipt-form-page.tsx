@@ -326,7 +326,7 @@ export function SalesReceiptFormPage() {
       <button type="button" onClick={closePage} className="text-base font-medium text-[var(--color-text-global)] hover:underline">Cancel</button>
       <div className="flex items-center gap-3">
         <Button variant="secondary" className="!rounded-md" disabled={saving || !loaded} onClick={() => void save("stay")}>Save</Button>
-        <Button className="!rounded-md" disabled={saving || !loaded} onClick={() => void save("close")}>{saving ? "Saving..." : "Save and close"}</Button>
+        <Button variant="primary" className="!rounded-md" disabled={saving || !loaded} onClick={() => void save("close")}>{saving ? "Saving..." : "Save and close"}</Button>
       </div>
     </>
   );

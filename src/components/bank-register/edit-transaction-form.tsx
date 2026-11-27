@@ -1,3 +1,4 @@
+import { DateField } from "@/components/ui/date-field";
 import { ReconcileStatusCell } from "@/components/bank-register/reconcile-status";
 import { RegisterTableColumnGroup } from "@/components/bank-register/register-table-column-group";
 import { SelectField } from "@/components/bank-register/select-field";
@@ -58,12 +59,7 @@ export function EditTransactionForm({
           <tbody>
             <tr className="align-top">
               <td className="form-control">
-                <InputField
-                  type="date"
-                  value={editor.date}
-                  onChange={(event) => onEditorChange("date", event.target.value)}
-                  className="w-full placeholder:text-[var(--color-text-disabled)]"
-                />
+                <DateField value={editor.date} onChange={(date) => onEditorChange("date", date)} />
               </td>
               <td className="form-control">
                 <InputField
@@ -72,7 +68,7 @@ export function EditTransactionForm({
                   onChange={(event) => onEditorChange("refNo", event.target.value)}
                   className="w-full placeholder:text-[var(--color-text-disabled)]"
                 />
-                <InputField type="text" value={entry.transactionType} disabled className="mt-1 w-full" />
+                <InputField type="text" value={entry.transactionType.toLowerCase().split("_").map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(" ")} disabled className="mt-1 w-full" />
               </td>
               <td className="form-control">
                 <SelectField
@@ -126,9 +122,7 @@ export function EditTransactionForm({
                 />
               </td>
               <ReconcileStatusCell status={editor.reconcileStatus} onCycle={onReconcileCycle} />
-              <td className="form-control">
-                <div className="rounded border border-[var(--color-divider-tertiary)] bg-[var(--color-container-background-secondary)] px-2 py-1 text-right text-xs text-[var(--color-icon-secondary)]">-</div>
-              </td>
+              <td className="form-control">&nbsp;</td>
             </tr>
           </tbody>
         </table>

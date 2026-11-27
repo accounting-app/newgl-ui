@@ -640,6 +640,19 @@
   background-color: var(--color-form-row-background);
   border-bottom: 1px solid var(--color-form-row-border);
 }
+/* QBO's pickers in the open register row: the chevron sits in its own cell. */
+.tw-override .form-transaction-row button[aria-label="Toggle options list"] {
+  top: 0;
+  bottom: 0;
+  right: 0;
+  translate: none;
+  transform: none;
+  width: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-left: 1px solid var(--color-input-border-primary);
+}
 .tw-override  .form-transaction-row-top {
   width: 100%;
   padding: 14px 0 5px;

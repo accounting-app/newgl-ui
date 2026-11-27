@@ -1,7 +1,7 @@
 "use client";
 
 import { formDetails } from "@/lib/hooks/use-saved-transaction";
-import { LinkedFiles } from "@/components/accounting/linked-files";
+import { DateField } from "@/components/ui/date-field";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ChevronDown, ChevronUp, ClipboardPaste, Copy, GripVertical, Plus, Settings, SquareArrowOutUpRight, Trash2, X } from "lucide-react";
@@ -55,6 +55,9 @@ const COPY_ICON_BUTTON = "flex items-center gap-1.5 rounded-md px-2 py-1 text-sm
 const CHECKBOX = "h-5 w-5 cursor-pointer rounded accent-[var(--color-ui-primary)] disabled:cursor-not-allowed";
 const RT_LINK = "text-left text-sm font-semibold text-[var(--color-negative)] hover:underline disabled:cursor-not-allowed disabled:opacity-50 disabled:no-underline";
 
+const OUTLINE_BUTTON = "rounded-md border-2 border-[var(--color-ui-primary)] px-4 py-1.5 font-medium text-[var(--color-ui-primary)] hover:bg-[var(--color-action-passive-subtle-hover)]";
+const FOOTER_LINK = "font-medium text-[var(--color-ui-primary)] hover:underline";
+
 const cents = (value: string) => Math.round((Number(value) || 0) * 100);
 const money = (value: number) => value.toLocaleString("en-US", { style: "currency", currency: "USD" });
 
@@ -87,6 +90,8 @@ export function ExpenseFormPage({ kind = "expense" }: { kind?: "expense" | "chec
   const [lines, setLines] = useState<Line[]>(startingLines);
   const [memo, setMemo] = useState("");
   const [linesOpen, setLinesOpen] = useState(true);
+  // QBO shows lines as plain text; only the one being edited has input boxes.
+  const [activeLineId, setActiveLineId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [payeeModalOpen, setPayeeModalOpen] = useState(false);
@@ -206,7 +211,7 @@ export function ExpenseFormPage({ kind = "expense" }: { kind?: "expense" | "chec
   const paymentAccount = accounts.find((a) => a.id === paymentAccountId);
   useEffect(() => {
     // A saved check keeps its own address until the payee is changed.
-    if (!isCheck || (params.get("txnId") && (!loaded || payee === (loaded.payee ?? "")))) return;
+    if (!isCheck || (params.get("txnId") && (!loaded || (payee === (loaded.payee ?? "") && loaded.details?.mailing)))) return;
     setMailing([payeeRecord?.name, payeeRecord?.address].filter(Boolean).join("\n"));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isCheck, payeeRecord]);
@@ -249,6 +254,7 @@ export function ExpenseFormPage({ kind = "expense" }: { kind?: "expense" | "chec
           return setLoadError("This transaction has lines this form can't show. Edit it from the register or as a journal entry.");
         }
         setLoaded({ ...txn, sourceAccountId: sourceId });
+        void attachments.loadLinked(txn.id).catch(() => toast({ variant: "error", title: "Could not load the attachments" }));
         setPaymentAccountId(sourceId);
         setPayee(txn.payee ?? "");
         setDate(txn.transactionDate);
@@ -284,7 +290,7 @@ export function ExpenseFormPage({ kind = "expense" }: { kind?: "expense" | "chec
 
   const updateLine = (id: string, patch: Partial<Line>) => setLines((current) => current.map((l) => (l.id === id ? { ...l, ...patch } : l)));
 
-  async function save(after: "stay" | "close") {
+  async function save(after: "stay" | "close" | "new") {
     setSaveMenuOpen(false);
     if (!paymentAccount) return setError("Choose the payment account.");
     if (!date) return setError("Enter the payment date.");
@@ -314,8 +320,11 @@ export function ExpenseFormPage({ kind = "expense" }: { kind?: "expense" | "chec
       if (loaded) {
         const saved = await services.transactionService.updateTransaction(loaded.id, { ...body, dueDate: loaded.dueDate });
         setLoaded({ ...saved, sourceAccountId: paymentAccount.id });
+        await attachments.linkTo(saved.id).catch(() => toast({ variant: "error", title: "Saved, but the attachments could not be linked" }));
+        await attachments.loadLinked(saved.id).catch(() => undefined);
         toast({ variant: "success", title: isCheck ? "Check saved" : "Expense saved" });
         if (after === "close") closePage();
+        else if (after === "new") window.location.assign(isCheck ? "/check" : "/expense");
         else services.accountService.listAccounts().then(setAccounts).catch(() => undefined);
         return;
       }
@@ -492,49 +501,44 @@ export function ExpenseFormPage({ kind = "expense" }: { kind?: "expense" | "chec
       <Button className="!rounded-md" disabled={saving} onClick={() => void saveTemplate()}>{saving ? "Saving..." : "Save template"}</Button>
     </>
   ) : (
-    <>
-        <div className="flex items-center gap-3">
-          <Button variant="secondary" className="!rounded-md" onClick={closePage}>Cancel</Button>
-          {txnId ? null : <Button variant="secondary" className="!rounded-md" onClick={resetForm}>Clear</Button>}
-        </div>
-        <div className="flex items-center gap-8 text-base">
-          {isCheck ? (
-            <>
-              <button type="button" onClick={() => window.print()} className="text-[var(--color-text-global)] hover:underline">Print check</button>
-              <button type="button" disabled title="Ordering checks isn't available yet" className="cursor-not-allowed text-[var(--color-text-disabled)]">Order checks</button>
-            </>
+    <div className="ml-auto flex flex-wrap items-center justify-end gap-8 text-base">
+      <button type="button" onClick={closePage} className={OUTLINE_BUTTON}>Cancel</button>
+      {txnId ? null : <button type="button" onClick={resetForm} className={FOOTER_LINK}>Clear</button>}
+      {isCheck ? (
+        <>
+          <button type="button" onClick={() => window.print()} className={FOOTER_LINK}>Print check</button>
+          <button type="button" disabled title="Ordering checks isn't available yet" className={`${FOOTER_LINK} cursor-not-allowed opacity-60`}>Order checks</button>
+        </>
+      ) : null}
+      <button type="button" onClick={() => tpl.start(date)} className={FOOTER_LINK}>Make recurring</button>
+      <button type="button" disabled title="More options aren't available yet" className={`${FOOTER_LINK} cursor-not-allowed opacity-60`}>More</button>
+      <div className="ml-6 flex items-center gap-4">
+        <button type="button" disabled={saving || Boolean(txnId && !loaded)} onClick={() => void save("stay")} className={`${OUTLINE_BUTTON} disabled:opacity-50`}>Save</button>
+        <div ref={saveMenuRef} className="relative inline-flex">
+          <Button variant="primary" className="!rounded-l-md !rounded-r-none" disabled={saving || Boolean(txnId && !loaded)} onClick={() => void save("close")}>{saving ? "Saving..." : "Save and close"}</Button>
+          <Button variant="primary" className="!rounded-l-none !rounded-r-md border-l border-l-white/30 !min-w-0 px-2" aria-label="More save options" disabled={saving || Boolean(txnId && !loaded)} onClick={() => setSaveMenuOpen((v) => !v)}>
+            <ChevronDown className="h-4 w-4" aria-hidden="true" />
+          </Button>
+          {saveMenuOpen ? (
+            <div className="absolute bottom-full right-0 mb-1 w-40 rounded-lg border border-[var(--color-divider-tertiary)] bg-[var(--color-container-background-primary)] py-1 shadow-lg">
+              <button type="button" onClick={() => void save(txnId ? "new" : "stay")} className="block w-full px-3 py-1.5 text-left text-sm text-[var(--color-text-global)] hover:bg-[var(--color-action-passive-subtle-hover)]">Save and new</button>
+            </div>
           ) : null}
-          <button type="button" onClick={() => tpl.start(date)} className="text-[var(--color-text-global)] hover:underline">Make recurring</button>
-          {isCheck ? <button type="button" disabled title="More options aren't available yet" className="cursor-not-allowed text-[var(--color-text-disabled)]">More</button> : null}
         </div>
-        <div className="flex items-center gap-3">
-          <Button variant="secondary" className="!rounded-md" disabled={saving || Boolean(txnId && !loaded)} onClick={() => void save("stay")}>Save</Button>
-          <div ref={saveMenuRef} className="relative inline-flex">
-            <Button className={txnId ? "!rounded-md" : "!rounded-l-md !rounded-r-none"} disabled={saving || Boolean(txnId && !loaded)} onClick={() => void save("close")}>{saving ? "Saving..." : "Save and close"}</Button>
-            {txnId ? null : (
-              <Button className="!rounded-l-none !rounded-r-md border-l border-l-white/30 !min-w-0 px-2" aria-label="More save options" disabled={saving} onClick={() => setSaveMenuOpen((v) => !v)}>
-                <ChevronDown className="h-4 w-4" aria-hidden="true" />
-              </Button>
-            )}
-            {saveMenuOpen ? (
-              <div className="absolute bottom-full right-0 mb-1 w-40 rounded-lg border border-[var(--color-divider-tertiary)] bg-[var(--color-container-background-primary)] py-1 shadow-lg">
-                <button type="button" onClick={() => void save("stay")} className="block w-full px-3 py-1.5 text-left text-sm text-[var(--color-text-global)] hover:bg-[var(--color-action-passive-subtle-hover)]">Save and new</button>
-              </div>
-            ) : null}
-          </div>
-        </div>
-    </>
+      </div>
+    </div>
   );
 
   return (
     <FullScreenFormShell
       title={
         <>
-          {isCheck ? `Check #${checkNo}` : "Expense"}
+          <span className="font-semibold">{isCheck ? `Check #${checkNo}` : "Expense"}</span>
           {loaded?.reconcileStatus === "R" ? <span className="text-lg text-[var(--color-negative)]">(Reconciled)</span> : null}
         </>
       }
       onClose={closePage}
+      centerTools
       toolbar={
         tpl.active ? null : <button type="button" onClick={() => setPanel("copy")} className="flex h-9 items-center gap-1.5 rounded-md px-2 text-sm text-[var(--color-text-global)] hover:bg-[var(--color-action-passive-subtle-hover)]">
           <Copy className="h-5 w-5" aria-hidden="true" />
@@ -611,7 +615,7 @@ export function ExpenseFormPage({ kind = "expense" }: { kind?: "expense" | "chec
             </div>
             <div>
               <label className={LABEL} htmlFor="expense-date">Payment date</label>
-              <InputField id="expense-date" type="date" value={date} onChange={(event) => setDate(event.target.value)} className="w-[200px]" />
+              <DateField id="expense-date" value={date} onChange={setDate} className="w-[200px]" />
             </div>
             <div>
               <label className={LABEL} htmlFor="check-no">Check no.</label>
@@ -623,7 +627,7 @@ export function ExpenseFormPage({ kind = "expense" }: { kind?: "expense" | "chec
         <div className="flex flex-wrap gap-6 pb-6">
           <div>
             <label className={LABEL} htmlFor="expense-date">Payment Date</label>
-            <InputField id="expense-date" type="date" value={date} onChange={(event) => setDate(event.target.value)} className="w-[200px]" />
+            <DateField id="expense-date" value={date} onChange={setDate} className="w-[200px]" />
           </div>
           <div className="w-[240px]">
             <span className={LABEL}>Payment Method</span>
@@ -690,17 +694,29 @@ export function ExpenseFormPage({ kind = "expense" }: { kind?: "expense" | "chec
                 </thead>
                 <tbody>
                   {lines.map((line, index) => (
-                    <tr key={line.id} className={`border-b border-[var(--color-divider-tertiary)] hover:bg-[var(--color-table-row-hover)] ${index % 2 === 0 ? "bg-[var(--color-table-row-secondary)]" : ""}`}>
+                    <tr key={line.id} onClick={() => setActiveLineId(line.id)} onFocus={() => setActiveLineId(line.id)} className={`h-[53px] border-b border-[var(--color-divider-tertiary)] hover:bg-[var(--color-table-row-hover)] ${index % 2 === 0 ? "bg-[var(--color-table-row-secondary)]" : ""}`}>
                       <td className="text-[var(--color-icon-muted)]"><GripVertical className="h-4 w-4" aria-hidden="true" /></td>
                       <td className="px-2 py-2 text-center">{index + 1}</td>
                       <td className="px-2 py-2">
-                        <Select value={line.categoryAccountId} onChange={(v) => updateLine(line.id, { categoryAccountId: v })} options={categoryOptions} placeholder="" allowCustomValue={false} />
+                        {activeLineId === line.id ? (
+                          <Select value={line.categoryAccountId} onChange={(v) => updateLine(line.id, { categoryAccountId: v })} options={categoryOptions} placeholder="" allowCustomValue={false} />
+                        ) : (
+                          <button type="button" aria-label={`Line ${index + 1} category`} onClick={() => setActiveLineId(line.id)} className="block min-h-9 w-full truncate px-3 text-left">{categoryName(line.categoryAccountId)}</button>
+                        )}
                       </td>
                       {columns.description ? <td className="border-l border-[var(--color-divider-tertiary)] px-2 py-2">
-                        <input value={line.description} onChange={(event) => updateLine(line.id, { description: event.target.value })} aria-label={`Line ${index + 1} description`} className={`${INPUT_BASE_CLASSES} h-9 rounded px-3 text-sm`} />
+                        {activeLineId === line.id ? (
+                          <input value={line.description} onChange={(event) => updateLine(line.id, { description: event.target.value })} aria-label={`Line ${index + 1} description`} className={`${INPUT_BASE_CLASSES} h-9 rounded px-3 text-sm`} />
+                        ) : (
+                          <button type="button" aria-label={`Line ${index + 1} description`} onClick={() => setActiveLineId(line.id)} className="block min-h-9 w-full truncate px-3 text-left">{line.description}</button>
+                        )}
                       </td> : null}
                       {columns.amount ? <td className="border-l border-[var(--color-divider-tertiary)] px-2 py-2">
-                        <input type="number" min="0" step="0.01" value={line.amount} onChange={(event) => updateLine(line.id, { amount: event.target.value })} aria-label={`Line ${index + 1} amount`} className={`${INPUT_BASE_CLASSES} h-9 rounded px-3 text-right text-sm`} />
+                        {activeLineId === line.id ? (
+                          <input type="number" min="0" step="0.01" value={line.amount} onChange={(event) => updateLine(line.id, { amount: event.target.value })} aria-label={`Line ${index + 1} amount`} className={`${INPUT_BASE_CLASSES} h-9 rounded px-3 text-right text-sm`} />
+                        ) : (
+                          <button type="button" aria-label={`Line ${index + 1} amount`} onClick={() => setActiveLineId(line.id)} className="block min-h-9 w-full px-3 text-right">{line.amount === "" ? "" : money(cents(line.amount) / 100)}</button>
+                        )}
                       </td> : null}
                       {!columns.description && !columns.amount ? <td /> : null}
                       <td className="px-1 text-center">
@@ -748,14 +764,7 @@ export function ExpenseFormPage({ kind = "expense" }: { kind?: "expense" | "chec
               </div>
             </div>
             <div className="w-[520px] max-w-full">
-              {txnId ? (
-                <>
-                  <span className={LABEL}>Attachments</span>
-                  {loaded ? <LinkedFiles zone="forms" linkedId={loaded.id} /> : null}
-                </>
-              ) : (
-                <AttachmentsField attachments={attachments} formLabel="Expense" />
-              )}
+              <AttachmentsField attachments={attachments} formLabel={isCheck ? "Check" : "Expense"} />
             </div>
           </div>
         </section>

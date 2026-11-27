@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
-import { deleteReceipt, updateReceipt, uploadReceipt, type ReceiptRecord, type ReceiptZone } from "@/lib/services/receipts-service";
+import { deleteReceipt, listReceipts, updateReceipt, uploadReceipt, type ReceiptRecord, type ReceiptZone } from "@/lib/services/receipts-service";
 
 export const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024;
 
@@ -20,6 +20,16 @@ export function useFormAttachments(zone: ReceiptZone = "forms") {
   const [error, setError] = useState<string | null>(null);
   // Files uploaded on this form (not picked from "Show existing"): detaching one deletes it, so abandoned forms don't leave orphans.
   const uploadedHere = useRef(new Set<string>());
+
+  // Files that were already linked when the form loaded; removing one unlinks it on save.
+  const alreadyLinked = useRef(new Set<string>());
+  const removedLinked = useRef(new Set<string>());
+
+  const loadLinked = useCallback(async (transactionId: string) => {
+    const linked = (await listReceipts(zone)).filter((r) => r.linkedTransactionId === transactionId);
+    alreadyLinked.current = new Set(linked.map((r) => r.id));
+    setItems((current) => [...linked, ...current.filter((r) => !alreadyLinked.current.has(r.id))]);
+  }, [zone]);
 
   const upload = useCallback(async (files: File[]) => {
     setError(null);
@@ -43,11 +53,16 @@ export function useFormAttachments(zone: ReceiptZone = "forms") {
 
   const detach = useCallback(async (id: string) => {
     setItems((current) => current.filter((r) => r.id !== id));
+    if (alreadyLinked.current.has(id)) removedLinked.current.add(id);
     if (uploadedHere.current.delete(id)) await deleteReceipt(id).catch(() => undefined);
   }, []);
 
   const linkTo = useCallback(async (transactionId: string) => {
-    await Promise.all(items.map((r) => updateReceipt(r.id, { linkedTransactionId: transactionId })));
+    await Promise.all([
+      ...items.map((r) => updateReceipt(r.id, { linkedTransactionId: transactionId })),
+      ...[...removedLinked.current].filter((id) => !items.some((r) => r.id === id)).map((id) => updateReceipt(id, { linkedTransactionId: null }))
+    ]);
+    removedLinked.current.clear();
     uploadedHere.current.clear();
     setItems([]);
   }, [items]);
@@ -60,5 +75,5 @@ export function useFormAttachments(zone: ReceiptZone = "forms") {
     orphans.forEach((id) => void deleteReceipt(id).catch(() => undefined));
   }, []);
 
-  return { items, uploading, error, upload, attach, detach, linkTo, reset };
+  return { items, uploading, error, upload, attach, detach, linkTo, reset, loadLinked };
 }

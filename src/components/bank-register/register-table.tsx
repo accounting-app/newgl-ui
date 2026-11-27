@@ -622,7 +622,7 @@ export function RegisterTable({
       toast({ variant: "info", title: `Editing a ${formatTransactionTypeLabel(entry.transactionType)} in its full form isn't available yet` });
       return;
     }
-    router.push(`${path}?txnId=${encodeURIComponent(entry.transactionId)}&rt=close`);
+    router.push(`${path}?txnId=${encodeURIComponent(entry.transactionId)}`);
   }
 
   async function handleDeleteRow() {
